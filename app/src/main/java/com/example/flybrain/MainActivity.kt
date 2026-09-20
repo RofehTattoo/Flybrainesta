@@ -606,9 +606,15 @@ class MainActivity : Activity() {
             java.util.Arrays.fill(historyDn, 0f)
             java.util.Arrays.fill(historyMotor, 0f)
             java.util.Arrays.fill(topDnIds, -1)
-            java.util.Arrays.fill(topDnVals, 0f)
+            java.util.Arrays.fill(topDnHz, 0f)
+            java.util.Arrays.fill(topDnDelta, 0f)
+            java.util.Arrays.fill(topDnVm, V_REST)
+            java.util.Arrays.fill(topDnWindowSpikes, 0)
             java.util.Arrays.fill(topMotorIds, -1)
-            java.util.Arrays.fill(topMotorVals, 0f)
+            java.util.Arrays.fill(topMotorHz, 0f)
+            java.util.Arrays.fill(topMotorDelta, 0f)
+            java.util.Arrays.fill(topMotorVm, V_REST)
+            java.util.Arrays.fill(topMotorWindowSpikes, 0)
             foodOn = false
             lightOn = false
             dangerOn = false
