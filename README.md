@@ -1,3 +1,9 @@
+# FlyBrain V1.14 — FBR-10 frozen baseline
+
+**CONNECTOME FROZEN:** MaleCNS v1.0 → FBR-10 → 16,669 neurons → 2,064,951 published edges / 16,783,932 contacts.
+
+See `FBR10_CONNECTOME_FINAL_AUDIT.md`. The CI validates the shipped binary by exact SHA-256 and does not regenerate it with the historical V1.13 reducer.
+
 # FlyBrain V1.13
 
 ## Objetivo

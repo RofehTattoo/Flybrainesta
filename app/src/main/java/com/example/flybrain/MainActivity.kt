@@ -205,6 +205,13 @@ class MainActivity : Activity() {
         // spikes into a short visual intensity trail so activation/deactivation
         // can be read without changing the neural state or connectivity.
         private val visualActivity = FloatArray(N)
+        // External sensory drive is stored as a per-step voltage/current kick and
+        // applied inside the LIF update AFTER the membrane leak. In the previous
+        // V1.13 implementation sense() wrote directly into v[], but stepBrain()
+        // then applied a full Euler leak with dt=20 ms and tau=20 ms, which reset
+        // the injected voltage back to V_REST before threshold evaluation. That
+        // made every stimulus effectively invisible to the neurons.
+        private val sensoryCurrent = FloatArray(N)
 
         private val incoming = Array(N) { IntArray(0) }
         private val incomingW = Array(N) { FloatArray(0) }
@@ -352,6 +359,11 @@ class MainActivity : Activity() {
         private var displacementPerSecond = 0f
         private var physicalMovementMemory = 0f
         private var maxDisplayedActivity = 0f
+        private var sensorySpikesDisplay = 0f
+        private var centralSpikesDisplay = 0f
+        private var descendingSpikesDisplay = 0f
+        private var motorSpikesDisplay = 0f
+        private var sensoryDriveDisplay = 0f
         private var lastMotionX = .24f
         private var lastMotionY = .55f
         private var runtimeFault = ""
@@ -364,9 +376,10 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.13 · MaleCNS v1.0 · FBC103\n")
+            append("FLYBRAIN V1.14 · MaleCNS v1.0 · FBR-10 · FBC103\n")
             append("16.669 neuronas · ${loadedEdgeCount} conexiones cargadas · ${if (connectomeLoaded) "CONNECTOME OK" else "CONNECTOME ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()} · Spikes/s ${spikesPerSecond.toInt()} · Motor ${(motorRateDisplay * 100).toInt()}%\n")
+            append("Neural S ${(sensorySpikesDisplay * 100).toInt()}% · C ${(centralSpikesDisplay * 100).toInt()}% · DN ${(descendingSpikesDisplay * 100).toInt()}% · M ${(motorSpikesDisplay * 100).toInt()}% · In ${"%.3f".format(sensoryDriveDisplay)}")
             val stateLabel = when {
                 inactivityContinuous >= 300f -> "SUEÑO"
                 inactivityContinuous >= 1.0f -> "REPOSO"
@@ -452,6 +465,7 @@ class MainActivity : Activity() {
                 refractory[i] = 0f
                 synTrace[i] = 0f
                 visualActivity[i] = 0f
+                sensoryCurrent[i] = 0f
                 for (k in incomingW[i].indices) {
                     incomingW[i][k] = baseW[i][k]
                     eligibility[i][k] = 0f
@@ -554,6 +568,11 @@ class MainActivity : Activity() {
             displacementPerSecond = 0f
             physicalMovementMemory = 0f
             maxDisplayedActivity = 0f
+            sensorySpikesDisplay = 0f
+            centralSpikesDisplay = 0f
+            descendingSpikesDisplay = 0f
+            motorSpikesDisplay = 0f
+            sensoryDriveDisplay = 0f
             lastMotionX = flyX
             lastMotionY = flyY
             runtimeFault = ""
@@ -722,6 +741,11 @@ class MainActivity : Activity() {
                 }
                 buildBrainDisplayGraph()
                 loadedEdgeCount = e
+                if (loadedEdgeCount != GeneratedConnectomeMeta.EDGES) {
+                    throw IllegalStateException(
+                        "edges=$loadedEdgeCount esperado=${GeneratedConnectomeMeta.EDGES}; binario y metadata no coinciden"
+                    )
+                }
                 if (loadedEdgeCount <= 0) throw IllegalStateException("connectome sin conexiones")
                 if (brainDisplayIds.isEmpty()) throw IllegalStateException("visualizador neuronal sin neuronas")
                 if (brainDisplayLinks.isEmpty()) throw IllegalStateException("visualizador neuronal sin conexiones representables")
@@ -926,7 +950,7 @@ class MainActivity : Activity() {
             for (i in 0 until size) {
                 val channel = ((i * 17) % pattern.size)
                 val micro = .72f + .28f * sin((i * 0.043f) + channel * .61f).let { (it + 1f) * .5f }
-                v[start + i] += pattern[channel] * gain * micro
+                sensoryCurrent[start + i] += pattern[channel] * gain * micro
             }
         }
 
@@ -970,7 +994,7 @@ class MainActivity : Activity() {
             val wall = min(min(flyX - .06f, .94f - flyX), min(flyY - .10f, .79f - flyY)).coerceIn(0f, .4f)
             val wallSignal = (1f - wall / .4f).coerceIn(0f, 1f)
             for (i in MECH_START until SENSOR_END) {
-                v[i] += wallSignal * .055f
+                sensoryCurrent[i] += wallSignal * .055f
             }
 
             foodDrive = foodPattern[10].coerceIn(0f, 1f)
@@ -983,8 +1007,12 @@ class MainActivity : Activity() {
 
             sensoryDisplay = .90f * sensoryDisplay + .10f * ((foodDrive + lightDrive + dangerDrive) / 3f)
 
+            // Adaptation is part of the sensory membrane equation. It is folded
+            // into the same external drive rather than modifying v[] before the
+            // leak, so the input cannot be accidentally erased by the 20 ms Euler
+            // leak used by the neural clock.
             for (i in 0 until SENSOR_END) {
-                v[i] -= adapt[i]
+                sensoryCurrent[i] -= adapt[i]
                 adapt[i] *= exp((-dt * 2.0f).toDouble()).toFloat()
             }
         }
@@ -1177,8 +1205,16 @@ class MainActivity : Activity() {
                 }
 
                 val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
-                v[i] += ((V_REST - v[i]) * 50.0f - adapt[i]) * dt + synCurrent +
-                    centralNoise
+                // IMPORTANT: sensoryCurrent is applied AFTER the membrane leak.
+                // With dt=.020 s and tau_m=.020 s, the old expression
+                //     v += (V_REST - v) * 50 * dt + input
+                // reduces to v = V_REST + input. When input had already been
+                // written into v by sense(), the leak erased it completely.
+                // Treating sensory input as an external drive here preserves the
+                // intended causal path: stimulus -> sensory spike -> connectome.
+                val externalCurrent = if (i < SENSOR_END) sensoryCurrent[i] else 0f
+                v[i] += ((V_REST - v[i]) * 50.0f - adapt[i]) * dt +
+                    synCurrent + externalCurrent + centralNoise
                 fired[i] = v[i] >= V_THRESHOLD
 
                 if (fired[i]) {
@@ -1207,6 +1243,25 @@ class MainActivity : Activity() {
                 spikeWindowTime = 0f
             }
             maxDisplayedActivity = activeVisual
+
+            // Pipeline diagnostics are read-only. They make it possible to tell
+            // whether a failure is at sensory activation, central propagation,
+            // descending output, or VNC motor output without changing behaviour.
+            val sensoryRate = populationRate(VIS_START, MECH_END)
+            val centralRateNow = populationRate(OTHER_START, OTHER_END)
+            val descRateNow = populationRate(DESC_START, DESC_END)
+            val motorRateNow = populationRate(MOTOR_START, MOTOR_END)
+            val drivePeak = if (SENSOR_END > 0) {
+                var peak = 0f
+                for (i in 0 until SENSOR_END) peak = max(peak, sensoryCurrent[i])
+                peak
+            } else 0f
+            val diagTau = 1f - exp((-dt / .10f).toDouble()).toFloat()
+            sensorySpikesDisplay += (sensoryRate - sensorySpikesDisplay) * diagTau
+            centralSpikesDisplay += (centralRateNow - centralSpikesDisplay) * diagTau
+            descendingSpikesDisplay += (descRateNow - descendingSpikesDisplay) * diagTau
+            motorSpikesDisplay += (motorRateNow - motorSpikesDisplay) * diagTau
+            sensoryDriveDisplay += (drivePeak - sensoryDriveDisplay) * diagTau
         }
 
         private fun count(a: Int, b: Int): Int {

@@ -2,7 +2,13 @@ package com.example.flybrain
 
 /** FBR-10 validated MaleCNS v1.0 induced subgraph. Generated from the exact official source files. */
 object GeneratedConnectomeMeta {
-    const val VERSION = "MaleCNS v1.0 · FBR-10 · 16,669"
+    const val VERSION = "MaleCNS v1.0 · FBR-10 · 16,669 · FROZEN"
+    const val FLYBRAIN_VERSION = "1.14"
+    const val FLYBRAIN_VERSION_CODE = 114
+    const val SOURCE_NEURONS = 166700
+    const val SOURCE_EDGES = 25582938
+    const val SOURCE_CONTACTS = 124177617L
+    const val BINARY_SHA256 = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
     const val FORMAT_MAGIC = "FBC103"
     const val FORMAT_VERSION = 103
     const val NEURONS = 16669
