@@ -1,0 +1,15 @@
+FlyBrain V1.13 — clean recovery build
+
+Source of truth: Git commit 6f8311c ("dia despues")
+Commit date: 2026-09-20 14:41:26 +0200
+Application version: 1.13
+versionCode: 113
+Binary format: FBC103 / format 103
+Target neurons: 16,669
+FBR-10 validated induced subgraph: 2,064,951 edges / 16,783,932 contacts
+
+This package intentionally contains NO .git directory. It is intended to be
+used as the initial contents of a brand-new GitHub repository.
+
+Do not mix files from V1.14 into this package. Keep this tree as the V1.13
+baseline and create future work in separate branches/repos.
