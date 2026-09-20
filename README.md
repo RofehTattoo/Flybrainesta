@@ -253,3 +253,7 @@ V1.14.2 preserves the exact frozen FBR-10 MaleCNS v1.0 connectome and adds prese
 
 V1.14.3 keeps the exact frozen FBR-10 MaleCNS v1.0 connectome and changes only observability. The white simulation area now uses a density-aware, nearly full-width diagnostic card designed to remain readable during screen recording. The lower CNS map uses thinner, lower-alpha edges so dense blue/gray bundles obscure fewer neurons while activity remains encoded by node size, brightness, halo, and edge brightness.
 
+
+
+## V1.14.4 — Neural Observatory Quantitative
+V1.14.4 mantiene el FBR-10 congelado y convierte el diagnóstico individual en una lectura cuantitativa: ventana de 500 ms, Hz por neurona, spikes por ventana, potencial de membrana (Vm) y diferencia respecto al baseline de 5 s tras RESET. La cabecera superior se simplifica para liberar espacio a la escena; el mapa CNS mantiene tamaño/brillo/halo y usa aristas aún más finas y transparentes en regiones densas.
