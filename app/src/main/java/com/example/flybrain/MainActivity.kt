@@ -188,6 +188,15 @@ class MainActivity : Activity() {
         private val prevFired = BooleanArray(N)
         private val motorRole = ByteArray(N)
         private val descendingRole = ByteArray(N)
+        // Real MaleCNS body IDs for the selected neurons. Presentation/diagnostic only.
+        private val bodyId = LongArray(N)
+        private val topDnIds = IntArray(6) { -1 }
+        private val topDnVals = FloatArray(6)
+        private val topMotorIds = IntArray(6) { -1 }
+        private val topMotorVals = FloatArray(6)
+        private var activeDnCount = 0
+        private var activeMotorCount = 0
+        private var diagnosticRefreshClock = 0f
         // V1.13: experimentally identified halt populations retained from the published MaleCNS annotations.
         // 1=FG walk-OFF, 2=BB walk-OFF, 3=BRK VNC brake.
         private val haltRole = ByteArray(N)
@@ -376,7 +385,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.14 · MaleCNS v1.0 · FBR-10 · FBC103\n")
+            append("FLYBRAIN V1.14.1 · MaleCNS v1.0 · FBR-10 · FBC103\n")
             append("16.669 neuronas · ${loadedEdgeCount} conexiones cargadas · ${if (connectomeLoaded) "CONNECTOME OK" else "CONNECTOME ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()} · Spikes/s ${spikesPerSecond.toInt()} · Motor ${(motorRateDisplay * 100).toInt()}%\n")
             append("Neural S ${(sensorySpikesDisplay * 100).toInt()}% · C ${(centralSpikesDisplay * 100).toInt()}% · DN ${(descendingSpikesDisplay * 100).toInt()}% · M ${(motorSpikesDisplay * 100).toInt()}% · In ${"%.3f".format(sensoryDriveDisplay)}")
@@ -576,6 +585,13 @@ class MainActivity : Activity() {
             lastMotionX = flyX
             lastMotionY = flyY
             runtimeFault = ""
+            activeDnCount = 0
+            activeMotorCount = 0
+            diagnosticRefreshClock = 0f
+            java.util.Arrays.fill(topDnIds, -1)
+            java.util.Arrays.fill(topDnVals, 0f)
+            java.util.Arrays.fill(topMotorIds, -1)
+            java.util.Arrays.fill(topMotorVals, 0f)
             foodOn = false
             lightOn = false
             dangerOn = false
@@ -680,7 +696,7 @@ class MainActivity : Activity() {
                 }
                 // Node metadata is kept in the binary for provenance/inspection.
                 repeat(n) {
-                    b.long
+                    bodyId[it] = b.long
                     b.get()
                     nodeSide[it] = b.get()
                     b.get()
@@ -1262,6 +1278,123 @@ class MainActivity : Activity() {
             descendingSpikesDisplay += (descRateNow - descendingSpikesDisplay) * diagTau
             motorSpikesDisplay += (motorRateNow - motorSpikesDisplay) * diagTau
             sensoryDriveDisplay += (drivePeak - sensoryDriveDisplay) * diagTau
+            diagnosticRefreshClock += dt
+            if (diagnosticRefreshClock >= 0.15f) {
+                diagnosticRefreshClock = 0f
+                refreshNodeDiagnostics()
+            }
+        }
+
+        private fun refreshNodeDiagnostics() {
+            activeDnCount = 0
+            activeMotorCount = 0
+            java.util.Arrays.fill(topDnIds, -1)
+            java.util.Arrays.fill(topDnVals, 0f)
+            java.util.Arrays.fill(topMotorIds, -1)
+            java.util.Arrays.fill(topMotorVals, 0f)
+
+            fun offer(ids: IntArray, vals: FloatArray, id: Int, value: Float) {
+                if (value <= 0.015f) return
+                var pos = -1
+                for (k in ids.indices) {
+                    if (ids[k] == id) return
+                    if (pos < 0 && value > vals[k]) pos = k
+                }
+                if (pos < 0) return
+                for (k in ids.lastIndex downTo pos + 1) {
+                    ids[k] = ids[k - 1]
+                    vals[k] = vals[k - 1]
+                }
+                ids[pos] = id
+                vals[pos] = value
+            }
+
+            for (i in DESC_START until DESC_END) {
+                val a = visualActivity[i]
+                if (a > 0.015f) activeDnCount++
+                offer(topDnIds, topDnVals, i, a)
+            }
+            for (i in MOTOR_START until MOTOR_END) {
+                val a = visualActivity[i]
+                if (a > 0.015f) activeMotorCount++
+                offer(topMotorIds, topMotorVals, i, a)
+            }
+        }
+
+        private fun dnRoleLabel(role: Int): String = when (role) {
+            1 -> "FWD"
+            2 -> "TURN"
+            3 -> "BACK"
+            4 -> "ESC"
+            else -> "DN"
+        }
+
+        private fun motorRoleLabel(role: Int): String = when (role) {
+            GeneratedConnectomeMeta.MOTOR_LEG -> "LEG"
+            GeneratedConnectomeMeta.MOTOR_WING -> "WING"
+            GeneratedConnectomeMeta.MOTOR_HALTERE -> "HALT"
+            GeneratedConnectomeMeta.MOTOR_NECK -> "NECK"
+            GeneratedConnectomeMeta.MOTOR_ABDOMEN -> "ABD"
+            GeneratedConnectomeMeta.MOTOR_JUMP -> "JUMP"
+            else -> "MOTOR"
+        }
+
+        private fun drawNeuralDiagnosticCard(c: Canvas) {
+            val sceneB = sceneBottom()
+            val cardW = min(width * .92f, 560f)
+            val cardH = 126f
+            val left = 12f
+            val top = max(10f, sceneB - cardH - 12f)
+            val right = left + cardW
+            val bottom = top + cardH
+
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(238, 255, 255, 255)
+            c.drawRoundRect(left, top, right, bottom, 12f, 12f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.5f
+            paint.color = Color.argb(185, 80, 88, 94)
+            c.drawRoundRect(left, top, right, bottom, 12f, 12f, paint)
+
+            paint.style = Paint.Style.FILL
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = 10f
+            paint.color = Color.rgb(35, 42, 46)
+            c.drawText("DIAGNÓSTICO NEURONAL · SOLO LECTURA", left + 10f, top + 17f, paint)
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = 8.5f
+            paint.color = Color.rgb(75, 83, 88)
+            c.drawText("Actividad individual · bodyId real MaleCNS · no modifica la dinámica", left + 10f, top + 30f, paint)
+
+            val col1 = left + 10f
+            val col2 = left + cardW * .51f
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = 9f
+            paint.color = Color.rgb(218, 75, 175)
+            c.drawText("DN  $activeDnCount/${DESC_END - DESC_START} activos", col1, top + 47f, paint)
+            paint.color = Color.rgb(235, 70, 75)
+            c.drawText("MOTOR  $activeMotorCount/${MOTOR_END - MOTOR_START} activos", col2, top + 47f, paint)
+
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = 8.2f
+            paint.color = Color.rgb(50, 57, 61)
+            for (k in 0 until 3) {
+                val dy = top + 62f + k * 17f
+                val di = topDnIds[k]
+                if (di >= 0) {
+                    c.drawText("${k + 1}. ${bodyId[di]}  ${dnRoleLabel(descendingRole[di].toInt())}  ${(topDnVals[k] * 100).toInt()}%", col1, dy, paint)
+                } else c.drawText("${k + 1}. —", col1, dy, paint)
+                val mi = topMotorIds[k]
+                if (mi >= 0) {
+                    c.drawText("${k + 1}. ${bodyId[mi]}  ${motorRoleLabel(motorRole[mi].toInt())}  ${(topMotorVals[k] * 100).toInt()}%", col2, dy, paint)
+                } else c.drawText("${k + 1}. —", col2, dy, paint)
+            }
+
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = 8.5f
+            paint.color = Color.rgb(70, 78, 83)
+            c.drawText("Spikes/s ${spikesPerSecond.toInt()} · S ${(sensorySpikesDisplay * 100).toInt()}% · C ${(centralSpikesDisplay * 100).toInt()}% · DN ${(descendingSpikesDisplay * 100).toInt()}% · M ${(motorSpikesDisplay * 100).toInt()}%", left + 10f, bottom - 9f, paint)
+            paint.typeface = Typeface.DEFAULT
         }
 
         private fun count(a: Int, b: Int): Int {
@@ -1648,6 +1781,7 @@ class MainActivity : Activity() {
 
             drawScene(c)
             drawFly(c, flyX * width, flyY * sceneBottom(), heading)
+            drawNeuralDiagnosticCard(c)
             drawBrainPanel(c)
             postInvalidateOnAnimation()
         }
@@ -1743,7 +1877,7 @@ class MainActivity : Activity() {
             paint.textSize = 8f
             paint.color = Color.rgb(190, 198, 202)
             c.drawText(
-                "Real: $loadedEdgeCount edges · Display: ${brainDisplayIds.size} neuronas / ${brainDisplayLinks.size} edges · Spikes: $spikesLastStep paso / ${spikesPerSecond.toInt()} s⁻¹",
+                "Real: $loadedEdgeCount edges · Display: ${brainDisplayIds.size} neuronas / ${brainDisplayLinks.size} edges · Intensidad viva: tamaño + brillo + halo · Spikes: ${spikesPerSecond.toInt()} s⁻¹",
                 20f, top + 34f, paint
             )
 
@@ -1949,45 +2083,70 @@ class MainActivity : Activity() {
                 }
             }
 
-            // Real retained edges between representative neurons. Color follows
-            // the source region and alpha/width follows recent neural activity.
+            // Real retained edges between representative neurons. Presentation only:
+            // recent activity controls brightness, width and glow.
             paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
             for ((sourceRep, targetRep) in brainDisplayLinks) {
                 val sourceId = brainDisplayIds[sourceRep]
                 val targetId = brainDisplayIds[targetRep]
                 val a = posForNeuron(sourceId)
                 val b = posForNeuron(targetId)
-                val intensity = max(visualActivity[sourceId], visualActivity[targetId])
-                val active = intensity > .035f
-                paint.strokeWidth = if (active) 1.0f + intensity * 2.4f else .65f
+                val activity = max(visualActivity[sourceId], visualActivity[targetId]).coerceIn(0f, 1f)
+                val regional = max(regionRateForId(sourceId), regionRateForId(targetId))
+                val signal = max(activity, regional * .18f)
                 val base = regionColor(sourceId)
-                val alpha = if (active) (95f + 155f * intensity).toInt().coerceIn(95, 250) else 72
+                if (activity > .045f) {
+                    paint.strokeWidth = 3.2f + 3.8f * activity
+                    paint.color = Color.argb((28f + 70f * activity).toInt().coerceIn(28, 100),
+                        Color.red(base), Color.green(base), Color.blue(base))
+                    c.drawLine(a[0], a[1], b[0], b[1], paint)
+                }
+                paint.strokeWidth = .55f + 1.55f * signal
+                val alpha = (26f + 205f * signal).toInt().coerceIn(26, 235)
                 paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
                 c.drawLine(a[0], a[1], b[0], b[1], paint)
             }
 
-            // Representative neurons retain their real IDs. Color identifies the
-            // anatomical population; radius/brightness identifies activity.
+            // Representative neurons: inactive = small/dim; active = larger,
+            // brighter and surrounded by a visible halo.
             paint.style = Paint.Style.FILL
             for (rep in brainDisplayIds.indices) {
                 val id = brainDisplayIds[rep]
                 val p = posForNeuron(id)
-                val intensity = max(visualActivity[id], regionRateForId(id) * .72f)
-                val route = max(routeForward[id], max(routeTurn[id], routeEscape[id]))
+                val activity = visualActivity[id].coerceIn(0f, 1f)
+                val regional = regionRateForId(id)
                 val base = regionColor(id)
-                val alpha = if (intensity > .025f) (110f + 145f * intensity).toInt().coerceIn(110, 255) else 125
-                val radius = if (intensity > .025f) 2.0f + 5.0f * intensity else 1.65f
+                val visibleBaseline = (regional * .12f).coerceIn(0f, .12f)
+                val intensity = max(activity, visibleBaseline)
+                val radius = 1.25f + 6.8f * activity
+
+                if (activity > .035f) {
+                    paint.color = Color.argb((22f + 55f * activity).toInt().coerceIn(22, 80),
+                        Color.red(base), Color.green(base), Color.blue(base))
+                    c.drawCircle(p[0], p[1], radius * 2.7f, paint)
+                    paint.color = Color.argb((42f + 95f * activity).toInt().coerceIn(42, 145),
+                        Color.red(base), Color.green(base), Color.blue(base))
+                    c.drawCircle(p[0], p[1], radius * 1.65f, paint)
+                }
+
+                val alpha = if (activity > .02f) {
+                    (85f + 170f * intensity).toInt().coerceIn(85, 255)
+                } else 72
                 paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
                 c.drawCircle(p[0], p[1], radius, paint)
-                if (intensity > .38f) {
-                    paint.color = Color.argb((55f + 115f * intensity).toInt().coerceIn(55, 170), 255, 255, 255)
-                    c.drawCircle(p[0], p[1], max(1.0f, radius * .28f), paint)
-                } else if (intensity <= .025f) {
-                    val routeBase = (55f + route * 75f).toInt().coerceIn(45, 125)
-                    paint.color = Color.argb(70, routeBase, routeBase + 4, routeBase + 9)
-                    c.drawCircle(p[0], p[1], 1.0f, paint)
+
+                if (activity > .25f) {
+                    paint.color = Color.argb((120f + 120f * activity).toInt().coerceIn(120, 240), 255, 255, 255)
+                    c.drawCircle(p[0], p[1], max(1.0f, radius * .25f), paint)
                 }
             }
+
+            paint.textAlign = Paint.Align.LEFT
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = 7f
+            paint.color = Color.rgb(205, 212, 216)
+            c.drawText("TAMAÑO = actividad · BRILLO = actividad · HALO = pico reciente", x + 12f, y + 15f, paint)
 
             paint.textSize = 6.5f
             paint.typeface = Typeface.DEFAULT

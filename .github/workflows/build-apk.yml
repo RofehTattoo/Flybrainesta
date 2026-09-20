@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.14 · FBR-10 frozen
+name: Build FlyBrain APK V1.14.1 · FBR-10 frozen + neural diagnostics
 
 on:
   workflow_dispatch:
@@ -44,15 +44,17 @@ jobs:
       - name: Validate project identity
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 114' app/build.gradle.kts
-          grep -Fq 'versionName = "1.14"' app/build.gradle.kts
-          grep -Fq 'FLYBRAIN V1.14' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'versionCode = 115' app/build.gradle.kts
+          grep -Fq 'versionName = "1.14.1"' app/build.gradle.kts
+          grep -Fq 'FLYBRAIN V1.14.1' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FLYBRAIN_VERSION = "1.14"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FLYBRAIN_VERSION_CODE = 114' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION = "1.14.1"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION_CODE = 115' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'NEURONS = 16669' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'EDGES = 2064951' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FORMAT_VERSION = 103' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          echo 'IDENTIDAD V1.14: OK'
+          echo 'IDENTIDAD V1.14.1: OK'
 
       - name: Validate frozen FBR-10 connectome
         run: |
@@ -86,6 +88,10 @@ jobs:
           assert 'synCurrent + externalCurrent + centralNoise' in s
           assert 'v[start + i] += pattern[channel] * gain * micro' not in s
           assert 'GeneratedConnectomeMeta.FORMAT_MAGIC' in s
+          assert 'DIAGNÓSTICO NEURONAL · SOLO LECTURA' in s
+          assert 'refreshNodeDiagnostics()' in s
+          assert 'bodyId[it] = b.long' in s
+          assert 'TAMAÑO = actividad · BRILLO = actividad · HALO = pico reciente' in s
           print('KOTLIN / NEURAL-ACTIVATION REGRESSION: OK')
           PY
 
@@ -108,7 +114,7 @@ jobs:
           print('REPORT: OK')
           PY
 
-      - name: Compile APK V1.14
+      - name: Compile APK V1.14.1
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
       - name: Verify APK V1.14
@@ -120,17 +126,17 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
           echo "$BADGING" | grep -Fq "package: name='com.example.flybrain'"
-          echo "$BADGING" | grep -Fq "versionCode='114'"
-          echo "$BADGING" | grep -Fq "versionName='1.14'"
+          echo "$BADGING" | grep -Fq "versionCode='115'"
+          echo "$BADGING" | grep -Fq "versionName='1.14.1'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
-          echo 'APK V1.14 VALIDATED'
+          echo 'APK V1.14.1 VALIDATED'
           ls -lh "$APK"
           sha256sum "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.14-APK
+          name: FlyBrain-V1.14.1-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

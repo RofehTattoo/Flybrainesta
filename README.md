@@ -239,3 +239,8 @@ py -3 tools\prepare_malecns.py --download
 The pinned source objects are checked by byte size, SHA-256, Feather schema and row count. The FlyBrain neuron census is the audited 166,700 unique body IDs with a non-empty `superclass`; it is not the 165,122 `status == Traced` subset.
 
 For the complete pipeline use `RUN_FBR10.bat`.
+
+
+## V1.14.1 — Neural Diagnostic Build
+
+V1.14.1 keeps the V1.14 FBR-10 connectome frozen and adds read-only individual DN/motor diagnostics in the white simulation area plus stronger live activity visualization in the brain map (node size, brightness, halo, edge width and brightness). No connectome record, weight, LIF state, or body rule is changed by these presentation layers.
