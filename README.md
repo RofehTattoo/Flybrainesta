@@ -249,3 +249,7 @@ V1.14.1 keeps the V1.14 FBR-10 connectome frozen and adds read-only individual D
 ## V1.14.2 — Neural Observatory
 
 V1.14.2 preserves the exact frozen FBR-10 MaleCNS v1.0 connectome and adds presentation-only instrumentation for controlled neural tests. The white simulation area now contains a larger two-column read-only diagnostic card with five individual DN and five motor-neuron leaders, real MaleCNS body IDs, functional role labels, activity bars, population rates, and a rolling 5-second Neural/DN/Motor history. The lower CNS visualization keeps live node size, brightness, halo, and edge intensity. No connectome record, weight, LIF equation, sensory input, or body-control rule is changed by these additions.
+## V1.14.3 — Neural Observatory XL
+
+V1.14.3 keeps the exact frozen FBR-10 MaleCNS v1.0 connectome and changes only observability. The white simulation area now uses a density-aware, nearly full-width diagnostic card designed to remain readable during screen recording. The lower CNS map uses thinner, lower-alpha edges so dense blue/gray bundles obscure fewer neurons while activity remains encoded by node size, brightness, halo, and edge brightness.
+

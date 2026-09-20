@@ -197,7 +197,7 @@ class MainActivity : Activity() {
         private var activeDnCount = 0
         private var activeMotorCount = 0
         private var diagnosticRefreshClock = 0f
-        // V1.14.2: presentation-only 5 s diagnostic history. Never feeds back into dynamics.
+        // V1.14.3: presentation-only 5 s diagnostic history and video-legible observability. Never feeds back into dynamics.
         private val historyNeural = FloatArray(50)
         private val historyDn = FloatArray(50)
         private val historyMotor = FloatArray(50)
@@ -391,7 +391,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.14.2 · MaleCNS v1.0 · FBR-10 · FBC103\n")
+            append("FLYBRAIN V1.14.3 · MaleCNS v1.0 · FBR-10 · FBC103\n")
             append("16.669 neuronas · ${loadedEdgeCount} conexiones cargadas · ${if (connectomeLoaded) "CONNECTOME OK" else "CONNECTOME ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()} · Spikes/s ${spikesPerSecond.toInt()} · Motor ${(motorRateDisplay * 100).toInt()}%\n")
             append("Neural S ${(sensorySpikesDisplay * 100).toInt()}% · C ${(centralSpikesDisplay * 100).toInt()}% · DN ${(descendingSpikesDisplay * 100).toInt()}% · M ${(motorSpikesDisplay * 100).toInt()}% · In ${"%.3f".format(sensoryDriveDisplay)}")
@@ -1359,101 +1359,148 @@ class MainActivity : Activity() {
         }
 
         private fun drawNeuralDiagnosticCard(c: Canvas) {
+            // V1.14.3: diagnostic card is sized in dp/sp so it remains legible on
+            // high-density phones and in screen recordings. Presentation only.
+            val d = resources.displayMetrics.density
+            val ts = resources.displayMetrics.scaledDensity
+            val dp = { v: Float -> v * d }
+            val sp = { v: Float -> v * ts }
+
             val sceneB = sceneBottom()
-            val cardW = min(width * .96f, 640f)
-            val cardH = min(202f, max(188f, sceneB - 18f))
-            val left = 8f
-            val top = max(8f, sceneB - cardH - 8f)
+            val margin = dp(10f)
+            val cardW = width - dp(20f)
+            val desiredH = dp(190f)
+            val minH = dp(158f)
+            val availableH = sceneB - dp(18f)
+            val cardH = min(desiredH, max(minH, availableH))
+            val left = dp(10f)
+            val top = max(dp(8f), sceneB - cardH - dp(8f))
             val right = left + cardW
             val bottom = top + cardH
             val mid = left + cardW * .50f
 
             paint.style = Paint.Style.FILL
-            paint.color = Color.argb(245, 255, 255, 255)
-            c.drawRoundRect(left, top, right, bottom, 12f, 12f, paint)
+            paint.color = Color.argb(248, 255, 255, 255)
+            c.drawRoundRect(left, top, right, bottom, dp(12f), dp(12f), paint)
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.5f
-            paint.color = Color.argb(205, 80, 88, 94)
-            c.drawRoundRect(left, top, right, bottom, 12f, 12f, paint)
+            paint.strokeWidth = dp(1.2f)
+            paint.color = Color.argb(210, 82, 90, 96)
+            c.drawRoundRect(left, top, right, bottom, dp(12f), dp(12f), paint)
             paint.style = Paint.Style.FILL
 
-            paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = 11f
-            paint.color = Color.rgb(30, 36, 40)
-            c.drawText("DIAGNÓSTICO NEURONAL · SOLO LECTURA", left + 11f, top + 17f, paint)
-            paint.typeface = Typeface.DEFAULT
-            paint.textSize = 8f
-            paint.color = Color.rgb(85, 92, 97)
-            c.drawText("BodyID reales MaleCNS · instrumentación únicamente · no modifica la dinámica", left + 11f, top + 30f, paint)
-
-            val colL = left + 11f
-            val colR = mid + 9f
-            paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = 9.5f
-            paint.color = Color.rgb(205, 55, 165)
-            c.drawText("DN ACTIVOS  $activeDnCount/${DESC_END - DESC_START}", colL, top + 47f, paint)
-            paint.color = Color.rgb(118, 72, 205)
-            c.drawText("MOTOR ACTIVOS  $activeMotorCount/${MOTOR_END - MOTOR_START}", colR, top + 47f, paint)
-
-            paint.typeface = Typeface.DEFAULT
-            paint.textSize = 8.2f
-            for (k in 0 until 5) {
-                val dy = top + 61f + k * 15f
-                val di = topDnIds[k]
-                paint.color = Color.rgb(55, 61, 65)
-                if (di >= 0) {
-                    c.drawText("${k + 1}. ${bodyId[di]}  ${dnRoleLabel(descendingRole[di].toInt())}", colL, dy, paint)
-                    val barL = colL + 124f
-                    val barW = 50f
-                    paint.color = Color.rgb(232, 234, 236)
-                    c.drawRoundRect(barL, dy - 8f, barL + barW, dy - 2f, 3f, 3f, paint)
-                    paint.color = Color.rgb(205, 55, 165)
-                    c.drawRoundRect(barL, dy - 8f, barL + barW * topDnVals[k].coerceIn(0f, 1f), dy - 2f, 3f, 3f, paint)
-                    paint.color = Color.rgb(45, 50, 54)
-                    c.drawText("${(topDnVals[k] * 100).toInt()}%", barL + barW + 5f, dy, paint)
-                } else c.drawText("${k + 1}. —", colL, dy, paint)
-
-                val mi = topMotorIds[k]
-                if (mi >= 0) {
-                    c.drawText("${k + 1}. ${bodyId[mi]}  ${motorRoleLabel(motorRole[mi].toInt())}", colR, dy, paint)
-                    val barL = colR + 124f
-                    val barW = 50f
-                    paint.color = Color.rgb(232, 234, 236)
-                    c.drawRoundRect(barL, dy - 8f, barL + barW, dy - 2f, 3f, 3f, paint)
-                    paint.color = Color.rgb(118, 72, 205)
-                    c.drawRoundRect(barL, dy - 8f, barL + barW * topMotorVals[k].coerceIn(0f, 1f), dy - 2f, 3f, 3f, paint)
-                    paint.color = Color.rgb(45, 50, 54)
-                    c.drawText("${(topMotorVals[k] * 100).toInt()}%", barL + barW + 5f, dy, paint)
-                } else c.drawText("${k + 1}. —", colR, dy, paint)
+            val stimulusLabel = when {
+                foodOn -> "COMIDA"
+                lightOn -> "LUZ"
+                dangerOn -> "PELIGRO"
+                else -> "NINGUNO"
             }
 
-            val dividerY = top + 139f
-            paint.color = Color.rgb(225, 227, 229)
-            c.drawRect(left + 10f, dividerY, right - 10f, dividerY + 1f, paint)
-
+            paint.textAlign = Paint.Align.LEFT
             paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = 8.5f
-            paint.color = Color.rgb(70, 78, 83)
-            c.drawText("SPIKES/s ${spikesPerSecond.toInt()} · S ${(sensorySpikesDisplay * 100).toInt()}% · C ${(centralSpikesDisplay * 100).toInt()}% · DN ${(descendingSpikesDisplay * 100).toInt()}% · M ${(motorSpikesDisplay * 100).toInt()}%", left + 11f, top + 153f, paint)
+            paint.textSize = sp(13f)
+            paint.color = Color.rgb(24, 30, 34)
+            c.drawText("DIAGNÓSTICO NEURONAL · SOLO LECTURA", left + dp(12f), top + dp(19f), paint)
             paint.typeface = Typeface.DEFAULT
-            paint.textSize = 7.5f
-            paint.color = Color.rgb(105, 112, 117)
-            c.drawText("Historial 5 s · Neural / DN / Motor", left + 11f, top + 166f, paint)
+            paint.textSize = sp(9.5f)
+            paint.color = Color.rgb(82, 89, 95)
+            c.drawText("MaleCNS bodyID · actividad individual · estímulo: $stimulusLabel", left + dp(12f), top + dp(33f), paint)
 
-            val gx = left + 174f
-            val gy = top + 157f
-            val gw = right - gx - 12f
-            val gh = 30f
-            paint.color = Color.rgb(245, 246, 247)
-            c.drawRoundRect(gx, gy - 9f, gx + gw, gy + gh, 5f, 5f, paint)
+            // Population counters.
+            val colL = left + dp(12f)
+            val colR = mid + dp(10f)
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = sp(11f)
+            paint.color = Color.rgb(190, 42, 145)
+            c.drawText("DN ACTIVOS  $activeDnCount/${DESC_END - DESC_START}", colL, top + dp(52f), paint)
+            paint.color = Color.rgb(108, 62, 195)
+            c.drawText("MOTOR ACTIVOS  $activeMotorCount/${MOTOR_END - MOTOR_START}", colR, top + dp(52f), paint)
+
+            // Column labels.
+            paint.textSize = sp(9.5f)
+            paint.color = Color.rgb(60, 67, 72)
+            c.drawText("TOP DN · actividad", colL, top + dp(67f), paint)
+            c.drawText("TOP MOTOR · actividad", colR, top + dp(67f), paint)
+
+            // Readable 5-row lists. Bars remain secondary; percentage text is primary
+            // so compression in video still leaves an unambiguous value.
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = sp(9.2f)
+            val rowStep = dp(15f)
+            for (k in 0 until 5) {
+                val baseline = top + dp(81f) + rowStep * k
+                val di = topDnIds[k]
+                val mi = topMotorIds[k]
+
+                paint.color = Color.rgb(38, 44, 49)
+                if (di >= 0) {
+                    val txt = "${k + 1}. ${bodyId[di]} · ${dnRoleLabel(descendingRole[di].toInt())}"
+                    c.drawText(txt, colL, baseline, paint)
+                    val pct = (topDnVals[k] * 100f).toInt().coerceIn(0, 100)
+                    val pctX = mid - dp(15f)
+                    paint.color = Color.rgb(190, 42, 145)
+                    c.drawText("$pct%", pctX, baseline, paint)
+                    val barLeft = colL + cardW * .235f
+                    val barRight = mid - dp(40f)
+                    paint.color = Color.rgb(232, 234, 236)
+                    c.drawRoundRect(barLeft, baseline - dp(9f), barRight, baseline - dp(4f), dp(3f), dp(3f), paint)
+                    paint.color = Color.rgb(190, 42, 145)
+                    c.drawRoundRect(barLeft, baseline - dp(9f), barLeft + (barRight - barLeft) * topDnVals[k].coerceIn(0f, 1f), baseline - dp(4f), dp(3f), dp(3f), paint)
+                } else c.drawText("${k + 1}. —", colL, baseline, paint)
+
+                paint.color = Color.rgb(38, 44, 49)
+                if (mi >= 0) {
+                    val txt = "${k + 1}. ${bodyId[mi]} · ${motorRoleLabel(motorRole[mi].toInt())}"
+                    c.drawText(txt, colR, baseline, paint)
+                    val pct = (topMotorVals[k] * 100f).toInt().coerceIn(0, 100)
+                    val pctX = right - dp(14f)
+                    paint.color = Color.rgb(108, 62, 195)
+                    paint.textAlign = Paint.Align.RIGHT
+                    c.drawText("$pct%", pctX, baseline, paint)
+                    paint.textAlign = Paint.Align.LEFT
+                    val barLeft = colR + cardW * .235f
+                    val barRight = right - dp(43f)
+                    paint.color = Color.rgb(232, 234, 236)
+                    c.drawRoundRect(barLeft, baseline - dp(9f), barRight, baseline - dp(4f), dp(3f), dp(3f), paint)
+                    paint.color = Color.rgb(108, 62, 195)
+                    c.drawRoundRect(barLeft, baseline - dp(9f), barLeft + (barRight - barLeft) * topMotorVals[k].coerceIn(0f, 1f), baseline - dp(4f), dp(3f), dp(3f), paint)
+                } else c.drawText("${k + 1}. —", colR, baseline, paint)
+            }
+
+            val dividerY = top + dp(150f)
+            paint.color = Color.rgb(224, 227, 230)
+            c.drawRect(left + dp(11f), dividerY, right - dp(11f), dividerY + dp(1f), paint)
+
+            // High-value metrics kept large enough for video capture.
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = sp(9.5f)
+            paint.color = Color.rgb(58, 66, 71)
+            c.drawText("SPIKES/s ${spikesPerSecond.toInt()} · S ${(sensorySpikesDisplay * 100).toInt()}% · C ${(centralSpikesDisplay * 100).toInt()}% · DN ${(descendingSpikesDisplay * 100).toInt()}% · M ${(motorSpikesDisplay * 100).toInt()}%", left + dp(12f), top + dp(164f), paint)
+
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = sp(9f)
+            paint.color = Color.rgb(87, 95, 100)
+            val stateLabel = when {
+                inactivityContinuous >= 300f -> "SUEÑO"
+                inactivityContinuous >= 1.0f -> "REPOSO"
+                physicalSpeed > 0.00035f -> "LOCOMOCIÓN"
+                else -> "INMÓVIL"
+            }
+            c.drawText("IN ${"%.2f".format(sensoryDriveDisplay)} · MOV ${"%.4f".format(physicalSpeed)} · ESTADO $stateLabel", left + dp(12f), top + dp(179f), paint)
+
+            // Compact 5 s history strip: Neural / DN / Motor.
+            val gx = left + cardW * .57f
+            val gy = top + dp(157f)
+            val gw = right - gx - dp(12f)
+            val gh = dp(27f)
+            paint.color = Color.rgb(247, 248, 249)
+            c.drawRoundRect(gx, gy, gx + gw, gy + gh, dp(5f), dp(5f), paint)
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1f
-            paint.color = Color.rgb(225, 228, 230)
-            c.drawRoundRect(gx, gy - 9f, gx + gw, gy + gh, 5f, 5f, paint)
-            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = dp(.7f)
+            paint.color = Color.rgb(222, 225, 228)
+            c.drawRoundRect(gx, gy, gx + gw, gy + gh, dp(5f), dp(5f), paint)
             fun plot(series: FloatArray, color: Int) {
                 paint.color = color
-                paint.strokeWidth = 1.7f
+                paint.strokeWidth = dp(1.1f)
                 val path = android.graphics.Path()
                 for (j in series.indices) {
                     val idx = (historyCursor + j) % series.size
@@ -1463,22 +1510,29 @@ class MainActivity : Activity() {
                 }
                 c.drawPath(path, paint)
             }
-            plot(historyNeural, Color.rgb(45, 155, 85))
-            plot(historyDn, Color.rgb(210, 65, 155))
-            plot(historyMotor, Color.rgb(105, 75, 190))
-
+            plot(historyNeural, Color.rgb(40, 150, 85))
+            plot(historyDn, Color.rgb(195, 45, 145))
+            plot(historyMotor, Color.rgb(100, 68, 185))
             paint.style = Paint.Style.FILL
-            paint.textSize = 7f
-            paint.color = Color.rgb(45, 155, 85)
-            c.drawText("N", gx + gw - 55f, gy - 1f, paint)
-            paint.color = Color.rgb(210, 65, 155)
-            c.drawText("DN", gx + gw - 40f, gy - 1f, paint)
-            paint.color = Color.rgb(105, 75, 190)
-            c.drawText("M", gx + gw - 18f, gy - 1f, paint)
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = sp(7.5f)
+            paint.color = Color.rgb(40, 150, 85)
+            c.drawText("N", gx + dp(7f), gy + dp(11f), paint)
+            paint.color = Color.rgb(195, 45, 145)
+            c.drawText("DN", gx + dp(21f), gy + dp(11f), paint)
+            paint.color = Color.rgb(100, 68, 185)
+            c.drawText("M", gx + dp(40f), gy + dp(11f), paint)
 
-            paint.textSize = 7f
-            paint.color = Color.rgb(105, 112, 117)
-            c.drawText("Actividad individual · lectura únicamente", left + 11f, bottom - 7f, paint)
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = sp(7.5f)
+            paint.color = Color.rgb(110, 118, 123)
+            c.drawText("5 s", gx + gw - dp(17f), gy + gh - dp(4f), paint)
+
+            paint.textAlign = Paint.Align.LEFT
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = sp(7.2f)
+            paint.color = Color.rgb(115, 121, 126)
+            c.drawText("Lectura únicamente · no altera neuronas, pesos, LIF ni conducta", left + dp(12f), bottom - dp(7f), paint)
         }
 
         private fun count(a: Int, b: Int): Int {
@@ -2167,8 +2221,10 @@ class MainActivity : Activity() {
                 }
             }
 
-            // Real retained edges between representative neurons. Presentation only:
-            // recent activity controls brightness, width and glow.
+            // Real retained edges between representative neurons. Presentation only.
+            // V1.14.3: links are deliberately thin and low-alpha so dense regions remain
+            // legible. Activity is encoded primarily by brightness, not diameter.
+            val lineDp = resources.displayMetrics.density
             paint.style = Paint.Style.STROKE
             paint.strokeCap = Paint.Cap.ROUND
             for ((sourceRep, targetRep) in brainDisplayLinks) {
@@ -2178,18 +2234,22 @@ class MainActivity : Activity() {
                 val b = posForNeuron(targetId)
                 val activity = max(visualActivity[sourceId], visualActivity[targetId]).coerceIn(0f, 1f)
                 val regional = max(regionRateForId(sourceId), regionRateForId(targetId))
-                val signal = max(activity, regional * .18f)
+                val signal = max(activity, regional * .14f)
                 val base = regionColor(sourceId)
-                if (activity > .045f) {
-                    paint.strokeWidth = 3.2f + 3.8f * activity
-                    paint.color = Color.argb((28f + 70f * activity).toInt().coerceIn(28, 100),
-                        Color.red(base), Color.green(base), Color.blue(base))
+
+                // Thin baseline for all represented real edges.
+                paint.strokeWidth = (0.28f + 0.42f * signal) * lineDp
+                val baseAlpha = (9f + 50f * signal).toInt().coerceIn(9, 60)
+                paint.color = Color.argb(baseAlpha, Color.red(base), Color.green(base), Color.blue(base))
+                c.drawLine(a[0], a[1], b[0], b[1], paint)
+
+                // Active edge highlight: still thin; brightness/alpha carries the signal.
+                if (activity > .06f) {
+                    paint.strokeWidth = (0.42f + 0.48f * activity) * lineDp
+                    val activeAlpha = (42f + 130f * activity).toInt().coerceIn(42, 175)
+                    paint.color = Color.argb(activeAlpha, Color.red(base), Color.green(base), Color.blue(base))
                     c.drawLine(a[0], a[1], b[0], b[1], paint)
                 }
-                paint.strokeWidth = .55f + 1.55f * signal
-                val alpha = (26f + 205f * signal).toInt().coerceIn(26, 235)
-                paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
-                c.drawLine(a[0], a[1], b[0], b[1], paint)
             }
 
             // Representative neurons: inactive = small/dim; active = larger,

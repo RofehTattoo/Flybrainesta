@@ -6,8 +6,8 @@ object GeneratedConnectomeMeta {
     const val FLYBRAIN_VERSION = "1.14"
     const val FLYBRAIN_VERSION_CODE = 114
     // Application diagnostic build layered on top of the frozen V1.14 connectome.
-    const val APP_VERSION = "1.14.2"
-    const val APP_VERSION_CODE = 116
+    const val APP_VERSION = "1.14.3"
+    const val APP_VERSION_CODE = 117
     const val SOURCE_NEURONS = 166700
     const val SOURCE_EDGES = 25582938
     const val SOURCE_CONTACTS = 124177617L
