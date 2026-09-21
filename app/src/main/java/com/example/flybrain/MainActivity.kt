@@ -132,34 +132,20 @@ class MainActivity : Activity() {
         // body-to-body connections from the source connectome.
         private val N = GeneratedConnectomeMeta.NEURONS
 
-        // V1.06: gain calibration for the existing connectome only. These values
-        // do not add neurons or edges; they control how strongly measured spikes
-        // move the existing LIF membrane potentials.
+        // V1.15: fixed synaptic gains for the signed/normalized FBD104 dynamics
+        // layer. They are model parameters, not an adaptive controller.
         private val SENSORY_VIS_GAIN = 0.70f
         private val SENSORY_OLF_GAIN = 1.00f
         private val SENSORY_GUST_GAIN = 0.85f
         private val SENSORY_MECH_GAIN = 0.70f
 
-        // V1.06: bounded homeostatic gain calibration. The controller changes
-        // only the efficacy of the EXISTING synapses; topology, neuron count and
-        // edge weights in the connectome file are untouched. It keeps internal
-        // populations in a sparse, non-saturated firing regime while a stimulus
-        // is present, instead of choosing a larger fixed gain blindly.
+        // These values are deliberately frozen during an experiment. Adaptive
+        // gain was removed because it altered the neural substrate in response
+        // to the very stimulus being measured.
         private var gainOther = 3.60f
         private var gainAsc = 3.40f
         private var gainDesc = 4.00f
         private var gainMotor = 3.60f
-        private var gainCalibrationClock = 0f
-        private var gainCalibrationActive = false
-
-        private val GAIN_OTHER_MIN = 2.00f
-        private val GAIN_OTHER_MAX = 4.80f
-        private val GAIN_ASC_MIN = 2.00f
-        private val GAIN_ASC_MAX = 4.50f
-        private val GAIN_DESC_MIN = 2.20f
-        private val GAIN_DESC_MAX = 5.20f
-        private val GAIN_MOTOR_MIN = 2.00f
-        private val GAIN_MOTOR_MAX = 4.80f
         private val V_REST = -0.72f
         private val V_THRESHOLD = -0.50f
         private val V_RESET = -0.84f
@@ -241,6 +227,8 @@ class MainActivity : Activity() {
         // the injected voltage back to V_REST before threshold evaluation. That
         // made every stimulus effectively invisible to the neurons.
         private val sensoryCurrent = FloatArray(N)
+        // FBR-10 dynamics layer: +1 excitatory, -1 inhibitory, 0 unknown/modulatory.
+        private val neuroSign = ByteArray(N)
 
         private val incoming = Array(N) { IntArray(0) }
         private val incomingW = Array(N) { FloatArray(0) }
@@ -405,8 +393,8 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.14.4 · MaleCNS v1.0 · FBR-10 · FBC103\n")
-            append("16.669 neuronas · ${loadedEdgeCount} conexiones cargadas · ${if (connectomeLoaded) "CONNECTOME OK" else "CONNECTOME ERROR"}\n")
+            append("FLYBRAIN V1.15.0 · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104\n")
+            append("16.669 neuronas · ${loadedEdgeCount} conexiones estructurales · ${loadedDynamicsEdgeCount} sinápticas dinámicas · ${if (connectomeLoaded && dynamicsLoaded) "CONNECTOME + DYNAMICS OK" else "CONNECTOME/DYNAMICS ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()}")
             if (runtimeFault.isNotEmpty()) append("\nERROR: $runtimeFault")
         }
@@ -496,8 +484,6 @@ class MainActivity : Activity() {
             gainAsc = 3.40f
             gainDesc = 4.00f
             gainMotor = 3.60f
-            gainCalibrationClock = 0f
-            gainCalibrationActive = false
             foodX = .76f
             foodY = .35f
             lightX = .72f
@@ -634,11 +620,13 @@ class MainActivity : Activity() {
         private var connectomeLoaded = false
         private var connectomeError = ""
         private var loadedEdgeCount = 0
+        private var loadedDynamicsEdgeCount = 0
+        private var dynamicsLoaded = false
 
         private fun buildBrain() {
             connectomeLoaded = loadMeasuredConnectome()
             if (!connectomeLoaded) {
-                runtimeFault = connectomeError.ifEmpty { "no se pudo cargar el connectome FBC103" }
+                runtimeFault = connectomeError.ifEmpty { "no se pudo cargar FBR-10 / dinámica FBD104" }
                 // Fail closed: never substitute an artificial graph for the
                 // published connectome. This makes a packaging/format error
                 // visible instead of producing scientifically misleading output.
@@ -780,6 +768,9 @@ class MainActivity : Activity() {
                 }
                 buildBrainDisplayGraph()
                 loadedEdgeCount = e
+                if (!loadDynamicsLayer()) {
+                    throw IllegalStateException(connectomeError.ifEmpty { "FBD104 dynamics layer unavailable" })
+                }
                 if (loadedEdgeCount != GeneratedConnectomeMeta.EDGES) {
                     throw IllegalStateException(
                         "edges=$loadedEdgeCount esperado=${GeneratedConnectomeMeta.EDGES}; binario y metadata no coinciden"
@@ -793,6 +784,87 @@ class MainActivity : Activity() {
             } catch (ex: Exception) {
                 connectomeError = ex.message ?: ex.javaClass.simpleName
                 loadedEdgeCount = 0
+                false
+            }
+        }
+
+        private fun loadDynamicsLayer(): Boolean {
+            return try {
+                val resourceId = resources.getIdentifier("malecns_fbr10_dynamics", "raw", packageName)
+                if (resourceId == 0) {
+                    connectomeError = "recurso malecns_fbr10_dynamics no encontrado"
+                    return false
+                }
+                val bytes = resources.openRawResource(resourceId).use { it.readBytes() }
+                val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                if (b.remaining() < 17) throw IllegalStateException("FBD104 cabecera incompleta")
+                val magic = ByteArray(8)
+                b.get(magic)
+                val magicText = magic.toString(Charsets.US_ASCII).trimEnd('\u0000')
+                if (magicText != "FBD104") throw IllegalStateException("magic=$magicText esperado=FBD104")
+                val n = b.int
+                val e = b.int
+                if (n != N) throw IllegalStateException("FBD104 neuronas=$n esperado=$N")
+                if (e < 0 || e > 50_000_000) throw IllegalStateException("FBD104 edges=$e fuera de rango")
+                val expectedBytes = 16L + n.toLong() + e.toLong() * 12L
+                if (bytes.size.toLong() != expectedBytes) {
+                    throw IllegalStateException("FBD104 tamaño=${bytes.size} esperado=$expectedBytes")
+                }
+                repeat(n) { idx ->
+                    neuroSign[idx] = b.get()
+                    val sign = neuroSign[idx].toInt()
+                    if (sign != -1 && sign != 0 && sign != 1) {
+                        throw IllegalStateException("FBD104 signo invalido en nodo $idx")
+                    }
+                }
+                val srcs = IntArray(e)
+                val dsts = IntArray(e)
+                val weights = FloatArray(e)
+                val incomingCount = IntArray(n)
+                repeat(e) {
+                    val src = b.int
+                    val dst = b.int
+                    val weight = b.float
+                    if (src !in 0 until n || dst !in 0 until n) {
+                        throw IllegalStateException("FBD104 edge[$it] fuera de rango: $src->$dst")
+                    }
+                    if (!weight.isFinite() || weight == 0f) {
+                        throw IllegalStateException("FBD104 edge[$it] con peso invalido")
+                    }
+                    if (neuroSign[src].toInt() == 0) {
+                        throw IllegalStateException("FBD104 edge[$it] usa presinaptica sin signo")
+                    }
+                    if ((weight > 0f) != (neuroSign[src].toInt() > 0)) {
+                        throw IllegalStateException("FBD104 signo de peso inconsistente en edge[$it]")
+                    }
+                    srcs[it] = src
+                    dsts[it] = dst
+                    weights[it] = weight
+                    incomingCount[dst]++
+                }
+                if (b.hasRemaining()) throw IllegalStateException("FBD104 bytes restantes=${b.remaining()}")
+
+                for (i in 0 until n) {
+                    incoming[i] = IntArray(incomingCount[i])
+                    incomingW[i] = FloatArray(incomingCount[i])
+                    baseW[i] = FloatArray(incomingCount[i])
+                    eligibility[i] = FloatArray(incomingCount[i])
+                }
+                val writePos = IntArray(n)
+                for (k in 0 until e) {
+                    val target = dsts[k]
+                    val pos = writePos[target]++
+                    incoming[target][pos] = srcs[k]
+                    incomingW[target][pos] = weights[k]
+                    baseW[target][pos] = weights[k]
+                }
+                loadedDynamicsEdgeCount = e
+                dynamicsLoaded = true
+                true
+            } catch (ex: Exception) {
+                dynamicsLoaded = false
+                loadedDynamicsEdgeCount = 0
+                connectomeError = ex.message ?: ex.javaClass.simpleName
                 false
             }
         }
@@ -995,6 +1067,9 @@ class MainActivity : Activity() {
 
 
         private fun sense(dt: Float) {
+            // External sensory drive is a per-step current, not an accumulating state.
+            // Clear it before encoding the current environmental state.
+            java.util.Arrays.fill(sensoryCurrent, 0f)
             val foodPattern = encodeOdor(foodOn, foodX, foodY, 2.25f * (1f - satiety * .45f))
             val tastePattern = encodeTaste(foodOn, foodX, foodY, 2.35f * (1f - satiety * .35f))
             val lightPattern = encodeStimulus(lightOn, lightX, lightY, 1.55f)
@@ -1056,40 +1131,6 @@ class MainActivity : Activity() {
             }
         }
 
-        private fun calibrateSynapticGain(dt: Float, sensoryArousal: Float) {
-            // Calibrate slowly (250 ms) and only while the environment is actually
-            // stimulating the sensory populations. With no stimulus, zero firing is
-            // a legitimate baseline in connectome LIF models and must not cause gain
-            // to ramp upward indefinitely.
-            gainCalibrationClock += dt
-            if (gainCalibrationClock < .25f) return
-            gainCalibrationClock = 0f
-
-            val active = sensoryArousal > .055f || foodOn || lightOn || dangerOn
-            gainCalibrationActive = active
-            if (!active) return
-
-            val otherRate = populationRate(OTHER_START, OTHER_END)
-            val ascRate = populationRate(ASC_START, ASC_END)
-            val descRate = populationRate(DESC_START, DESC_END)
-            val motorRate = populationRate(MOTOR_START, MOTOR_END)
-
-            // Target windows are deliberately broad: they define a sparse regime,
-            // not a claim that every fly neuron has one universal firing rate.
-            gainOther = adaptGain(gainOther, otherRate, .004f, .035f, GAIN_OTHER_MIN, GAIN_OTHER_MAX)
-            gainAsc = adaptGain(gainAsc, ascRate, .003f, .030f, GAIN_ASC_MIN, GAIN_ASC_MAX)
-            gainDesc = adaptGain(gainDesc, descRate, .004f, .045f, GAIN_DESC_MIN, GAIN_DESC_MAX)
-            gainMotor = adaptGain(gainMotor, motorRate, .002f, .035f, GAIN_MOTOR_MIN, GAIN_MOTOR_MAX)
-        }
-
-        private fun adaptGain(current: Float, rate: Float, low: Float, high: Float, minGain: Float, maxGain: Float): Float {
-            var g = current
-            // Small multiplicative steps prevent frame-to-frame oscillation.
-            if (rate > high) g *= .94f
-            else if (rate < low) g *= 1.045f
-            return g.coerceIn(minGain, maxGain)
-        }
-
         private fun stepBrain(dt: Float) {
             for (i in 0 until N) prevFired[i] = fired[i]
 
@@ -1111,7 +1152,6 @@ class MainActivity : Activity() {
                 abs(dangerDrive - previousDangerDrive)).coerceIn(0f, 1f)
 
             val sensoryArousal = max(foodDrive, max(lightDrive, dangerDrive))
-            calibrateSynapticGain(dt, sensoryArousal)
             val targetExploration = (.42f + .12f * sensoryNovelty + .06f * sensoryArousal).coerceIn(.15f, .75f)
             explorationState += dt * (.12f * (targetExploration - explorationState))
             explorationState = explorationState.coerceIn(.05f, .80f)
@@ -1211,10 +1251,9 @@ class MainActivity : Activity() {
                     // published edge itself. No artificial "halt gain" is applied.
                     syn += w[k] * synTrace[source]
                 }
-                // Do not clip the raw summed synaptic drive before gain. V1.04
-                // was saturating at +/-0.38 and suppressing long multi-hop paths.
-                // V1.04 applies a single physiologically-inspired current ceiling
-                // after population-specific gain.
+                // The normalized signed drive is bounded only after population
+                // gain. This keeps inhibition/excitation balanced without
+                // changing the frozen edge topology.
                 syn = syn.coerceIn(-.75f, .75f)
 
                 val isSensor = i < SENSOR_END
@@ -1230,12 +1269,11 @@ class MainActivity : Activity() {
                 // dynamics or from an explicit sensory input.
                 val centralNoise = 0f
 
-                // V1.06: amplify transmission through the EXISTING retained
-                // connectome. The topology and weights are untouched; this is a
-                // single model-gain calibration so sparse reduced paths can cross
-                // the LIF threshold instead of dying after the first synapse.
-                // The gain is strongest at DN/VNC stages where the reduction is
-                // sparsest, while the current ceiling prevents runaway saturation.
+                // V1.15: gains are fixed model parameters. The previous adaptive
+                // controller was coupled to stimulus presentation and therefore
+                // changed the system while it was being measured. FBD104 already
+                // contains signed, normalized synaptic weights; these gains are
+                // now held constant so stimulus comparisons are reproducible.
                 val synGain = when {
                     isMotor -> gainMotor
                     isDesc -> gainDesc
@@ -1411,7 +1449,7 @@ class MainActivity : Activity() {
         }
 
         private fun drawNeuralDiagnosticCard(c: Canvas) {
-            // V1.14.4: quantitative readout only. No diagnostic value feeds back into dynamics.
+            // V1.15: quantitative readout only. No diagnostic value feeds back into dynamics.
             val d = resources.displayMetrics.density
             val ts = resources.displayMetrics.scaledDensity
             val dp = { v: Float -> v * d }

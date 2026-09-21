@@ -255,5 +255,10 @@ V1.14.3 keeps the exact frozen FBR-10 MaleCNS v1.0 connectome and changes only o
 
 
 
+## V1.15.0 — Neural Dynamics Integrity
+V1.15.0 keeps the FBR-10/FBC103 structural graph frozen and introduces a separate FBD104 dynamics layer derived from the official MaleCNS v1.0 neurotransmitter table. Fast synaptic edges use the established FlyBrain convention (acetylcholine excitatory; GABA/glutamate inhibitory; other/modulatory/unknown omitted from fast current) and are normalized per postsynaptic target before entering the LIF model. The adaptive synaptic-gain controller is removed from the experimental loop so stimulus tests do not change the model while being measured. Sensory current is reset every neural step, making stimulus OFF actually mean zero external sensory current.
+
+The structural FBR-10 artifact remains byte-for-byte frozen; FBD104 is a derived dynamics artifact and is regenerated in CI from the pinned neurotransmitter source.
+
 ## V1.14.4 — Neural Observatory Quantitative
 V1.14.4 mantiene el FBR-10 congelado y convierte el diagnóstico individual en una lectura cuantitativa: ventana de 500 ms, Hz por neurona, spikes por ventana, potencial de membrana (Vm) y diferencia respecto al baseline de 5 s tras RESET. La cabecera superior se simplifica para liberar espacio a la escena; el mapa CNS mantiene tamaño/brillo/halo y usa aristas aún más finas y transparentes en regiones densas.

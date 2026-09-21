@@ -2,12 +2,14 @@ package com.example.flybrain
 
 /** FBR-10 validated MaleCNS v1.0 induced subgraph. Generated from the exact official source files. */
 object GeneratedConnectomeMeta {
-    const val VERSION = "MaleCNS v1.0 · FBR-10 · 16,669 · FROZEN · DIAGNOSTIC"
+    const val VERSION = "MaleCNS v1.0 · FBR-10 · 16,669 · FROZEN · FBD104"
     const val FLYBRAIN_VERSION = "1.14"
     const val FLYBRAIN_VERSION_CODE = 114
     // Application diagnostic build layered on top of the frozen V1.14 connectome.
-    const val APP_VERSION = "1.14.4"
-    const val APP_VERSION_CODE = 118
+    const val APP_VERSION = "1.15.0"
+    const val APP_VERSION_CODE = 119
+    const val DYNAMICS_FORMAT = "FBD104"
+    const val DYNAMICS_NORMALIZATION_SCALE = 0.42f
     const val SOURCE_NEURONS = 166700
     const val SOURCE_EDGES = 25582938
     const val SOURCE_CONTACTS = 124177617L
