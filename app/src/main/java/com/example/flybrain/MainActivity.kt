@@ -375,6 +375,8 @@ class MainActivity : Activity() {
         private var physicalSpeed = 0f
         private var displacementPerSecond = 0f
         private var physicalMovementMemory = 0f
+        // Read-only trajectory telemetry for V1.15 validation; never feeds back into dynamics.
+        private var pathLength = 0f
         private var maxDisplayedActivity = 0f
         private var sensorySpikesDisplay = 0f
         private var centralSpikesDisplay = 0f
@@ -567,6 +569,7 @@ class MainActivity : Activity() {
             physicalSpeed = 0f
             displacementPerSecond = 0f
             physicalMovementMemory = 0f
+            pathLength = 0f
             maxDisplayedActivity = 0f
             sensorySpikesDisplay = 0f
             centralSpikesDisplay = 0f
@@ -1460,7 +1463,7 @@ class MainActivity : Activity() {
             val left = dp(10f)
             val right = width - dp(10f)
             val cardW = right - left
-            val cardH = min(dp(218f), max(dp(198f), sceneB - dp(28f)))
+            val cardH = min(dp(240f), max(dp(218f), sceneB - dp(28f)))
             val top = sceneTop + dp(10f)
             val bottom = top + cardH
             val mid = left + cardW * .50f
@@ -1540,10 +1543,26 @@ class MainActivity : Activity() {
             paint.color = Color.rgb(58, 66, 71)
             c.drawText("SPIKES/s ${spikesPerSecond.toInt()} · BASE ${if (baselineReady) "OK" else "capturando"} · S ${(sensorySpikesDisplay * 100).toInt()}% · C ${(centralSpikesDisplay * 100).toInt()}% · DN ${(descendingSpikesDisplay * 100).toInt()}% · M ${(motorSpikesDisplay * 100).toInt()}%", left + dp(12f), top + dp(195f), paint)
 
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = sp(8.2f)
+            paint.color = Color.rgb(55, 63, 68)
+            val headingDeg = Math.toDegrees(heading.toDouble()).toFloat()
+            val netDisplacement = hypot(flyX - .24f, flyY - .55f)
+            c.drawText(
+                "CUERPO · X ${"%.3f".format(flyX)} · Y ${"%.3f".format(flyY)} · rumbo ${"%.1f".format(headingDeg)}°",
+                left + dp(12f), top + dp(208f), paint
+            )
+            c.drawText(
+                "V física ${"%.4f".format(physicalSpeed)} · recorrido ${"%.3f".format(pathLength)} · Δposición ${"%.3f".format(netDisplacement)}",
+                left + dp(12f), top + dp(220f), paint
+            )
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(7.6f)
             paint.color = Color.rgb(87, 95, 100)
-            c.drawText("Δbase = Hz actual − Hz basal · Vm = potencial instantáneo · ventana 500 ms", left + dp(12f), top + dp(209f), paint)
+            c.drawText(
+                "LEG ${"%.2f".format(legActivityCache)} · WING ${"%.2f".format(wingActivityCache)} · JUMP ${"%.2f".format(jumpActivityCacheValue)} · ESC-N ${"%.2f".format(escapeAction)} · trayectoria solo lectura",
+                left + dp(12f), top + dp(232f), paint
+            )
         }
 
         private fun count(a: Int, b: Int): Int {
@@ -1806,6 +1825,7 @@ class MainActivity : Activity() {
             val dyPhysical = flyY - lastMotionY
             physicalSpeed = hypot(dxPhysical, dyPhysical) / dt.coerceAtLeast(.001f)
             displacementPerSecond = physicalSpeed
+            pathLength += hypot(dxPhysical, dyPhysical)
             val movementEvidence = (physicalSpeed / .0035f).coerceIn(0f, 1f)
             physicalMovementMemory = .94f * physicalMovementMemory + .06f * movementEvidence
             lastMotionX = flyX
