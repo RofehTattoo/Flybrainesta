@@ -21,6 +21,15 @@ EXPECTED = {"LEG":381, "ABDOMEN":214, "WING":67, "NECK":24, "HALTERE":16, "OTHER
 EXPECTED_SIDE = {"L":355, "R":353}
 ROLE_NAMES = {1:"LEG",2:"WING",3:"HALTERE",4:"NECK",5:"ABDOMEN",6:"OTHER",7:"OLD_OTHER",0:"NON_MOTOR"}
 
+
+def clean(v) -> str:
+    """Normalize Arrow scalar / Python values without requiring pandas."""
+    if v is None:
+        return ""
+    if hasattr(v, "as_py"):
+        v = v.as_py()
+    return str(v).strip()
+
 # MEASURED MaleCNS motor subclass vocabulary.  The official annotation file
 # occasionally leaves `class` empty (observed for bodyId 164190 / MNad21).
 # `subclass` is the curated motor body-part code and is therefore the
