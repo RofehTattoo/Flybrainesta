@@ -85,7 +85,9 @@ jobs:
       - name: Validate frozen FBR-10
         run: |
           set -euo pipefail
-          python -m py_compile tools/validate_frozen_connectome.py
+          python -m py_compile tools/fbc103_reader.py tools/test_fbc103_reader.py tools/test_frozen_connectome_validator.py tools/validate_frozen_connectome.py
+          python tools/test_fbc103_reader.py
+          python tools/test_frozen_connectome_validator.py
           python tools/validate_frozen_connectome.py
           grep -Fq 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60' FBR10_CONNECTOME_FINAL_AUDIT.md
 
