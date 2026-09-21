@@ -118,6 +118,8 @@ jobs:
           assert 'loadDynamicsLayer()' in s
           assert 'loadVncMotorSemantics()' in s
           assert 'vnc_motor_semantics.tsv' in s
+          assert 'val expectedHeader = "bodyId\\ttype\\tclass' in s, 'VNCSEM header must use real Kotlin tab escapes'
+          assert 'bodyId\\\\ttype' not in s, 'VNCSEM header must not contain literal backslash-t sequences'
           assert 'MOTOR_FUNCTION_JUMP' in s
           assert 'externalContext' not in s
           print('KOTLIN STRUCTURE: OK')

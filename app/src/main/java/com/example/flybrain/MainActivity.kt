@@ -715,7 +715,7 @@ class MainActivity : Activity() {
         private fun loadVncMotorSemantics() {
             val parsed = assets.open("vnc_motor_semantics.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
                 val header = reader.readLine() ?: throw IllegalStateException("VNCSEM cabecera ausente")
-                val expectedHeader = "bodyId\\ttype\\tclass\\tsubclass\\tsomaSide\\tsomaNeuromere\\texitNerve\\tanatomicalClass\\tfunctionalTag\\tclassSource\\tcurrentFBC103Role\\tcurrentFBC103RoleCode\\tsemanticRoleCode\\tdiscrepancy"
+                val expectedHeader = "bodyId\ttype\tclass\tsubclass\tsomaSide\tsomaNeuromere\texitNerve\tanatomicalClass\tfunctionalTag\tclassSource\tcurrentFBC103Role\tcurrentFBC103RoleCode\tsemanticRoleCode\tdiscrepancy"
                 if (header != expectedHeader) throw IllegalStateException("VNCSEM cabecera inesperada")
                 reader.readLines()
             }
