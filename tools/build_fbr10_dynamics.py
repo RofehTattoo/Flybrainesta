@@ -118,9 +118,15 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool):
     recognized_nodes = 0
     for i, body in enumerate(body_ids):
         sign = NT_SIGN.get(nt.get(body, ""), 0.0)
-        signs[i] = 1 if sign > 0 else (-1 if sign < 0 else 0)
-        if signs[i] != 0:
+        # Physical files store bytes as unsigned 0..255. FBD104 defines
+        # the signed-node convention as 0 = unknown, 1 = excitatory,
+        # 0xFF = inhibitory (-1 when decoded as a Kotlin Byte).
+        sign_byte = 1 if sign > 0 else (0xFF if sign < 0 else 0)
+        signs[i] = sign_byte
+        if sign_byte != 0:
             recognized_nodes += 1
+    if not all(x in (0, 1, 0xFF) for x in signs):
+        raise AssertionError("FBD104 sign encoding must be 0, 1, or 0xFF")
 
     resolved = []
     unresolved = 0
