@@ -68,28 +68,38 @@ def main():
     if sha256(ann_path)!=ANN_SHA: raise SystemExit("official annotation SHA mismatch")
     body, old_role, old_side=read_fbc(fbc)
     retained=set(body)
-    df=feather.read_feather(ann_path)
+    # Do NOT use the pandas-converting Feather convenience reader here: that convenience API converts
+    # through pandas and makes pandas an implicit runtime dependency. The
+    # V1.15.2 audit only needs PyArrow, so keep the data Arrow-native.
     required=['bodyId','superclass','class','subclass','type','somaSide','somaNeuromere','exitNerve']
-    missing=[c for c in required if c not in df.columns]
+    table=feather.read_table(ann_path, columns=required)
+    missing=[c for c in required if c not in table.column_names]
     if missing: raise SystemExit(f"missing official columns: {missing}")
-    df=df[df['bodyId'].isin(retained)].copy()
-    df=df.drop_duplicates('bodyId')
-    motors=df[df['superclass'].astype(str).str.strip().str.lower().eq('vnc_motor')].copy()
+    records=table.to_pylist()
+    records=[r for r in records if r.get('bodyId') in retained]
+    by_body={}
+    for r in records:
+        bid=int(r['bodyId'])
+        if bid in by_body:
+            raise SystemExit(f"duplicate official annotation bodyId {bid}")
+        by_body[bid]=r
+    motors=[r for r in by_body.values()
+            if clean(r.get('superclass')).lower() == 'vnc_motor']
     if len(motors)!=708: raise SystemExit(f"FBR-10 VNC motor count={len(motors)}, expected 708")
     old={int(b):(int(r),int(s)) for b,r,s in zip(body,old_role,old_side)}
     rows=[]
-    for _,r in motors.iterrows():
-        bid=int(r['bodyId']); cls=clean(r['class']).lower()
+    for r in motors:
+        bid=int(r['bodyId']); cls=clean(r.get('class')).lower()
         if cls not in EXPECTED: raise SystemExit(f"unsupported official motor class {cls!r} for {bid}")
-        side=clean(r['somaSide']).upper()
+        side=clean(r.get('somaSide')).upper()
         if side not in ('L','R'): raise SystemExit(f"invalid motor side {side!r} for {bid}")
-        typ=clean(r['type']); func='JUMP' if typ.lower() == 'ttmn' else 'NONE'
+        typ=clean(r.get('type')); func='JUMP' if typ.lower() == 'ttmn' else 'NONE'
         oldr=old[bid][0]
         expected_role={'leg':1,'wing':2,'haltere':3,'neck':4,'abdominal':5,'other':6}[cls]
         rows.append({
-            'bodyId':bid,'type':typ,'class':cls,'subclass':clean(r['subclass']),
-            'somaSide':side,'somaNeuromere':clean(r['somaNeuromere']),
-            'exitNerve':clean(r['exitNerve']),'anatomicalClass':cls.upper(),
+            'bodyId':bid,'type':typ,'class':cls,'subclass':clean(r.get('subclass')),
+            'somaSide':side,'somaNeuromere':clean(r.get('somaNeuromere')),
+            'exitNerve':clean(r.get('exitNerve')),'anatomicalClass':cls.upper(),
             'functionalTag':func,'currentFBC103Role':ROLE_NAMES.get(oldr,'UNKNOWN'),
             'currentFBC103RoleCode':oldr,'semanticRoleCode':expected_role,
             'discrepancy': 'MATCH' if oldr==expected_role else 'RECLASSIFIED'
