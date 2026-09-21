@@ -91,7 +91,7 @@ jobs:
           python tools/validate_frozen_connectome.py
           grep -Fq 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60' FBR10_CONNECTOME_FINAL_AUDIT.md
 
-      - name: Validate V1.15.6 FOOD-TUNE-C identity and source invariants
+      - name: Validate V1.15.7-UI identity and source invariants
         run: |
           set -euo pipefail
           grep -Fq 'versionCode = 126' app/build.gradle.kts
@@ -157,8 +157,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "versionCode='125'"
-          echo "$BADGING" | grep -Fq "versionName='1.15.6'"
+          echo "$BADGING" | grep -Fq "versionCode='126'"
+          echo "$BADGING" | grep -Fq "versionName='1.15.7'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
