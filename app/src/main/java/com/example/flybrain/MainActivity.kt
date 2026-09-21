@@ -173,6 +173,9 @@ class MainActivity : Activity() {
         private val fired = BooleanArray(N)
         private val prevFired = BooleanArray(N)
         private val motorRole = ByteArray(N)
+        // V1.15.2 anatomical VNC semantics are loaded from the official-annotation-derived asset.
+        // The FBC103 role byte remains frozen and is retained only for provenance/audit.
+        private val motorFunctionalTag = ByteArray(N)
         private val descendingRole = ByteArray(N)
         // Real MaleCNS body IDs for the selected neurons. Presentation/diagnostic only.
         private val bodyId = LongArray(N)
@@ -198,7 +201,7 @@ class MainActivity : Activity() {
 
         // Frozen FBR-10 VNC motor-role census. These denominators come only from
         // the role metadata stored in FBC103 and are never inferred from firing.
-        private val motorRoleTotals = IntArray(8)
+        private val motorRoleTotals = IntArray(7)
         private var legLeftTotal = 0
         private var legRightTotal = 0
         private var legUnknownSideTotal = 0
@@ -206,6 +209,9 @@ class MainActivity : Activity() {
         private var wingRightTotal = 0
         private var jumpLeftTotal = 0
         private var jumpRightTotal = 0
+        private var haltereActiveCache = 0
+        private var abdomenActiveCache = 0
+        private var unresolvedMotorActiveCache = 0
         private var legActiveCache = 0
         private var leftLegActiveCache = 0
         private var rightLegActiveCache = 0
@@ -413,7 +419,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.15.1 · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104\n")
+            append("FLYBRAIN V1.15.2 · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104 + VNCSEM102\n")
             append("16.669 neuronas · ${loadedEdgeCount} conexiones estructurales · ${loadedDynamicsEdgeCount} sinápticas dinámicas · ${if (connectomeLoaded && dynamicsLoaded) "CONNECTOME + DYNAMICS OK" else "CONNECTOME/DYNAMICS ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()}")
             if (runtimeFault.isNotEmpty()) append("\nERROR: $runtimeFault")
@@ -706,6 +712,42 @@ class MainActivity : Activity() {
             }
         }
 
+        private fun loadVncMotorSemantics() {
+            val rows = assets.open("vnc_motor_semantics.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
+                reader.readLines().drop(1)
+            }
+            if (rows.size != (MOTOR_END - MOTOR_START)) {
+                throw IllegalStateException("VNCSEM filas=${rows.size} esperado=${MOTOR_END - MOTOR_START}")
+            }
+            val byBody = HashMap<Long, Triple<Int, Int, Int>>(rows.size * 2)
+            for (line in rows) {
+                val c = line.split('\t')
+                if (c.size < 13) throw IllegalStateException("VNCSEM fila incompleta")
+                val id = c[0].toLong()
+                val role = c[11].toInt()
+                val fn = when (c[8]) {
+                    "JUMP" -> GeneratedConnectomeMeta.MOTOR_FUNCTION_JUMP
+                    else -> GeneratedConnectomeMeta.MOTOR_FUNCTION_NONE
+                }
+                val side = when (c[4]) {
+                    "L" -> -1
+                    "R" -> 1
+                    else -> throw IllegalStateException("VNCSEM lado inválido bodyId=$id")
+                }
+                if (role !in GeneratedConnectomeMeta.MOTOR_LEG..GeneratedConnectomeMeta.MOTOR_OTHER) {
+                    throw IllegalStateException("VNCSEM rol anatómico inválido=$role bodyId=$id")
+                }
+                byBody[id] = Triple(role, fn, side)
+            }
+            if (byBody.size != rows.size) throw IllegalStateException("VNCSEM bodyId duplicado")
+            for (i in MOTOR_START until MOTOR_END) {
+                val pair = byBody[bodyId[i]] ?: throw IllegalStateException("VNCSEM falta bodyId=${bodyId[i]}")
+                motorRole[i] = pair.first.toByte()
+                motorFunctionalTag[i] = pair.second.toByte()
+                nodeSide[i] = pair.third.toByte()
+            }
+        }
+
         private fun loadMeasuredConnectome(): Boolean {
             return try {
                 validateGeneratedMeta()
@@ -755,7 +797,10 @@ class MainActivity : Activity() {
                     }
                 }
 
-                // Build fixed VNC motor-role denominators from the frozen FBC103 metadata.
+                loadVncMotorSemantics()
+
+                // Build fixed VNC motor-role denominators from the official-annotation-derived VNC semantics layer.
+
                 // The runtime never invents a role: every neuron in VMOTOR is already
                 // a published/curated vnc_motor entry with one stored role code.
                 java.util.Arrays.fill(motorRoleTotals, 0)
@@ -769,7 +814,7 @@ class MainActivity : Activity() {
                 for (i in MOTOR_START until MOTOR_END) {
                     val role = motorRole[i].toInt()
                     if (role !in GeneratedConnectomeMeta.MOTOR_LEG..GeneratedConnectomeMeta.MOTOR_OTHER) {
-                        throw IllegalStateException("rol VNC motor invalido en nodo=$i: $role")
+                        throw IllegalStateException("rol VNC motor anatómico invalido en nodo=$i: $role")
                     }
                     motorRoleTotals[role]++
                     when (role) {
@@ -782,7 +827,9 @@ class MainActivity : Activity() {
                             -1 -> wingLeftTotal++
                             1 -> wingRightTotal++
                         }
-                        GeneratedConnectomeMeta.MOTOR_JUMP -> when (nodeSide[i].toInt()) {
+                    }
+                    if (motorFunctionalTag[i].toInt() == GeneratedConnectomeMeta.MOTOR_FUNCTION_JUMP) {
+                        when (nodeSide[i].toInt()) {
                             -1 -> jumpLeftTotal++
                             1 -> jumpRightTotal++
                         }
@@ -1512,7 +1559,6 @@ class MainActivity : Activity() {
             GeneratedConnectomeMeta.MOTOR_HALTERE -> "HALT"
             GeneratedConnectomeMeta.MOTOR_NECK -> "NECK"
             GeneratedConnectomeMeta.MOTOR_ABDOMEN -> "ABD"
-            GeneratedConnectomeMeta.MOTOR_JUMP -> "JUMP"
             else -> "MOTOR"
         }
 
@@ -1629,7 +1675,7 @@ class MainActivity : Activity() {
                 left + dp(12f), top + dp(232f), paint
             )
             c.drawText(
-                "WING ${wingActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_WING]} · JUMP ${jumpActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_JUMP]} · OTHER ${motorOtherActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER]} · ESC-N ${"%.2f".format(escapeAction)} · solo lectura",
+                "WING ${wingActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_WING]} · JUMP ${jumpActiveCache}/${jumpLeftTotal + jumpRightTotal} · ABD ${abdomenActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_ABDOMEN]} · HALT ${haltereActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_HALTERE]} · OTHER ${motorOtherActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER]} · ESC-N ${"%.2f".format(escapeAction)} · solo lectura",
                 left + dp(12f), top + dp(244f), paint
             )
         }
@@ -1823,24 +1869,33 @@ class MainActivity : Activity() {
                     }
                     GeneratedConnectomeMeta.MOTOR_WING -> wingActive++
                     GeneratedConnectomeMeta.MOTOR_NECK -> neckActive++
-                    GeneratedConnectomeMeta.MOTOR_JUMP -> jumpActive++
                     GeneratedConnectomeMeta.MOTOR_ABDOMEN -> abdomenActive++
-                    else -> motorOtherActive++
+                    GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereActiveCache++
+                    GeneratedConnectomeMeta.MOTOR_OTHER -> motorOtherActive++
+                }
+                if (motorFunctionalTag[i].toInt() == GeneratedConnectomeMeta.MOTOR_FUNCTION_JUMP) {
+                    jumpActive++
                 }
             }
 
             val legTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_LEG]
             val wingTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_WING]
             val neckTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_NECK]
-            val jumpTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_JUMP]
             val abdomenTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_ABDOMEN]
+            val haltereTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_HALTERE]
             legActivity = if (legTotal == 0) 0f else legActive.toFloat() / legTotal.toFloat()
             leftLeg = if (legLeftTotal == 0) 0f else leftLegActive.toFloat() / legLeftTotal.toFloat()
             rightLeg = if (legRightTotal == 0) 0f else rightLegActive.toFloat() / legRightTotal.toFloat()
             wingActivity = if (wingTotal == 0) 0f else wingActive.toFloat() / wingTotal.toFloat()
             neckActivity = if (neckTotal == 0) 0f else neckActive.toFloat() / neckTotal.toFloat()
+            val jumpTotal = jumpLeftTotal + jumpRightTotal
             jumpActivity = if (jumpTotal == 0) 0f else jumpActive.toFloat() / jumpTotal.toFloat()
             abdomenActivity = if (abdomenTotal == 0) 0f else abdomenActive.toFloat() / abdomenTotal.toFloat()
+            abdomenActiveCache = abdomenActive
+            val haltereActivity = if (haltereTotal == 0) 0f else haltereActiveCache.toFloat() / haltereTotal.toFloat()
+            motorOtherActiveCache = motorOtherActive
+            unresolvedMotorActiveCache = motorOtherActive
+            @Suppress("UNUSED_VARIABLE") val retainedHaltereActivity = haltereActivity
 
             legActiveCache = legActive
             leftLegActiveCache = leftLegActive
@@ -1848,7 +1903,6 @@ class MainActivity : Activity() {
             unknownLegActiveCache = unknownLegActive
             wingActiveCache = wingActive
             jumpActiveCache = jumpActive
-            motorOtherActiveCache = motorOtherActive
             wingActivityCache = wingActivity
 
             // V1.13: behavioural pause/sleep evidence is derived from actual VNC

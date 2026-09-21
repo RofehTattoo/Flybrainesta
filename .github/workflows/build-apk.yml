@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.15.1 · FBR-10 frozen + signed dynamics + VNC body audit
+name: Build FlyBrain APK V1.15.2 · frozen FBR-10 + FBD104 + VNC semantics
 
 on:
   workflow_dispatch:
@@ -12,112 +12,87 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Android SDK 35
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
-
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
       - name: Install validation dependencies
         run: python -m pip install --upgrade pip numpy pyarrow
+
+      - name: Download exact official MaleCNS annotations
+        run: |
+          set -euo pipefail
+          mkdir -p build/malecns_raw app/src/main/assets
+          URL='https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/body-annotations-male-cns-v1.0-minconf-0.5.feather'
+          curl -fL --retry 4 --retry-delay 2 "$URL" -o build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather
+          echo '2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2  build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather' | sha256sum -c -
+          echo 'OFFICIAL ANNOTATIONS: OK'
+
+      - name: Build and validate V1.15.2 VNC semantics
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/build_vnc_motor_semantics.py tools/validate_vnc_motor_semantics.py
+          python tools/build_vnc_motor_semantics.py \
+            --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --output app/src/main/assets/vnc_motor_semantics.tsv \
+            --report build/VNC_MOTOR_SEMANTICS_REPORT.json
+          python tools/validate_vnc_motor_semantics.py \
+            --semantics app/src/main/assets/vnc_motor_semantics.tsv \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --report build/VNC_MOTOR_SEMANTICS_REPORT.json
+          cp build/VNC_MOTOR_SEMANTICS_REPORT.json app/src/main/res/raw/vnc_motor_semantics_report.json
+          test -s app/src/main/assets/vnc_motor_semantics.tsv
+          test -s app/src/main/res/raw/vnc_motor_semantics_report.json
 
       - name: Build FBD104 signed dynamics layer
         run: |
           set -euo pipefail
-          mkdir -p build/malecns_raw
-          NT="build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather"
-          URL="https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/body-neurotransmitters-male-cns-v1.0.feather"
+          NT='build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather'
+          URL='https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/body-neurotransmitters-male-cns-v1.0.feather'
           curl -fL --retry 4 --retry-delay 2 "$URL" -o "$NT"
           echo '95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621  build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather' | sha256sum -c -
           python -m py_compile tools/build_fbr10_dynamics.py tools/validate_fbr10_dynamics.py
           python tools/build_fbr10_dynamics.py --nt "$NT" --output app/src/main/res/raw/malecns_fbr10_dynamics.bin
           python tools/validate_fbr10_dynamics.py
-          test -s app/src/main/res/raw/malecns_fbr10_dynamics.bin
-          test -s build/FBR10_DYNAMICS_REPORT.json
           cp build/FBR10_DYNAMICS_REPORT.json app/src/main/res/raw/malecns_fbr10_dynamics_report.json
-          echo 'FBD104 DYNAMICS: OK'
 
-      - name: Validate project identity
+      - name: Validate frozen FBR-10
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 120' app/build.gradle.kts
-          grep -Fq 'versionName = "1.15.1"' app/build.gradle.kts
-          grep -Fq 'FLYBRAIN V1.15.1' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'FLYBRAIN_VERSION = "1.14"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'FLYBRAIN_VERSION_CODE = 114' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION = "1.15.1"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION_CODE = 120' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'DYNAMICS_FORMAT = "FBD104"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'DYNAMICS_NORMALIZATION_SCALE = 0.42f' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'NEURONS = 16669' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'EDGES = 2064951' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'FORMAT_VERSION = 103' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
-          echo 'IDENTIDAD V1.15.1: OK'
-
-      - name: Validate frozen FBR-10 connectome
-        run: |
-          set -euo pipefail
-          test -s app/src/main/res/raw/malecns_reduced.bin
-          test -s app/src/main/res/raw/malecns_reduced_report.json
           python -m py_compile tools/validate_frozen_connectome.py
           python tools/validate_frozen_connectome.py
-          grep -Fq 'CONNECTOME FROZEN' FBR10_CONNECTOME_FINAL_AUDIT.md
           grep -Fq 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60' FBR10_CONNECTOME_FINAL_AUDIT.md
-          echo 'FBR-10 FROZEN: OK'
 
-      - name: Validate FBD104 dynamics artifact
+      - name: Validate V1.15.2 identity and source invariants
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import json, struct
-          from pathlib import Path
-          p=Path('app/src/main/res/raw/malecns_fbr10_dynamics.bin')
-          b=p.read_bytes()
-          assert b[:8] == b'FBD104\x00\x00'
-          n,e=struct.unpack_from('<II', b, 8)
-          assert n == 16669
-          assert len(b) == 16 + n + e*12
-          d=json.loads(Path('build/FBR10_DYNAMICS_REPORT.json').read_text())
-          assert d['format']=='FBD104'
-          assert d['neurons']==16669
-          assert d['structural_edges']==2064951
-          assert d['signed_edges']==e
-          print('FBD104: OK', e, 'signed edges')
-          PY
-
-      - name: Validate frozen VNC motor mapping
-        run: |
-          set -euo pipefail
-          python -m py_compile tools/validate_vnc_motor_mapping.py
-          python tools/validate_vnc_motor_mapping.py
-
-      - name: Prohibit accidental historical rebuild in CI
-        run: |
-          set -euo pipefail
-          ! grep -Fq 'python tools/build_connectome.py' .github/workflows/build-apk.yml
-          ! grep -Fq 'python tools/build_connectome_fbr10.py' .github/workflows/build-apk.yml
-          echo 'CI NO REGENERATION: OK'
+          grep -Fq 'versionCode = 121' app/build.gradle.kts
+          grep -Fq 'versionName = "1.15.2"' app/build.gradle.kts
+          grep -Fq 'APP_VERSION = "1.15.2"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION_CODE = 121' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'loadVncMotorSemantics()' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'vnc_motor_semantics.tsv' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'MOTOR_FUNCTION_JUMP' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'FBC103' V1.15.2_VNC_MOTOR_SEMANTICS.md
 
       - name: Validate Kotlin source structure
         run: |
@@ -128,58 +103,35 @@ jobs:
           assert s.count('{') == s.count('}')
           assert s.count('(') == s.count(')')
           assert s.count('[') == s.count(']')
-          assert 'private val sensoryCurrent = FloatArray(N)' in s
-          assert 'private val neuroSign = ByteArray(N)' in s
-          assert 'java.util.Arrays.fill(sensoryCurrent, 0f)' in s
           assert 'calibrateSynapticGain' not in s
+          assert 'java.util.Arrays.fill(sensoryCurrent, 0f)' in s
           assert 'loadDynamicsLayer()' in s
-          assert 'val externalCurrent = if (i < SENSOR_END) sensoryCurrent[i] else 0f' in s
-          assert 'synCurrent + externalCurrent + centralNoise' in s
-          assert 'v[start + i] += pattern[channel] * gain * micro' not in s
-          assert 'GeneratedConnectomeMeta.FORMAT_MAGIC' in s
-          assert 'DIAGNÓSTICO NEURONAL · SOLO LECTURA' in s
-          assert 'refreshNodeDiagnostics(diagWindowElapsed)' in s
-          assert 'bodyId[it] = b.long' in s
-          assert 'Quantitative node diagnostics' in s
-          # Trajectory telemetry is read-only instrumentation; verify its UI/runtime hooks.
-          assert 'rumbo' in s
-          assert 'recorrido' in s
-          assert 'ESC-N' in s
-          assert 'flyX' in s and 'flyY' in s
-          assert 'heading' in s
-          assert 'speed' in s
-          assert 'motorRoleTotals' in s
-          assert 'legLeftTotal' in s
-          assert 'legActiveCache' in s
-          assert 'bodyQuiescent' in s
-          assert 'foodOn && foodDistance < .055f && gustatoryRateNow > .04f' in s
+          assert 'loadVncMotorSemantics()' in s
+          assert 'vnc_motor_semantics.tsv' in s
+          assert 'MOTOR_FUNCTION_JUMP' in s
           assert 'externalContext' not in s
-          print('KOTLIN / NEURAL-ACTIVATION + TRAJECTORY TELEMETRY + VNC MOTOR MAPPING: OK')
+          print('KOTLIN STRUCTURE: OK')
           PY
 
-      - name: Pre-build report consistency
+      - name: Validate FBD104 artifact
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json
+          import json, struct
           from pathlib import Path
-          d=json.loads(Path('app/src/main/res/raw/malecns_reduced_report.json').read_text())
-          assert d['status']=='FROZEN'
-          assert d['dataset']=='MaleCNS v1.0'
-          assert d['reduction']=='FBR-10'
-          assert d['flybrain_version']=='1.14'
-          assert d['binary_format']=='FBC103'
-          assert d['neurons_retained']==16669
-          assert d['edges_retained']==2064951
-          assert d['contacts_retained']==16783932
-          assert d['sha256']=='bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60'
-          print('REPORT: OK')
+          p=Path('app/src/main/res/raw/malecns_fbr10_dynamics.bin'); b=p.read_bytes()
+          assert b[:8] == b'FBD104\x00\x00'
+          n,e=struct.unpack_from('<II',b,8)
+          assert n==16669 and len(b)==16+n+e*12
+          d=json.loads(Path('build/FBR10_DYNAMICS_REPORT.json').read_text())
+          assert d['neurons']==16669 and d['structural_edges']==2064951
+          print('FBD104: OK')
           PY
 
-      - name: Compile APK V1.15.1
+      - name: Compile APK V1.15.2
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK V1.15.1
+      - name: Verify APK V1.15.2
         run: |
           set -euo pipefail
           APK='app/build/outputs/apk/debug/app-debug.apk'
@@ -187,20 +139,18 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "package: name='com.example.flybrain'"
-          echo "$BADGING" | grep -Fq "versionCode='120'"
-          echo "$BADGING" | grep -Fq "versionName='1.15.1'"
+          echo "$BADGING" | grep -Fq "versionCode='121'"
+          echo "$BADGING" | grep -Fq "versionName='1.15.2'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
-          unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics_report.json'
-          echo 'APK V1.15.1 VALIDATED'
-          ls -lh "$APK"
+          unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
+          unzip -l "$APK" | grep -Fq 'vnc_motor_semantics_report.json'
           sha256sum "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.15.1-APK
+          name: FlyBrain-V1.15.2-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

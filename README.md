@@ -1,3 +1,11 @@
+# FlyBrain V1.15.2 — VNC Motor Semantics
+
+**Current development release:** V1.15.2 / versionCode 121. This release corrects only the VNC motor semantics/body translation layer. FBR-10/FBC103 and FBD104 remain frozen/independent.
+
+The runtime anatomical VNC map is generated from the exact official MaleCNS v1.0 annotation Feather (`body-annotations-male-cns-v1.0-minconf-0.5.feather`, SHA-256 `2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2`) and packaged by CI as `vnc_motor_semantics.tsv`.
+
+---
+
 # FlyBrain V1.14 — FBR-10 frozen baseline
 
 **CONNECTOME FROZEN:** MaleCNS v1.0 → FBR-10 → 16,669 neurons → 2,064,951 published edges / 16,783,932 contacts.
@@ -266,3 +274,11 @@ The structural FBR-10 artifact remains byte-for-byte frozen; FBD104 is a derived
 
 ## V1.14.4 — Neural Observatory Quantitative
 V1.14.4 mantiene el FBR-10 congelado y convierte el diagnóstico individual en una lectura cuantitativa: ventana de 500 ms, Hz por neurona, spikes por ventana, potencial de membrana (Vm) y diferencia respecto al baseline de 5 s tras RESET. La cabecera superior se simplifica para liberar espacio a la escena; el mapa CNS mantiene tamaño/brillo/halo y usa aristas aún más finas y transparentes en regiones densas.
+
+## V1.15.2 — VNC Motor Semantics
+
+V1.15.2 replaces the heuristic VNC motor-role interpretation with a separately generated semantics layer derived from the exact official MaleCNS v1.0 annotation Feather. The frozen FBC103 role byte is not rewritten. Runtime anatomical roles and official motor sides are loaded from `vnc_motor_semantics.tsv`.
+
+The anatomical census gate is 708 motors: 381 LEG, 214 ABDOMEN, 67 WING, 24 NECK, 16 HALTERE, 6 OTHER; 355 L / 353 R. `TTMn` remains WING and receives only an engineering `JUMP` functional tag.
+
+No synthetic neurons/edges or stimulus-to-body command was introduced. VNC semantics are a read-only translation layer between measured motor activity and the existing body mechanics.
