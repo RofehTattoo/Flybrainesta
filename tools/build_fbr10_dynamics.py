@@ -134,7 +134,11 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool):
     i_contact = 0
     target_totals = [0.0] * n
     for src, dst, raw_weight in edges:
-        sign = signs[src]
+        sign_byte = signs[src]
+        # Decode the on-disk unsigned byte representation back to the
+        # mathematical sign before applying it to edge weights.
+        # FBD104: 0 = unknown/modulatory, 1 = excitatory, 0xFF = inhibitory.
+        sign = -1 if sign_byte == 0xFF else (1 if sign_byte == 1 else 0)
         if sign == 0:
             unresolved += 1
             continue
