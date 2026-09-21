@@ -255,6 +255,10 @@ V1.14.3 keeps the exact frozen FBR-10 MaleCNS v1.0 connectome and changes only o
 
 
 
+## V1.15.1 — VNC → body mechanics audit
+
+V1.15.1 keeps the frozen FBR-10/FBC103 structural layer and FBD104 signed dynamics unchanged. It corrects the VNC motor-output normalization and the body/environment interface used for behavioral readouts: LEG/WING/JUMP are normalized by the fixed retained role populations, left/right leg outputs use the frozen side census, stimulus identity is removed from body turn normalization, food intake no longer requires locomotion, and locomotion/rest telemetry follows measured physical movement. CI now audits the frozen VNC motor-role census.
+
 ## V1.15.0 — Neural Dynamics Integrity
 V1.15.0 keeps the FBR-10/FBC103 structural graph frozen and introduces a separate FBD104 dynamics layer derived from the official MaleCNS v1.0 neurotransmitter table. Fast synaptic edges use the established FlyBrain convention (acetylcholine excitatory; GABA/glutamate inhibitory; other/modulatory/unknown omitted from fast current) and are normalized per postsynaptic target before entering the LIF model. The adaptive synaptic-gain controller is removed from the experimental loop so stimulus tests do not change the model while being measured. Sensory current is reset every neural step, making stimulus OFF actually mean zero external sensory current.
 

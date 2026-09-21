@@ -195,6 +195,24 @@ class MainActivity : Activity() {
         private val motorWindowSpikes = IntArray(MOTOR_END - MOTOR_START)
         private val dnBaselineSpikes = IntArray(DESC_END - DESC_START)
         private val motorBaselineSpikes = IntArray(MOTOR_END - MOTOR_START)
+
+        // Frozen FBR-10 VNC motor-role census. These denominators come only from
+        // the role metadata stored in FBC103 and are never inferred from firing.
+        private val motorRoleTotals = IntArray(8)
+        private var legLeftTotal = 0
+        private var legRightTotal = 0
+        private var legUnknownSideTotal = 0
+        private var wingLeftTotal = 0
+        private var wingRightTotal = 0
+        private var jumpLeftTotal = 0
+        private var jumpRightTotal = 0
+        private var legActiveCache = 0
+        private var leftLegActiveCache = 0
+        private var rightLegActiveCache = 0
+        private var unknownLegActiveCache = 0
+        private var wingActiveCache = 0
+        private var jumpActiveCache = 0
+        private var motorOtherActiveCache = 0
         private var baselineCaptureSeconds = 0f
         private var baselineReady = false
         // V1.14.3: presentation-only 5 s diagnostic history and video-legible observability. Never feeds back into dynamics.
@@ -395,7 +413,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.15.0 · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104\n")
+            append("FLYBRAIN V1.15.1 · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104\n")
             append("16.669 neuronas · ${loadedEdgeCount} conexiones estructurales · ${loadedDynamicsEdgeCount} sinápticas dinámicas · ${if (connectomeLoaded && dynamicsLoaded) "CONNECTOME + DYNAMICS OK" else "CONNECTOME/DYNAMICS ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()}")
             if (runtimeFault.isNotEmpty()) append("\nERROR: $runtimeFault")
@@ -588,6 +606,13 @@ class MainActivity : Activity() {
             java.util.Arrays.fill(dnWindowSpikes, 0)
             java.util.Arrays.fill(motorWindowSpikes, 0)
             java.util.Arrays.fill(dnBaselineSpikes, 0)
+            legActiveCache = 0
+            leftLegActiveCache = 0
+            rightLegActiveCache = 0
+            unknownLegActiveCache = 0
+            wingActiveCache = 0
+            jumpActiveCache = 0
+            motorOtherActiveCache = 0
             java.util.Arrays.fill(motorBaselineSpikes, 0)
             historyCursor = 0
             historyClock = 0f
@@ -729,6 +754,46 @@ class MainActivity : Activity() {
                         throw IllegalStateException("metadata de ruta invalida en nodo $it")
                     }
                 }
+
+                // Build fixed VNC motor-role denominators from the frozen FBC103 metadata.
+                // The runtime never invents a role: every neuron in VMOTOR is already
+                // a published/curated vnc_motor entry with one stored role code.
+                java.util.Arrays.fill(motorRoleTotals, 0)
+                legLeftTotal = 0
+                legRightTotal = 0
+                legUnknownSideTotal = 0
+                wingLeftTotal = 0
+                wingRightTotal = 0
+                jumpLeftTotal = 0
+                jumpRightTotal = 0
+                for (i in MOTOR_START until MOTOR_END) {
+                    val role = motorRole[i].toInt()
+                    if (role !in GeneratedConnectomeMeta.MOTOR_LEG..GeneratedConnectomeMeta.MOTOR_OTHER) {
+                        throw IllegalStateException("rol VNC motor invalido en nodo=$i: $role")
+                    }
+                    motorRoleTotals[role]++
+                    when (role) {
+                        GeneratedConnectomeMeta.MOTOR_LEG -> when (nodeSide[i].toInt()) {
+                            -1 -> legLeftTotal++
+                            1 -> legRightTotal++
+                            else -> legUnknownSideTotal++
+                        }
+                        GeneratedConnectomeMeta.MOTOR_WING -> when (nodeSide[i].toInt()) {
+                            -1 -> wingLeftTotal++
+                            1 -> wingRightTotal++
+                        }
+                        GeneratedConnectomeMeta.MOTOR_JUMP -> when (nodeSide[i].toInt()) {
+                            -1 -> jumpLeftTotal++
+                            1 -> jumpRightTotal++
+                        }
+                    }
+                }
+                if (motorRoleTotals.sum() != (MOTOR_END - MOTOR_START)) {
+                    throw IllegalStateException(
+                        "censo VNC motor inconsistente: ${motorRoleTotals.sum()} != ${MOTOR_END - MOTOR_START}"
+                    )
+                }
+
                 // FBR-10 has ~2.06M edges. Do not build boxed MutableList<Int/Float>
                 // structures here: on Android that creates a very large temporary
                 // object graph and can trigger GC pressure/OOM before the simulation starts.
@@ -1463,7 +1528,7 @@ class MainActivity : Activity() {
             val left = dp(10f)
             val right = width - dp(10f)
             val cardW = right - left
-            val cardH = min(dp(240f), max(dp(218f), sceneB - dp(28f)))
+            val cardH = min(dp(258f), max(dp(232f), sceneB - dp(28f)))
             val top = sceneTop + dp(10f)
             val bottom = top + cardH
             val mid = left + cardW * .50f
@@ -1557,11 +1622,15 @@ class MainActivity : Activity() {
                 left + dp(12f), top + dp(220f), paint
             )
             paint.typeface = Typeface.DEFAULT
-            paint.textSize = sp(7.6f)
+            paint.textSize = sp(7.5f)
             paint.color = Color.rgb(87, 95, 100)
             c.drawText(
-                "LEG ${"%.2f".format(legActivityCache)} · WING ${"%.2f".format(wingActivityCache)} · JUMP ${"%.2f".format(jumpActivityCacheValue)} · ESC-N ${"%.2f".format(escapeAction)} · trayectoria solo lectura",
+                "LEG ${legActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_LEG]} · L ${leftLegActiveCache}/${legLeftTotal} · R ${rightLegActiveCache}/${legRightTotal}",
                 left + dp(12f), top + dp(232f), paint
+            )
+            c.drawText(
+                "WING ${wingActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_WING]} · JUMP ${jumpActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_JUMP]} · OTHER ${motorOtherActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER]} · ESC-N ${"%.2f".format(escapeAction)} · solo lectura",
+                left + dp(12f), top + dp(244f), paint
             )
         }
 
@@ -1730,37 +1799,56 @@ class MainActivity : Activity() {
             var jumpActivity = 0f
             var abdomenActivity = 0f
             var allMotor = 0f
-            var nLeftLeg = 0
-            var nRightLeg = 0
-            var nLeg = 0
-            var nWing = 0
-            var nNeck = 0
-            var nJump = 0
-            var nAbd = 0
+            var legActive = 0
+            var leftLegActive = 0
+            var rightLegActive = 0
+            var unknownLegActive = 0
+            var wingActive = 0
+            var neckActive = 0
+            var jumpActive = 0
+            var abdomenActive = 0
+            var motorOtherActive = 0
 
             for (i in MOTOR_START until MOTOR_END) {
                 if (!fired[i]) continue
                 allMotor += 1f
                 when (motorRole[i].toInt()) {
                     GeneratedConnectomeMeta.MOTOR_LEG -> {
-                        legActivity += 1f; nLeg++
-                        if (nodeSide[i].toInt() < 0) { leftLeg += 1f; nLeftLeg++ } else if (nodeSide[i].toInt() > 0) { rightLeg += 1f; nRightLeg++ }
+                        legActive++
+                        when (nodeSide[i].toInt()) {
+                            -1 -> leftLegActive++
+                            1 -> rightLegActive++
+                            else -> unknownLegActive++
+                        }
                     }
-                    GeneratedConnectomeMeta.MOTOR_WING -> { wingActivity += 1f; nWing++ }
-                    GeneratedConnectomeMeta.MOTOR_NECK -> { neckActivity += 1f; nNeck++ }
-                    GeneratedConnectomeMeta.MOTOR_JUMP -> { jumpActivity += 1f; nJump++ }
-                    GeneratedConnectomeMeta.MOTOR_ABDOMEN -> { abdomenActivity += 1f; nAbd++ }
-                    else -> Unit
+                    GeneratedConnectomeMeta.MOTOR_WING -> wingActive++
+                    GeneratedConnectomeMeta.MOTOR_NECK -> neckActive++
+                    GeneratedConnectomeMeta.MOTOR_JUMP -> jumpActive++
+                    GeneratedConnectomeMeta.MOTOR_ABDOMEN -> abdomenActive++
+                    else -> motorOtherActive++
                 }
             }
 
-            legActivity = if (nLeg == 0) 0f else legActivity / nLeg
-            leftLeg = if (nLeftLeg == 0) 0f else leftLeg / nLeftLeg
-            rightLeg = if (nRightLeg == 0) 0f else rightLeg / nRightLeg
-            wingActivity = if (nWing == 0) 0f else wingActivity / nWing
-            neckActivity = if (nNeck == 0) 0f else neckActivity / nNeck
-            jumpActivity = if (nJump == 0) 0f else jumpActivity / nJump
-            abdomenActivity = if (nAbd == 0) 0f else abdomenActivity / nAbd
+            val legTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_LEG]
+            val wingTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_WING]
+            val neckTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_NECK]
+            val jumpTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_JUMP]
+            val abdomenTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_ABDOMEN]
+            legActivity = if (legTotal == 0) 0f else legActive.toFloat() / legTotal.toFloat()
+            leftLeg = if (legLeftTotal == 0) 0f else leftLegActive.toFloat() / legLeftTotal.toFloat()
+            rightLeg = if (legRightTotal == 0) 0f else rightLegActive.toFloat() / legRightTotal.toFloat()
+            wingActivity = if (wingTotal == 0) 0f else wingActive.toFloat() / wingTotal.toFloat()
+            neckActivity = if (neckTotal == 0) 0f else neckActive.toFloat() / neckTotal.toFloat()
+            jumpActivity = if (jumpTotal == 0) 0f else jumpActive.toFloat() / jumpTotal.toFloat()
+            abdomenActivity = if (abdomenTotal == 0) 0f else abdomenActive.toFloat() / abdomenTotal.toFloat()
+
+            legActiveCache = legActive
+            leftLegActiveCache = leftLegActive
+            rightLegActiveCache = rightLegActive
+            unknownLegActiveCache = unknownLegActive
+            wingActiveCache = wingActive
+            jumpActiveCache = jumpActive
+            motorOtherActiveCache = motorOtherActive
             wingActivityCache = wingActivity
 
             // V1.13: behavioural pause/sleep evidence is derived from actual VNC
@@ -1768,8 +1856,8 @@ class MainActivity : Activity() {
             // after the body has genuinely become nearly immobile.
             // V1.13: locomotion is a physical readout. Neural leg activity is kept
             // as a diagnostic but cannot by itself declare that the body moved.
-            val locomotorOutput = legActivity.coerceIn(0f, 1f)
-            recentMovementMemory = .94f * recentMovementMemory + .06f * locomotorOutput
+            // Pause/homeostasis evidence is based on the measured body state, not
+            // on a count of firing leg neurons.
             val bodySpeed = physicalSpeed
             val wasActuallyMoving = physicalMovementMemory > .02f
             if (bodySpeed <= 0.00035f) {
@@ -1795,12 +1883,11 @@ class MainActivity : Activity() {
             // originates from measured VNC motor activity. Left/right asymmetry in
             // leg and neck output changes heading; leg output supplies walking force.
             val rawTurn = ((rightLeg - leftLeg) + (neckActivity * 0.22f)) * 1.55f
-            // V1.04: remove only a slowly learned idle bilateral bias. This is
-            // proprioceptive/homeostatic normalization, not a stimulus-to-turn
-            // rule. Once an external sensory state is present, the raw neural
-            // asymmetry is allowed to steer normally.
-            val externalContext = max(foodDrive, max(lightDrive, dangerDrive))
-            if (externalContext < .08f) {
+            // Slow turn-bias normalization is based only on measured body state.
+            // Stimulus identity is deliberately absent, so no sensory condition can
+            // inject a direct turn bias into body mechanics.
+            val bodyQuiescent = physicalSpeed < .00035f && legActivity < .01f
+            if (bodyQuiescent) {
                 baselineTurnBias += (rawTurn - baselineTurnBias) * (1f - exp((-dt / 2.5f).toDouble()).toFloat())
             } else {
                 baselineTurnBias *= exp((-dt / 5.0f).toDouble()).toFloat()
@@ -1852,7 +1939,7 @@ class MainActivity : Activity() {
             val foodDistance = hypot(foodX - flyX, foodY - flyY)
             val gustatoryRateNow = populationRate(GUST_START, GUST_END)
             // Food intake requires physical proximity plus measured gustatory activity.
-            if (foodOn && foodDistance < .055f && gustatoryRateNow > .04f && stableLocomotion > .01f) {
+            if (foodOn && foodDistance < .055f && gustatoryRateNow > .04f) {
                 foodHits++
                 satiety = min(1f, satiety + .24f)
                 reward += 1f
@@ -1914,8 +2001,9 @@ class MainActivity : Activity() {
 
             learn(reward, dt)
 
-            val motorLocomotion = legActivity.coerceIn(0f, 1f)
-            stableLocomotion = (.88f * stableLocomotion + .12f * motorLocomotion).coerceIn(0f, 1f)
+            // Stable locomotion is a body readout, not a neural firing shortcut.
+            stableLocomotion = (.88f * stableLocomotion + .12f * physicalMovementMemory).coerceIn(0f, 1f)
+            recentMovementMemory = .94f * recentMovementMemory + .06f * physicalMovementMemory
             val wingVisualIntensity = max(wingActivityCache, jumpActivityCache())
             wingBeatPhase += dt * (8f + 11f * wingVisualIntensity) * (Math.PI.toFloat() * 2f)
             updateBuzzSound()

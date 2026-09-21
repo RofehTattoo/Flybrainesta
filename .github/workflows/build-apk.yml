@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.15.0 · FBR-10 frozen + signed dynamics
+name: Build FlyBrain APK V1.15.1 · FBR-10 frozen + signed dynamics + VNC body audit
 
 on:
   workflow_dispatch:
@@ -60,20 +60,20 @@ jobs:
       - name: Validate project identity
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 119' app/build.gradle.kts
-          grep -Fq 'versionName = "1.15.0"' app/build.gradle.kts
-          grep -Fq 'FLYBRAIN V1.15.0' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'versionCode = 120' app/build.gradle.kts
+          grep -Fq 'versionName = "1.15.1"' app/build.gradle.kts
+          grep -Fq 'FLYBRAIN V1.15.1' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FLYBRAIN_VERSION = "1.14"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FLYBRAIN_VERSION_CODE = 114' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION = "1.15.0"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION_CODE = 119' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION = "1.15.1"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION_CODE = 120' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'DYNAMICS_FORMAT = "FBD104"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'DYNAMICS_NORMALIZATION_SCALE = 0.42f' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'NEURONS = 16669' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'EDGES = 2064951' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FORMAT_VERSION = 103' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
-          echo 'IDENTIDAD V1.15.0: OK'
+          echo 'IDENTIDAD V1.15.1: OK'
 
       - name: Validate frozen FBR-10 connectome
         run: |
@@ -105,6 +105,12 @@ jobs:
           assert d['signed_edges']==e
           print('FBD104: OK', e, 'signed edges')
           PY
+
+      - name: Validate frozen VNC motor mapping
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/validate_vnc_motor_mapping.py
+          python tools/validate_vnc_motor_mapping.py
 
       - name: Prohibit accidental historical rebuild in CI
         run: |
@@ -142,7 +148,13 @@ jobs:
           assert 'flyX' in s and 'flyY' in s
           assert 'heading' in s
           assert 'speed' in s
-          print('KOTLIN / NEURAL-ACTIVATION + TRAJECTORY TELEMETRY: OK')
+          assert 'motorRoleTotals' in s
+          assert 'legLeftTotal' in s
+          assert 'legActiveCache' in s
+          assert 'bodyQuiescent' in s
+          assert 'foodOn && foodDistance < .055f && gustatoryRateNow > .04f' in s
+          assert 'externalContext' not in s
+          print('KOTLIN / NEURAL-ACTIVATION + TRAJECTORY TELEMETRY + VNC MOTOR MAPPING: OK')
           PY
 
       - name: Pre-build report consistency
@@ -164,10 +176,10 @@ jobs:
           print('REPORT: OK')
           PY
 
-      - name: Compile APK V1.15.0
+      - name: Compile APK V1.15.1
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK V1.15.0
+      - name: Verify APK V1.15.1
         run: |
           set -euo pipefail
           APK='app/build/outputs/apk/debug/app-debug.apk'
@@ -176,19 +188,19 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
           echo "$BADGING" | grep -Fq "package: name='com.example.flybrain'"
-          echo "$BADGING" | grep -Fq "versionCode='119'"
-          echo "$BADGING" | grep -Fq "versionName='1.15.0'"
+          echo "$BADGING" | grep -Fq "versionCode='120'"
+          echo "$BADGING" | grep -Fq "versionName='1.15.1'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics_report.json'
-          echo 'APK V1.15.0 VALIDATED'
+          echo 'APK V1.15.1 VALIDATED'
           ls -lh "$APK"
           sha256sum "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.15.0-APK
+          name: FlyBrain-V1.15.1-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

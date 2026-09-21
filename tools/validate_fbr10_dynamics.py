@@ -40,6 +40,7 @@ def main(root:Path):
         else: neg_edges+=1
     assert pos==len(db)
     print(f'FBC103: {sn} neurons / {se} structural edges / sha256 {sha256(structural)}')
+    assert pos_edges > 0 and neg_edges > 0, 'FBD104 must contain both excitatory and inhibitory signed edges'
     print(f'FBD104: {dn} neurons / {de} signed edges / +{pos_edges} / -{neg_edges}')
     print('FBR-10 structural SHA-256 remains frozen:', sha256(structural))
 
