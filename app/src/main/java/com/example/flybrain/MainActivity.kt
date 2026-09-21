@@ -136,8 +136,8 @@ class MainActivity : Activity() {
         // layer. They are model parameters, not an adaptive controller.
         private val SENSORY_VIS_GAIN = 0.70f
         private val SENSORY_OLF_GAIN = 1.00f
-        // V1.15.4 FOOD-TUNE-A: only olfactory source gain is increased; distance kernel unchanged.
-        private val FOOD_OLF_GAIN = 3.00f
+        // V1.15.5 FOOD-TUNE-B: olfactory source gain increased to 6.00; distance kernel unchanged.
+        private val FOOD_OLF_GAIN = 6.00f
         private val SENSORY_GUST_GAIN = 0.85f
         private val SENSORY_MECH_GAIN = 0.70f
 
@@ -241,7 +241,7 @@ class MainActivity : Activity() {
         private val refractory = FloatArray(N)
         // V1.13: short-lived synaptic trace (~5 ms), matching the published LIF model timescale.
         private val synTrace = FloatArray(N)
-        // V1.15.4 diagnostic: read-only net synaptic drive immediately before LIF thresholding.
+        // V1.15.5 diagnostic: read-only net synaptic drive immediately before LIF thresholding.
         // This is telemetry only and never feeds back into the dynamics.
         private val lastSynDrive = FloatArray(N)
 
@@ -412,7 +412,7 @@ class MainActivity : Activity() {
         private var descendingSpikesDisplay = 0f
         private var motorSpikesDisplay = 0f
         private var sensoryDriveDisplay = 0f
-        // V1.15.4-FOOD-TUNE-A: motor drive is measured before spike thresholding.
+        // V1.15.5-FOOD-TUNE-B: motor drive is measured before spike thresholding.
         // Signed values preserve net excitation/inhibition; absolute values expose
         // subthreshold input even when excitation and inhibition partially cancel.
         private var motorDriveSignedCache = 0f
@@ -442,7 +442,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.15.4-FOOD-TUNE-A · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104 + VNCSEM102\n")
+            append("FLYBRAIN V1.15.5-FOOD-TUNE-B · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104 + VNCSEM102\n")
             append("16.669 neuronas · ${loadedEdgeCount} conexiones estructurales · ${loadedDynamicsEdgeCount} sinápticas dinámicas · ${if (connectomeLoaded && dynamicsLoaded) "CONNECTOME + DYNAMICS OK" else "CONNECTOME/DYNAMICS ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()}")
             if (runtimeFault.isNotEmpty()) append("\nERROR: $runtimeFault")
