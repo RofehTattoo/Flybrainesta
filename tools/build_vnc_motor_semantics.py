@@ -11,6 +11,7 @@ import argparse, csv, hashlib, json, struct
 from collections import Counter
 from pathlib import Path
 import pyarrow.feather as feather
+from fbc103_reader import FBC_SHA as SHARED_FBC_SHA, read_fbc103
 
 FBC_SHA = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
 ANN_SHA = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
@@ -57,39 +58,7 @@ def resolve_motor_class(raw_cls: str, subclass: str, body_id: int) -> tuple[str,
 
 
 def sha256(p: Path) -> str:
-    h=hashlib.sha256()
-    with p.open('rb') as f:
-        for b in iter(lambda:f.read(8*1024*1024), b''): h.update(b)
-    return h.hexdigest()
-
-
-def clean(v):
-    if v is None: return ""
-    try:
-        if hasattr(v, 'as_py'): v=v.as_py()
-    except Exception: pass
-    return str(v).strip()
-
-
-def read_fbc(path: Path):
-    b=path.read_bytes()
-    if sha256(path)!=FBC_SHA: raise SystemExit("FBC103 SHA mismatch")
-    if b[:8] != b'FBC103\x00\x00': raise SystemExit("FBC103 magic mismatch")
-    n,e=struct.unpack_from('<II', b, 8)
-    if n != N: raise SystemExit(f"FBC103 neurons={n}, expected {N}")
-    body=[]; old=[]; side=[]
-    off=16
-    for _ in range(n):
-        bid=struct.unpack_from('<Q', b, off)[0]; off+=8
-        off += 1 # channel
-        s=struct.unpack_from('<b', b, off)[0]; off+=1
-        off += 1 # reserved
-        r=struct.unpack_from('<b', b, off)[0]; off+=1
-        off += 1 # dn role
-        off += 1 # halt role
-        off += 12 # three route floats
-        body.append(bid); side.append(s); old.append(r)
-    return body, old, side
+    return __import__("fbc103_reader").sha256(p)
 
 
 def main():
@@ -101,7 +70,10 @@ def main():
     args=ap.parse_args()
     ann_path=Path(args.annotations); fbc=Path(args.fbc103)
     if sha256(ann_path)!=ANN_SHA: raise SystemExit("official annotation SHA mismatch")
-    body, old_role, old_side=read_fbc(fbc)
+    fbc_nodes = read_fbc103(fbc)
+    body = [r["bodyId"] for r in fbc_nodes]
+    old_role = [r["role"] for r in fbc_nodes]
+    old_side = [r["side"] for r in fbc_nodes]
     retained=set(body)
     # Do NOT use the pandas-converting Feather convenience reader here: that convenience API converts
     # through pandas and makes pandas an implicit runtime dependency. The

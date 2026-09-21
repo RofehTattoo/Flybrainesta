@@ -10,6 +10,7 @@ import argparse, csv, hashlib, json, struct
 from collections import Counter
 from pathlib import Path
 import pyarrow.feather as feather
+from fbc103_reader import FBC_SHA as SHARED_FBC_SHA, read_fbc103
 
 FBC_SHA="bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
 ANN_SHA="2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
@@ -40,19 +41,6 @@ def clean(v):
     if hasattr(v,"as_py"): v=v.as_py()
     return str(v).strip()
 
-def fbc(path):
-    b=Path(path).read_bytes()
-    assert sha(path)==FBC_SHA, "FBC103 SHA mismatch"
-    assert b[:8]==b"FBC103\0\0", "FBC103 magic mismatch"
-    n,e=struct.unpack_from("<II",b,8); assert n==N
-    ids=[]; roles=[]; off=16
-    for _ in range(n):
-        ids.append(struct.unpack_from("<Q",b,off)[0]); off+=8
-        off+=1; off+=1; off+=1
-        roles.append(struct.unpack_from("<b",b,off)[0]); off+=1
-        off+=1; off+=12
-    return ids,roles
-
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--semantics",required=True); ap.add_argument("--fbc103",required=True)
@@ -60,7 +48,12 @@ def main():
     a=ap.parse_args()
 
     assert sha(a.annotations)==ANN_SHA, "annotation SHA mismatch"
-    ids,old=fbc(a.fbc103); retained=set(ids)
+    fbc_nodes = read_fbc103(Path(a.fbc103))
+    ids = [r["bodyId"] for r in fbc_nodes]
+    old = [r["role"] for r in fbc_nodes]
+    retained=set(ids)
+    assert len(fbc_nodes) == N
+    assert len(retained) == N, "FBC103 retained bodyId set is not unique"
     required=["bodyId","superclass","class","subclass","type","somaSide","somaNeuromere","exitNerve"]
     table=feather.read_table(a.annotations,columns=required)
     records=[r for r in table.to_pylist() if r.get("bodyId") in retained]
