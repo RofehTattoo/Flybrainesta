@@ -1,3 +1,5 @@
+**Current development release:** V1.15.4-FOOD-TUNE-A / versionCode 123. Single-parameter food experiment: olfactory source gain 2.25 → 3.00; FBC103/FBD104/VNC semantics remain frozen.
+
 # FlyBrain V1.15.2 — VNC Motor Semantics
 
 **Current development release:** V1.15.2 / versionCode 121. This release corrects only the VNC motor semantics/body translation layer. FBR-10/FBC103 and FBD104 remain frozen/independent.

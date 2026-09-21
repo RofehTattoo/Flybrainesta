@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.15.3-DIAGNOSTIC · frozen FBR-10 + FBD104 + VNC semantics
+name: Build FlyBrain APK V1.15.4-FOOD-TUNE-A · frozen FBR-10 + FBD104 + VNC semantics
 
 on:
   workflow_dispatch:
@@ -94,14 +94,15 @@ jobs:
       - name: Validate V1.15.3 diagnostic identity and source invariants
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 122' app/build.gradle.kts
-          grep -Fq 'versionName = "1.15.3"' app/build.gradle.kts
-          grep -Fq 'APP_VERSION = "1.15.3"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION_CODE = 122' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'versionCode = 123' app/build.gradle.kts
+          grep -Fq 'versionName = "1.15.4"' app/build.gradle.kts
+          grep -Fq 'APP_VERSION = "1.15.4"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION_CODE = 123' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'loadVncMotorSemantics()' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'vnc_motor_semantics.tsv' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'MOTOR_FUNCTION_JUMP' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'FOOD_OLF_GAIN = 3.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FBC103' V1.15.2_VNC_MOTOR_SEMANTICS.md
 
       - name: Validate Kotlin source structure
@@ -140,10 +141,10 @@ jobs:
           print('FBD104: OK')
           PY
 
-      - name: Compile APK V1.15.3-DIAGNOSTIC
+      - name: Compile APK V1.15.4-FOOD-TUNE-A
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK V1.15.3-DIAGNOSTIC
+      - name: Verify APK V1.15.4-FOOD-TUNE-A
         run: |
           set -euo pipefail
           APK='app/build/outputs/apk/debug/app-debug.apk'
@@ -151,8 +152,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "versionCode='122'"
-          echo "$BADGING" | grep -Fq "versionName='1.15.3'"
+          echo "$BADGING" | grep -Fq "versionCode='123'"
+          echo "$BADGING" | grep -Fq "versionName='1.15.4'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
@@ -162,7 +163,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.15.3-DIAGNOSTIC-APK
+          name: FlyBrain-V1.15.4-FOOD-TUNE-A-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
