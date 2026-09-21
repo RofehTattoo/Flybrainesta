@@ -16,7 +16,7 @@ FBC_SHA = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
 ANN_SHA = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
 N = 16669
 MOTOR_START, MOTOR_END = 4278, 4986
-EXPECTED = {"leg":381, "abdominal":214, "wing":67, "neck":24, "haltere":16, "other":6}
+EXPECTED = {"LEG":381, "ABDOMEN":214, "WING":67, "NECK":24, "HALTERE":16, "OTHER":6}
 EXPECTED_SIDE = {"L":355, "R":353}
 ROLE_NAMES = {1:"LEG",2:"WING",3:"HALTERE",4:"NECK",5:"ABDOMEN",6:"OTHER",7:"OLD_OTHER",0:"NON_MOTOR"}
 
@@ -122,7 +122,7 @@ def main():
         oldr=old[bid][0]
         expected_role=CLASS_TO_ROLE[cls]
         rows.append({
-            'bodyId':bid,'type':typ,'class':raw_cls,'subclass':subclass,
+            'bodyId':bid,'type':typ,'class':cls,'subclass':subclass,
             'somaSide':side,'somaNeuromere':clean(r.get('somaNeuromere')),
             'exitNerve':clean(r.get('exitNerve')),'anatomicalClass':cls.upper(),
             'functionalTag':func,'classSource':class_source,
@@ -131,9 +131,10 @@ def main():
             'discrepancy': 'MATCH' if oldr==expected_role else 'RECLASSIFIED'
         })
     rows.sort(key=lambda x:x['bodyId'])
-    counts=Counter(x['class'] for x in rows); sides=Counter(x['somaSide'] for x in rows)
+    counts=Counter(x['anatomicalClass'] for x in rows); sides=Counter(x['somaSide'] for x in rows)
     if dict(counts)!=EXPECTED: raise SystemExit(f"class census {dict(counts)} != {EXPECTED}")
     if dict(sides)!=EXPECTED_SIDE: raise SystemExit(f"side census {dict(sides)} != {EXPECTED_SIDE}")
+    if any(not x['class'] for x in rows): raise SystemExit('effective motor class unexpectedly blank')
     out=Path(args.output); out.parent.mkdir(parents=True,exist_ok=True)
     with out.open('w',newline='',encoding='utf-8') as f:
         w=csv.DictWriter(f,fieldnames=list(rows[0]),delimiter='\t',lineterminator='\n'); w.writeheader(); w.writerows(rows)

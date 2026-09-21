@@ -76,6 +76,10 @@ def main():
         expected_class=SUBCLASS_TO_CLASS[sub]
         if raw_cls and raw_cls != expected_class.lower():
             mismatches.append((bid,"official class/subclass conflict",raw_cls,expected_class))
+        if not out.get("class","").strip():
+            mismatches.append((bid,"class","",expected_class))
+        elif out.get("class","").strip().upper() != expected_class:
+            mismatches.append((bid,"class",out.get("class",""),expected_class))
         checks={
             "type":clean(r.get("type")),
             "subclass":sub,
@@ -90,6 +94,8 @@ def main():
                 got=got.upper()
             if got != expected:
                 mismatches.append((bid,key,got,expected))
+        if not out.get("class","").strip():
+            mismatches.append((bid,"class","",expected_class))
         expected_source="class" if raw_cls else "subclass_completion"
         if out.get("classSource") != expected_source:
             mismatches.append((bid,"classSource",out.get("classSource"),expected_source))
