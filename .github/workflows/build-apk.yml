@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.15.5-FOOD-TUNE-B · frozen FBR-10 + FBD104 + VNC semantics
+name: Build FlyBrain APK V1.15.6-FOOD-TUNE-C · frozen FBR-10 + FBD104 + VNC semantics
 
 on:
   workflow_dispatch:
@@ -91,18 +91,19 @@ jobs:
           python tools/validate_frozen_connectome.py
           grep -Fq 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60' FBR10_CONNECTOME_FINAL_AUDIT.md
 
-      - name: Validate V1.15.5 FOOD-TUNE-B identity and source invariants
+      - name: Validate V1.15.6 FOOD-TUNE-C identity and source invariants
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 124' app/build.gradle.kts
-          grep -Fq 'versionName = "1.15.5"' app/build.gradle.kts
-          grep -Fq 'APP_VERSION = "1.15.5"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION_CODE = 124' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'versionCode = 125' app/build.gradle.kts
+          grep -Fq 'versionName = "1.15.6"' app/build.gradle.kts
+          grep -Fq 'APP_VERSION = "1.15.6"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION_CODE = 125' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'loadVncMotorSemantics()' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'vnc_motor_semantics.tsv' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'MOTOR_FUNCTION_JUMP' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FOOD_OLF_GAIN = 6.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'val concentration = gaussian(d, 1.10f)' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FBC103' V1.15.2_VNC_MOTOR_SEMANTICS.md
 
       - name: Validate Kotlin source structure
@@ -141,10 +142,10 @@ jobs:
           print('FBD104: OK')
           PY
 
-      - name: Compile APK V1.15.5-FOOD-TUNE-B
+      - name: Compile APK V1.15.6-FOOD-TUNE-C
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK V1.15.5-FOOD-TUNE-B
+      - name: Verify APK V1.15.6-FOOD-TUNE-C
         run: |
           set -euo pipefail
           APK='app/build/outputs/apk/debug/app-debug.apk'
@@ -152,8 +153,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "versionCode='124'"
-          echo "$BADGING" | grep -Fq "versionName='1.15.5'"
+          echo "$BADGING" | grep -Fq "versionCode='125'"
+          echo "$BADGING" | grep -Fq "versionName='1.15.6'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
@@ -163,7 +164,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.15.5-FOOD-TUNE-B-APK
+          name: FlyBrain-V1.15.6-FOOD-TUNE-C-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

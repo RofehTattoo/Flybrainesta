@@ -1207,7 +1207,7 @@ class MainActivity : Activity() {
             val dx = sx - flyX
             val dy = sy - flyY
             val d = hypot(dx, dy)
-            val concentration = gaussian(d, .58f)
+            val concentration = gaussian(d, 1.10f)
             val rel = atan2(sin(atan2(dy, dx) - heading), cos(atan2(dy, dx) - heading))
             val bilateral = (sin(rel) * .28f).coerceIn(-.28f, .28f)
             val left = (concentration * (1f + bilateral) * gain).coerceIn(0f, 3f)
