@@ -713,18 +713,22 @@ class MainActivity : Activity() {
         }
 
         private fun loadVncMotorSemantics() {
-            val rows = assets.open("vnc_motor_semantics.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
-                reader.readLines().drop(1)
+            val parsed = assets.open("vnc_motor_semantics.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
+                val header = reader.readLine() ?: throw IllegalStateException("VNCSEM cabecera ausente")
+                val expectedHeader = "bodyId\\ttype\\tclass\\tsubclass\\tsomaSide\\tsomaNeuromere\\texitNerve\\tanatomicalClass\\tfunctionalTag\\tclassSource\\tcurrentFBC103Role\\tcurrentFBC103RoleCode\\tsemanticRoleCode\\tdiscrepancy"
+                if (header != expectedHeader) throw IllegalStateException("VNCSEM cabecera inesperada")
+                reader.readLines()
             }
+            val rows = parsed
             if (rows.size != (MOTOR_END - MOTOR_START)) {
                 throw IllegalStateException("VNCSEM filas=${rows.size} esperado=${MOTOR_END - MOTOR_START}")
             }
             val byBody = HashMap<Long, Triple<Int, Int, Int>>(rows.size * 2)
             for (line in rows) {
                 val c = line.split('\t')
-                if (c.size < 13) throw IllegalStateException("VNCSEM fila incompleta")
+                if (c.size != 14) throw IllegalStateException("VNCSEM esquema inesperado: ${c.size} columnas")
                 val id = c[0].toLong()
-                val role = c[11].toInt()
+                val role = c[12].toInt()
                 val fn = when (c[8]) {
                     "JUMP" -> GeneratedConnectomeMeta.MOTOR_FUNCTION_JUMP
                     else -> GeneratedConnectomeMeta.MOTOR_FUNCTION_NONE
@@ -1853,6 +1857,7 @@ class MainActivity : Activity() {
             var neckActive = 0
             var jumpActive = 0
             var abdomenActive = 0
+            var haltereActive = 0
             var motorOtherActive = 0
 
             for (i in MOTOR_START until MOTOR_END) {
@@ -1870,7 +1875,7 @@ class MainActivity : Activity() {
                     GeneratedConnectomeMeta.MOTOR_WING -> wingActive++
                     GeneratedConnectomeMeta.MOTOR_NECK -> neckActive++
                     GeneratedConnectomeMeta.MOTOR_ABDOMEN -> abdomenActive++
-                    GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereActiveCache++
+                    GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereActive++
                     GeneratedConnectomeMeta.MOTOR_OTHER -> motorOtherActive++
                 }
                 if (motorFunctionalTag[i].toInt() == GeneratedConnectomeMeta.MOTOR_FUNCTION_JUMP) {
@@ -1892,7 +1897,8 @@ class MainActivity : Activity() {
             jumpActivity = if (jumpTotal == 0) 0f else jumpActive.toFloat() / jumpTotal.toFloat()
             abdomenActivity = if (abdomenTotal == 0) 0f else abdomenActive.toFloat() / abdomenTotal.toFloat()
             abdomenActiveCache = abdomenActive
-            val haltereActivity = if (haltereTotal == 0) 0f else haltereActiveCache.toFloat() / haltereTotal.toFloat()
+            haltereActiveCache = haltereActive
+            val haltereActivity = if (haltereTotal == 0) 0f else haltereActive.toFloat() / haltereTotal.toFloat()
             motorOtherActiveCache = motorOtherActive
             unresolvedMotorActiveCache = motorOtherActive
             @Suppress("UNUSED_VARIABLE") val retainedHaltereActivity = haltereActivity
