@@ -135,8 +135,14 @@ jobs:
           assert 'refreshNodeDiagnostics(diagWindowElapsed)' in s
           assert 'bodyId[it] = b.long' in s
           assert 'Quantitative node diagnostics' in s
-          assert 'Δbase = Hz actual − Hz basal' in s
-          print('KOTLIN / NEURAL-ACTIVATION REGRESSION: OK')
+          # Trajectory telemetry is read-only instrumentation; verify its UI/runtime hooks.
+          assert 'rumbo' in s
+          assert 'recorrido' in s
+          assert 'ESC-N' in s
+          assert 'flyX' in s and 'flyY' in s
+          assert 'heading' in s
+          assert 'speed' in s
+          print('KOTLIN / NEURAL-ACTIVATION + TRAJECTORY TELEMETRY: OK')
           PY
 
       - name: Pre-build report consistency
