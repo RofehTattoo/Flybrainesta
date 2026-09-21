@@ -47,7 +47,8 @@ jobs:
       - name: Build and validate V1.15.2 VNC semantics
         run: |
           set -euo pipefail
-          python -m py_compile tools/build_vnc_motor_semantics.py tools/validate_vnc_motor_semantics.py
+          python -m py_compile tools/build_vnc_motor_semantics.py tools/validate_vnc_motor_semantics.py tools/test_vnc_motor_semantics_logic.py
+          python tools/test_vnc_motor_semantics_logic.py
           python - <<'PY'
           from pathlib import Path
           s=Path('tools/build_vnc_motor_semantics.py').read_text()

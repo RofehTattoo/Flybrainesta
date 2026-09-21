@@ -17,6 +17,17 @@ N=16669; MOTOR_START=4278; MOTOR_END=4986
 EXPECTED={"LEG":381,"ABDOMEN":214,"WING":67,"NECK":24,"HALTERE":16,"OTHER":6}
 EXPECTED_SIDE={"L":355,"R":353}
 SUBCLASS_TO_CLASS={"fl":"LEG","ml":"LEG","hl":"LEG","wm":"WING","nm":"NECK","hm":"HALTERE","ad":"ABDOMEN","xm":"OTHER"}
+RAW_CLASS_TO_CANONICAL={"leg":"LEG","wing":"WING","haltere":"HALTERE","neck":"NECK","abdominal":"ABDOMEN","abdomen":"ABDOMEN","other":"OTHER"}
+
+def resolve_motor_class(raw_cls, subclass, bid):
+    assert subclass in SUBCLASS_TO_CLASS, f"unsupported official motor subclass {subclass!r} for {bid}"
+    expected=SUBCLASS_TO_CLASS[subclass]
+    if raw_cls:
+        canonical=RAW_CLASS_TO_CANONICAL.get(raw_cls)
+        assert canonical is not None, f"unsupported official motor class {raw_cls!r} for {bid}"
+        assert canonical==expected, f"official class/subclass conflict for {bid}: {raw_cls!r}/{subclass!r} -> {expected}"
+        return canonical, "class"
+    return expected, "subclass_completion"
 
 def sha(p):
     h=hashlib.sha256()
@@ -73,9 +84,7 @@ def main():
         raw_cls=clean(r.get("class")).lower()
         sub=clean(r.get("subclass")).lower()
         assert sub in SUBCLASS_TO_CLASS, f"unsupported official motor subclass {sub!r} for {bid}"
-        expected_class=SUBCLASS_TO_CLASS[sub]
-        if raw_cls and raw_cls != expected_class.lower():
-            mismatches.append((bid,"official class/subclass conflict",raw_cls,expected_class))
+        expected_class, expected_source=resolve_motor_class(raw_cls, sub, bid)
         if not out.get("class","").strip():
             mismatches.append((bid,"class","",expected_class))
         elif out.get("class","").strip().upper() != expected_class:
@@ -94,9 +103,6 @@ def main():
                 got=got.upper()
             if got != expected:
                 mismatches.append((bid,key,got,expected))
-        if not out.get("class","").strip():
-            mismatches.append((bid,"class","",expected_class))
-        expected_source="class" if raw_cls else "subclass_completion"
         if out.get("classSource") != expected_source:
             mismatches.append((bid,"classSource",out.get("classSource"),expected_source))
         expected_tag="JUMP" if clean(r.get("type")).lower()=="ttmn" else "NONE"

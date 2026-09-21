@@ -24,12 +24,36 @@ ROLE_NAMES = {1:"LEG",2:"WING",3:"HALTERE",4:"NECK",5:"ABDOMEN",6:"OTHER",7:"OLD
 # occasionally leaves `class` empty (observed for bodyId 164190 / MNad21).
 # `subclass` is the curated motor body-part code and is therefore the
 # authoritative completion field; it is not a synthetic behavioral label.
+# Canonical runtime vocabulary. Keep MaleCNS raw annotation values separate from
+# the FlyBrain anatomical vocabulary so naming differences (e.g. abdominal vs
+# abdomen) cannot create false census failures.
 SUBCLASS_TO_CLASS = {
-    "fl": "leg", "ml": "leg", "hl": "leg",
-    "wm": "wing", "nm": "neck", "hm": "haltere",
-    "ad": "abdominal", "xm": "other",
+    "fl": "LEG", "ml": "LEG", "hl": "LEG",
+    "wm": "WING", "nm": "NECK", "hm": "HALTERE",
+    "ad": "ABDOMEN", "xm": "OTHER",
 }
-CLASS_TO_ROLE = {"leg":1, "wing":2, "haltere":3, "neck":4, "abdominal":5, "other":6}
+RAW_CLASS_TO_CANONICAL = {
+    "leg": "LEG", "wing": "WING", "haltere": "HALTERE",
+    "neck": "NECK", "abdominal": "ABDOMEN", "abdomen": "ABDOMEN",
+    "other": "OTHER",
+}
+CLASS_TO_ROLE = {"LEG":1, "WING":2, "HALTERE":3, "NECK":4, "ABDOMEN":5, "OTHER":6}
+
+def resolve_motor_class(raw_cls: str, subclass: str, body_id: int) -> tuple[str, str]:
+    if subclass not in SUBCLASS_TO_CLASS:
+        raise SystemExit(f"unsupported official motor subclass {subclass!r} for {body_id}")
+    derived = SUBCLASS_TO_CLASS[subclass]
+    if raw_cls:
+        canonical = RAW_CLASS_TO_CANONICAL.get(raw_cls)
+        if canonical is None:
+            raise SystemExit(f"unsupported official motor class {raw_cls!r} for {body_id}")
+        if canonical != derived:
+            raise SystemExit(
+                f"official class/subclass conflict for {body_id}: class={raw_cls!r}, "
+                f"subclass={subclass!r} -> {derived!r}"
+            )
+        return canonical, "class"
+    return derived, "subclass_completion"
 
 
 def sha256(p: Path) -> str:
@@ -104,17 +128,8 @@ def main():
         bid=int(r['bodyId'])
         raw_cls=clean(r.get('class')).lower()
         subclass=clean(r.get('subclass')).lower()
-        if subclass not in SUBCLASS_TO_CLASS:
-            raise SystemExit(f"unsupported official motor subclass {subclass!r} for {bid}")
-        derived_cls=SUBCLASS_TO_CLASS[subclass]
-        if raw_cls and raw_cls != derived_cls:
-            raise SystemExit(
-                f"official class/subclass conflict for {bid}: class={raw_cls!r}, "
-                f"subclass={subclass!r} -> {derived_cls!r}"
-            )
-        cls=raw_cls or derived_cls
-        class_source="class" if raw_cls else "subclass_completion"
-        if not raw_cls:
+        cls, class_source = resolve_motor_class(raw_cls, subclass, bid)
+        if class_source == "subclass_completion":
             class_completion.append(bid)
         side=clean(r.get('somaSide')).upper()
         if side not in ('L','R'): raise SystemExit(f"invalid motor side {side!r} for {bid}")
@@ -124,7 +139,7 @@ def main():
         rows.append({
             'bodyId':bid,'type':typ,'class':cls,'subclass':subclass,
             'somaSide':side,'somaNeuromere':clean(r.get('somaNeuromere')),
-            'exitNerve':clean(r.get('exitNerve')),'anatomicalClass':cls.upper(),
+            'exitNerve':clean(r.get('exitNerve')),'anatomicalClass':cls,
             'functionalTag':func,'classSource':class_source,
             'currentFBC103Role':ROLE_NAMES.get(oldr,'UNKNOWN'),
             'currentFBC103RoleCode':oldr,'semanticRoleCode':expected_role,
@@ -132,6 +147,8 @@ def main():
         })
     rows.sort(key=lambda x:x['bodyId'])
     counts=Counter(x['anatomicalClass'] for x in rows); sides=Counter(x['somaSide'] for x in rows)
+    raw_class_counts=Counter(clean(r.get('class')) for r in motors)
+    subclass_counts=Counter(clean(r.get('subclass')).lower() for r in motors)
     if dict(counts)!=EXPECTED: raise SystemExit(f"class census {dict(counts)} != {EXPECTED}")
     if dict(sides)!=EXPECTED_SIDE: raise SystemExit(f"side census {dict(sides)} != {EXPECTED_SIDE}")
     if any(not x['class'] for x in rows): raise SystemExit('effective motor class unexpectedly blank')
@@ -143,6 +160,8 @@ def main():
         'annotation_sha256':ANN_SHA,'fbc103_sha256':FBC_SHA,'fbc103_modified':False,
         'neurons_fbr10':N,'vnc_motor_rows':len(rows),'counts':dict(counts),'sides':dict(sides),
         'functional_tags':dict(Counter(x['functionalTag'] for x in rows)),
+        'raw_official_class_census':dict(raw_class_counts),
+        'official_motor_subclass_census':dict(subclass_counts),
         'class_completion_count':len(class_completion),
         'class_completion_bodyIds':class_completion,
         'reclassified_from_old_fbc103':sum(x['discrepancy']=='RECLASSIFIED' for x in rows),

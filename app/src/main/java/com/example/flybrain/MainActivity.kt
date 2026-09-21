@@ -729,9 +729,22 @@ class MainActivity : Activity() {
                 if (c.size != 14) throw IllegalStateException("VNCSEM esquema inesperado: ${c.size} columnas")
                 val id = c[0].toLong()
                 val role = c[12].toInt()
+                val classRole = when (c[7]) {
+                    "LEG" -> GeneratedConnectomeMeta.MOTOR_LEG
+                    "WING" -> GeneratedConnectomeMeta.MOTOR_WING
+                    "HALTERE" -> GeneratedConnectomeMeta.MOTOR_HALTERE
+                    "NECK" -> GeneratedConnectomeMeta.MOTOR_NECK
+                    "ABDOMEN" -> GeneratedConnectomeMeta.MOTOR_ABDOMEN
+                    "OTHER" -> GeneratedConnectomeMeta.MOTOR_OTHER
+                    else -> throw IllegalStateException("VNCSEM clase anatómica inválida=${c[7]} bodyId=$id")
+                }
+                if (role != classRole) {
+                    throw IllegalStateException("VNCSEM role/class mismatch bodyId=$id class=${c[7]} role=$role expected=$classRole")
+                }
                 val fn = when (c[8]) {
                     "JUMP" -> GeneratedConnectomeMeta.MOTOR_FUNCTION_JUMP
-                    else -> GeneratedConnectomeMeta.MOTOR_FUNCTION_NONE
+                    "NONE" -> GeneratedConnectomeMeta.MOTOR_FUNCTION_NONE
+                    else -> throw IllegalStateException("VNCSEM functionalTag inválido=${c[8]} bodyId=$id")
                 }
                 val side = when (c[4]) {
                     "L" -> -1
