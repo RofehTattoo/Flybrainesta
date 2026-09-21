@@ -20,7 +20,7 @@ android {
         applicationId = "com.example.flybrain"
         minSdk = 26
         targetSdk = 35
-        versionCode = 121
-        versionName = "1.15.2"
+        versionCode = 122
+        versionName = "1.15.3"
     }
 }

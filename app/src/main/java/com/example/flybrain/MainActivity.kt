@@ -239,6 +239,9 @@ class MainActivity : Activity() {
         private val refractory = FloatArray(N)
         // V1.13: short-lived synaptic trace (~5 ms), matching the published LIF model timescale.
         private val synTrace = FloatArray(N)
+        // V1.15.3 diagnostic: read-only net synaptic drive immediately before LIF thresholding.
+        // This is telemetry only and never feeds back into the dynamics.
+        private val lastSynDrive = FloatArray(N)
 
         // V1.07: presentation-only activity persistence. It smooths individual
         // spikes into a short visual intensity trail so activation/deactivation
@@ -407,6 +410,24 @@ class MainActivity : Activity() {
         private var descendingSpikesDisplay = 0f
         private var motorSpikesDisplay = 0f
         private var sensoryDriveDisplay = 0f
+        // V1.15.3-DIAGNOSTIC: motor drive is measured before spike thresholding.
+        // Signed values preserve net excitation/inhibition; absolute values expose
+        // subthreshold input even when excitation and inhibition partially cancel.
+        private var motorDriveSignedCache = 0f
+        private var motorDriveAbsCache = 0f
+        private var legDriveSignedCache = 0f
+        private var wingDriveSignedCache = 0f
+        private var neckDriveSignedCache = 0f
+        private var abdomenDriveSignedCache = 0f
+        private var haltereDriveSignedCache = 0f
+        private var otherMotorDriveSignedCache = 0f
+        private var leftLegDriveSignedCache = 0f
+        private var rightLegDriveSignedCache = 0f
+        private var motorDriveAbsPeakCache = 0f
+        private var wallDistanceCache = 0f
+        private var wallSignalCache = 0f
+        private var physicalAcceleration = 0f
+        private var previousPhysicalSpeed = 0f
         private var lastMotionX = .24f
         private var lastMotionY = .55f
         private var runtimeFault = ""
@@ -419,7 +440,7 @@ class MainActivity : Activity() {
         }
 
         fun infoText() = buildString {
-            append("FLYBRAIN V1.15.2 · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104 + VNCSEM102\n")
+            append("FLYBRAIN V1.15.3-DIAGNOSTIC · MaleCNS v1.0 · FBR-10 · FBC103 + FBD104 + VNCSEM102\n")
             append("16.669 neuronas · ${loadedEdgeCount} conexiones estructurales · ${loadedDynamicsEdgeCount} sinápticas dinámicas · ${if (connectomeLoaded && dynamicsLoaded) "CONNECTOME + DYNAMICS OK" else "CONNECTOME/DYNAMICS ERROR"}\n")
             append("Comidas $foodHits · Escapes $escapeEvents · FPS ${fps.toInt()}")
             if (runtimeFault.isNotEmpty()) append("\nERROR: $runtimeFault")
@@ -492,6 +513,7 @@ class MainActivity : Activity() {
                 prevFired[i] = false
                 refractory[i] = 0f
                 synTrace[i] = 0f
+                lastSynDrive[i] = 0f
                 visualActivity[i] = 0f
                 sensoryCurrent[i] = 0f
                 for (k in incomingW[i].indices) {
@@ -600,6 +622,21 @@ class MainActivity : Activity() {
             descendingSpikesDisplay = 0f
             motorSpikesDisplay = 0f
             sensoryDriveDisplay = 0f
+            motorDriveSignedCache = 0f
+            motorDriveAbsCache = 0f
+            legDriveSignedCache = 0f
+            wingDriveSignedCache = 0f
+            neckDriveSignedCache = 0f
+            abdomenDriveSignedCache = 0f
+            haltereDriveSignedCache = 0f
+            otherMotorDriveSignedCache = 0f
+            leftLegDriveSignedCache = 0f
+            rightLegDriveSignedCache = 0f
+            motorDriveAbsPeakCache = 0f
+            wallDistanceCache = 0f
+            wallSignalCache = 0f
+            physicalAcceleration = 0f
+            previousPhysicalSpeed = 0f
             lastMotionX = flyX
             lastMotionY = flyY
             runtimeFault = ""
@@ -1239,6 +1276,8 @@ class MainActivity : Activity() {
             // feedback, not a command to turn.
             val wall = min(min(flyX - .06f, .94f - flyX), min(flyY - .10f, .79f - flyY)).coerceIn(0f, .4f)
             val wallSignal = (1f - wall / .4f).coerceIn(0f, 1f)
+            wallDistanceCache = wall
+            wallSignalCache = wallSignal
             for (i in MECH_START until SENSOR_END) {
                 sensoryCurrent[i] += wallSignal * .055f
             }
@@ -1414,6 +1453,7 @@ class MainActivity : Activity() {
                 }
 
                 val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
+                lastSynDrive[i] = synCurrent
                 // IMPORTANT: sensoryCurrent is applied AFTER the membrane leak.
                 // With dt=.020 s and tau_m=.020 s, the old expression
                 //     v += (V_REST - v) * 50 * dt + input
@@ -1591,7 +1631,7 @@ class MainActivity : Activity() {
             val left = dp(10f)
             val right = width - dp(10f)
             val cardW = right - left
-            val cardH = min(dp(258f), max(dp(232f), sceneB - dp(28f)))
+            val cardH = min(dp(272f), max(dp(248f), sceneB - dp(20f)))
             val top = sceneTop + dp(10f)
             val bottom = top + cardH
             val mid = left + cardW * .50f
@@ -1681,19 +1721,20 @@ class MainActivity : Activity() {
                 left + dp(12f), top + dp(208f), paint
             )
             c.drawText(
-                "V física ${"%.4f".format(physicalSpeed)} · recorrido ${"%.3f".format(pathLength)} · Δposición ${"%.3f".format(netDisplacement)}",
+                "V ${"%.4f".format(physicalSpeed)} · A ${"%.4f".format(physicalAcceleration)} · recorrido ${"%.3f".format(pathLength)} · Δpos ${"%.3f".format(netDisplacement)}",
                 left + dp(12f), top + dp(220f), paint
             )
-            paint.typeface = Typeface.DEFAULT
-            paint.textSize = sp(7.5f)
-            paint.color = Color.rgb(87, 95, 100)
             c.drawText(
-                "LEG ${legActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_LEG]} · L ${leftLegActiveCache}/${legLeftTotal} · R ${rightLegActiveCache}/${legRightTotal}",
+                "MOTOR DRIVE net ${"%.4f".format(motorDriveSignedCache)} · |drive| ${"%.4f".format(motorDriveAbsCache)} · pico ${"%.4f".format(motorDriveAbsPeakCache)}",
                 left + dp(12f), top + dp(232f), paint
             )
             c.drawText(
-                "WING ${wingActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_WING]} · JUMP ${jumpActiveCache}/${jumpLeftTotal + jumpRightTotal} · ABD ${abdomenActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_ABDOMEN]} · HALT ${haltereActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_HALTERE]} · OTHER ${motorOtherActiveCache}/${motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER]} · ESC-N ${"%.2f".format(escapeAction)} · solo lectura",
+                "LEG drive ${"%.4f".format(legDriveSignedCache)} · L ${"%.4f".format(leftLegDriveSignedCache)} · R ${"%.4f".format(rightLegDriveSignedCache)} · spike L ${leftLegActiveCache} R ${rightLegActiveCache}",
                 left + dp(12f), top + dp(244f), paint
+            )
+            c.drawText(
+                "WING ${"%.3f".format(wingDriveSignedCache)} · NECK ${"%.3f".format(neckDriveSignedCache)} · ABD ${"%.3f".format(abdomenDriveSignedCache)} · MECH ${mechanosensoryRateDisplay.toInt()}% · WALL ${"%.3f".format(wallDistanceCache)} / ${"%.2f".format(wallSignalCache)}",
+                left + dp(12f), top + dp(256f), paint
             )
         }
 
@@ -1872,8 +1913,38 @@ class MainActivity : Activity() {
             var abdomenActive = 0
             var haltereActive = 0
             var motorOtherActive = 0
+            var motorDriveSigned = 0f
+            var motorDriveAbs = 0f
+            var motorDriveAbsPeak = 0f
+            var legDriveSigned = 0f
+            var wingDriveSigned = 0f
+            var neckDriveSigned = 0f
+            var abdomenDriveSigned = 0f
+            var haltereDriveSigned = 0f
+            var otherDriveSigned = 0f
+            var leftLegDrive = 0f
+            var rightLegDrive = 0f
 
             for (i in MOTOR_START until MOTOR_END) {
+                val drive = lastSynDrive[i]
+                motorDriveSigned += drive
+                motorDriveAbs += abs(drive)
+                motorDriveAbsPeak = max(motorDriveAbsPeak, abs(drive))
+                when (motorRole[i].toInt()) {
+                    GeneratedConnectomeMeta.MOTOR_LEG -> {
+                        legDriveSigned += drive
+                        when (nodeSide[i].toInt()) {
+                            -1 -> leftLegDrive += drive
+                            1 -> rightLegDrive += drive
+                        }
+                    }
+                    GeneratedConnectomeMeta.MOTOR_WING -> wingDriveSigned += drive
+                    GeneratedConnectomeMeta.MOTOR_NECK -> neckDriveSigned += drive
+                    GeneratedConnectomeMeta.MOTOR_ABDOMEN -> abdomenDriveSigned += drive
+                    GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereDriveSigned += drive
+                    GeneratedConnectomeMeta.MOTOR_OTHER -> otherDriveSigned += drive
+                }
+                if (!fired[i]) continue
                 if (!fired[i]) continue
                 allMotor += 1f
                 when (motorRole[i].toInt()) {
@@ -1914,6 +1985,18 @@ class MainActivity : Activity() {
             val haltereActivity = if (haltereTotal == 0) 0f else haltereActive.toFloat() / haltereTotal.toFloat()
             motorOtherActiveCache = motorOtherActive
             unresolvedMotorActiveCache = motorOtherActive
+            val motorCountF = motorCount.toFloat().coerceAtLeast(1f)
+            motorDriveSignedCache = motorDriveSigned / motorCountF
+            motorDriveAbsCache = motorDriveAbs / motorCountF
+            motorDriveAbsPeakCache = motorDriveAbsPeak
+            legDriveSignedCache = if (legTotal == 0) 0f else legDriveSigned / legTotal.toFloat()
+            wingDriveSignedCache = if (wingTotal == 0) 0f else wingDriveSigned / wingTotal.toFloat()
+            neckDriveSignedCache = if (neckTotal == 0) 0f else neckDriveSigned / neckTotal.toFloat()
+            abdomenDriveSignedCache = if (abdomenTotal == 0) 0f else abdomenDriveSigned / abdomenTotal.toFloat()
+            haltereDriveSignedCache = if (haltereTotal == 0) 0f else haltereDriveSigned / haltereTotal.toFloat()
+            otherMotorDriveSignedCache = if (motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER] == 0) 0f else otherDriveSigned / motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER].toFloat()
+            leftLegDriveSignedCache = if (legLeftTotal == 0) 0f else leftLegDrive / legLeftTotal.toFloat()
+            rightLegDriveSignedCache = if (legRightTotal == 0) 0f else rightLegDrive / legRightTotal.toFloat()
             @Suppress("UNUSED_VARIABLE") val retainedHaltereActivity = haltereActivity
 
             legActiveCache = legActive
@@ -1984,6 +2067,8 @@ class MainActivity : Activity() {
             val dxPhysical = flyX - lastMotionX
             val dyPhysical = flyY - lastMotionY
             physicalSpeed = hypot(dxPhysical, dyPhysical) / dt.coerceAtLeast(.001f)
+            physicalAcceleration = (physicalSpeed - previousPhysicalSpeed) / dt.coerceAtLeast(.001f)
+            previousPhysicalSpeed = physicalSpeed
             displacementPerSecond = physicalSpeed
             pathLength += hypot(dxPhysical, dyPhysical)
             val movementEvidence = (physicalSpeed / .0035f).coerceIn(0f, 1f)
