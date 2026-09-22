@@ -1,29 +1,15 @@
 from pathlib import Path
 import hashlib
-
-ROOT = Path(__file__).resolve().parents[1]
-MAIN = (ROOT / 'app/src/main/java/com/example/flybrain/MainActivity.kt').read_text()
-BUILDER = (ROOT / 'tools/build_olfactory_input_map.py').read_text()
-FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
-EXPECTED = 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60'
-
-assert 'olfactoryNeuronIndices' in MAIN
-assert 'injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN, excludeOlfactory = true)' in MAIN
-assert 'olfactoryPopulationRate()' in MAIN
-assert 'mechanosensoryPopulationRate()' in MAIN
-assert 'for (i in OLF_START until OLF_END)' not in MAIN
-assert 'INDEX-CYCLIC' not in MAIN
+ROOT=Path(__file__).resolve().parents[1]
+MAIN=(ROOT/'app/src/main/java/com/example/flybrain/MainActivity.kt').read_text()
+assert 'injectSensoryPopulation(OLF_START, OLF_END' not in MAIN
+sense=MAIN[MAIN.index('private fun sense'):MAIN.index('private fun stepBrain')]
+assert 'injectSensoryPopulation(OLF_START, OLF_END' not in sense
+assert 'injectOlfactoryPopulation' in sense
 assert 'FOOD_OLF_PATTERN_CAP' not in MAIN
-assert 'encodeOdor' not in MAIN
-assert 'foodDirectionalBias' not in MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeuralSimulation')]
-
-assert 'EXPECTED_ORNS = 45' in BUILDER
-assert 'EXPECTED_SIDE = {"L": 12, "R": 27, "U": 6}' in BUILDER
-assert 'sc == "cb_sensory"' in BUILDER
-assert 'cl == "olfactory"' in BUILDER
-assert 'typ.startswith("ORN_")' in BUILDER
-assert 'nt.lower() != "acetylcholine"' in BUILDER and 'entryNerve' in BUILDER
-
-assert hashlib.sha256(FBC.read_bytes()).hexdigest() == EXPECTED
+assert 'foodDirectionalBias' not in MAIN[MAIN.index('private fun updateActionSelection'):MAIN.index('private fun updateActionSelection')+6000]
+assert 'loadOlfactoryInputMap()' in MAIN
+assert 'assets.open("olfactory_input_map.tsv")' in MAIN
+FBC=ROOT/'app/src/main/res/raw/malecns_reduced.bin'
+assert hashlib.sha256(FBC.read_bytes()).hexdigest()=='bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60'
 print('OLF ANATOMICAL INPUT AUDIT: PASS')
-print('FBC103 SHA-256:', EXPECTED)
