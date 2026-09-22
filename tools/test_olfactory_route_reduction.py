@@ -12,7 +12,13 @@ assert 'def is_olfactory_orn' in B
 assert 'route_olfactory_forward' in B
 assert 'route_olfactory_motor' in B
 assert 'protected_orns' in B
-assert "extra_pool = annotated[\\n            ~annotated.bodyId.isin(selected_ids_now)\\n            & ~annotated[\"is_olfactory_orn\"]" in B
+
+# Check the exclusion of olfactory ORNs from the generic extra pool
+# without depending on exact whitespace/indentation in the builder.
+assert 'extra_pool = annotated[' in B
+assert '~annotated.bodyId.isin(selected_ids_now)' in B
+assert '~annotated["is_olfactory_orn"]' in B
+
 assert 'entryNerve' in B
 assert 'annotations[annotations["status"]' not in B
 assert 'official release contains 166,700' in B
@@ -22,6 +28,8 @@ assert 'sc == "ol_sensory"' not in B
 
 module = ast.parse(B)
 
+# Extract the shared ORN helper, classifier, and the official four-ID
+# exception constant directly from build_connectome.py.
 keep = []
 for node in module.body:
     if isinstance(node, ast.FunctionDef) and node.name in {
@@ -49,7 +57,9 @@ exec(
     ns,
 )
 
+# Normal typed ORNs.
 assert ns["is_olfactory_orn"]({
+    "bodyId": 1,
     "superclass": "cb_sensory",
     "class": "olfactory",
     "type": "ORN_TEST",
@@ -57,14 +67,14 @@ assert ns["is_olfactory_orn"]({
 })
 
 assert ns["is_olfactory_orn"]({
+    "bodyId": 2,
     "superclass": "cb_sensory",
     "class": "olfactory",
     "type": "ORN_TEST",
     "entryNerve": "MxLbN",
 })
 
-# The four official untyped ORNs must also be recognized without inventing
-# a synthetic type label.
+# The four official MaleCNS v1.0 ORNs whose published type is NULL.
 for body_id in (242812, 242908, 488209, 956041):
     assert ns["is_olfactory_orn"]({
         "bodyId": body_id,
@@ -74,13 +84,16 @@ for body_id in (242812, 242908, 488209, 956041):
         "entryNerve": "AN",
     })
 
+# Historical visual cells must remain visual, not olfactory.
 assert ns["classify_channel"]({
+    "bodyId": 3,
     "superclass": "ol_sensory",
     "class": "visual",
     "type": "R7d",
 }) == 0
 
 assert ns["classify_channel"]({
+    "bodyId": 4,
     "superclass": "cb_sensory",
     "class": "olfactory",
     "type": "ORN_TEST",
