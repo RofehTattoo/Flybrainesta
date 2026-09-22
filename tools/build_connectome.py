@@ -75,6 +75,20 @@ def clean(x):
     return str(x)
 
 
+def normalized_orn_type_entry_nerve_pairs(df: pd.DataFrame) -> pd.DataFrame:
+    """Return unique published ORN (type, entryNerve) combinations.
+
+    MaleCNS v1.0 contains 54 distinct typed ORN combinations but only 53
+    unique `type` strings because ORN_VA7l occurs under both AN and MxLbN.
+    The reduction must preserve the source distinction without inventing a
+    new type label.
+    """
+    pairs = df.loc[df["type"].notna(), ["type", "entryNerve"]].copy()
+    pairs["type"] = pairs["type"].astype(str).str.strip()
+    pairs["entryNerve"] = pairs["entryNerve"].astype(str).str.strip().str.upper()
+    return pairs.drop_duplicates().sort_values(["type", "entryNerve"]).reset_index(drop=True)
+
+
 def is_olfactory_orn(row) -> bool:
     """True only for real MaleCNS olfactory receptor neurons (ORNs).
 
@@ -328,11 +342,13 @@ def main(root: Path) -> None:
 
     orn_source = annotated[is_olfactory].copy()
     orn_type_counts_source = orn_source.groupby("type", sort=True).size().to_dict()
+    orn_type_entry_nerve_pairs_source = normalized_orn_type_entry_nerve_pairs(orn_source)
     if len(orn_source) != 2639:
         raise RuntimeError(f"MaleCNS v1.0 ORN census changed: expected 2639, found {len(orn_source)}")
-    if len(orn_type_counts_source) != EXPECTED_ORN_TYPES:
+    if len(orn_type_entry_nerve_pairs_source) != EXPECTED_ORN_TYPES:
         raise RuntimeError(
-            f"MaleCNS v1.0 ORN type census changed: expected {EXPECTED_ORN_TYPES}, found {len(orn_type_counts_source)}"
+            "MaleCNS v1.0 ORN type+entryNerve census changed: "
+            f"expected {EXPECTED_ORN_TYPES}, found {len(orn_type_entry_nerve_pairs_source)}"
         )
 
     role_counts_source = np.bincount(desc_role[is_desc], minlength=5)
@@ -816,12 +832,16 @@ def main(root: Path) -> None:
     if len(selected_orns) != TARGET_ORNS:
         raise AssertionError(f"selected ORNs={len(selected_orns)} expected={TARGET_ORNS}")
     # The four official untyped ORNs have no published `type` value.
-    # Count only actual published ORN type labels when validating the 54 types;
-    # do not invent a synthetic type for the four NULL annotations.
+    # Keep the source `type` field untouched and validate the published
+    # type+entryNerve combinations instead: MaleCNS v1.0 has 54 such
+    # combinations but only 53 unique type strings because ORN_VA7l occurs
+    # under both AN and MxLbN.
     retained_orn_types = selected_orns["type"].dropna().astype(str).nunique()
-    if retained_orn_types != EXPECTED_ORN_TYPES:
+    retained_orn_type_entry_nerve_pairs = normalized_orn_type_entry_nerve_pairs(selected_orns)
+    if len(retained_orn_type_entry_nerve_pairs) != EXPECTED_ORN_TYPES:
         raise AssertionError(
-            f"selected ORN types={retained_orn_types} expected={EXPECTED_ORN_TYPES}"
+            "selected ORN type+entryNerve combinations="
+            f"{len(retained_orn_type_entry_nerve_pairs)} expected={EXPECTED_ORN_TYPES}"
         )
 
     # Stable anatomical ordering: sensory channels first, then descending,
@@ -1067,15 +1087,20 @@ def main(root: Path) -> None:
         "sha256": fbc_sha,
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,
-        "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), all 54 ORN types are represented, and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
+        "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
         "source": BASE,
         "neurons_source": int(total),
         "neurons_retained": TARGET,
         "edges_retained": len(edges),
         "olfactory_orns_source": int(len(orn_source)),
         "olfactory_orns_retained": int(len(selected_orns)),
+        # `*_types_*` preserve the literal unique `type`-label count (53);
+        # the 54-value census is the distinct published (type, entryNerve)
+        # combination count and is exposed separately to avoid conflating the two.
         "olfactory_orn_types_source": int(len(orn_type_counts_source)),
         "olfactory_orn_types_retained": int(retained_orn_types),
+        "olfactory_orn_type_entry_nerve_pairs_source": int(len(orn_type_entry_nerve_pairs_source)),
+        "olfactory_orn_type_entry_nerve_pairs_retained": int(len(retained_orn_type_entry_nerve_pairs)),
         "olfactory_orn_target": TARGET_ORNS,
         "olfactory_route_forward_source_nonzero": int((route_olfactory_forward > 0).sum()),
         "olfactory_route_forward_selected_nonzero": int((route_olfactory_forward_selected > 0).sum()),
@@ -1112,6 +1137,14 @@ def main(root: Path) -> None:
         "route_quota_requested": route_quota,
         "olfactory_orn_type_counts_source": {str(k): int(v) for k,v in orn_type_counts_source.items()},
         "olfactory_orn_type_counts_retained": {str(k): int(v) for k,v in selected_orns.groupby("type").size().to_dict().items()},
+        "olfactory_orn_type_entry_nerve_pairs_source": [
+            {"type": str(row["type"]), "entryNerve": str(row["entryNerve"])}
+            for _, row in orn_type_entry_nerve_pairs_source.iterrows()
+        ],
+        "olfactory_orn_type_entry_nerve_pairs_retained": [
+            {"type": str(row["type"]), "entryNerve": str(row["entryNerve"])}
+            for _, row in retained_orn_type_entry_nerve_pairs.iterrows()
+        ],
         "retained_sensor_to_desc_edges": int(retained_sensor_desc_edges),
         "retained_desc_to_motor_edges": int(retained_desc_motor_edges),
         "retained_sensor_to_desc_contacts": int(retained_sensor_desc.sum()),
