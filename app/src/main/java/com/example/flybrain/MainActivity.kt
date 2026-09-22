@@ -165,8 +165,12 @@ class MainActivity : Activity() {
         private val descendingRole = ByteArray(N)
         // Real MaleCNS body IDs for the selected neurons. Presentation/diagnostic only.
         private val bodyId = LongArray(N)
-        // Official-annotation-derived olfactory side: -1=L, +1=R, 0=bilateral/unknown.
-        // This is sensory input metadata, not a behavioral command.
+        // Official-MaleCNS-derived olfactory population. These indices are loaded
+        // from the build-generated map and are the only neurons that receive COMIDA.
+        // They are real retained FBR-10 ORNs; no synthetic neurons or edges are added.
+        private var olfactoryNeuronIndices = IntArray(0)
+        // Official side evidence: -1=L, +1=R, 0=bilateral/unknown.
+        // This is sensory-input metadata only, never a behavioral command.
         private val olfactorySide = ByteArray(N)
         private val topDnIds = IntArray(6) { -1 }
         private val topDnHz = FloatArray(6)
@@ -353,7 +357,6 @@ class MainActivity : Activity() {
         private var olfInputRightCache = 0f
         private var olfInputFrontCache = 0f
         private var olfInputRearCache = 0f
-        private val olfProjectionMode = "INDEX-CYCLIC"
         private var lightDirectionalBias = 0f
         private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
@@ -744,27 +747,52 @@ class MainActivity : Activity() {
         private fun loadOlfactoryInputMap() {
             val parsed = assets.open("olfactory_input_map.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
                 val header = reader.readLine() ?: throw IllegalStateException("OLFMAP cabecera ausente")
-                val expectedHeader = "index\tbodyId\tsideCode\tsideSource\ttype\tclass\tsubclass\tinstance\treceptorType\trootSide\tsomaSide\tentryNerve"
+                val expectedHeader = "index\tbodyId\tsideCode\tsideSource\ttype\tclass\tsuperclass\tconsensus_nt\tsubclass\tinstance\treceptorType\trootSide\tsomaSide\tentryNerve"
                 if (header != expectedHeader) throw IllegalStateException("OLFMAP cabecera inesperada")
                 reader.readLines()
             }
-            if (parsed.size != (OLF_END - OLF_START)) {
-                throw IllegalStateException("OLFMAP filas=${parsed.size} esperado=${OLF_END - OLF_START}")
+            if (parsed.size != 45) {
+                throw IllegalStateException("OLFMAP filas=${parsed.size} esperado=45")
             }
             val seen = HashSet<Long>(parsed.size * 2)
-            for (line in parsed) {
+            val indices = IntArray(parsed.size)
+            for ((rowNo, line) in parsed.withIndex()) {
                 val c = line.split('\t')
-                if (c.size != 12) throw IllegalStateException("OLFMAP esquema inesperado: ${c.size} columnas")
+                if (c.size != 14) throw IllegalStateException("OLFMAP esquema inesperado: ${c.size} columnas")
                 val idx = c[0].toInt()
                 val bid = c[1].toLong()
                 val side = c[2].toInt()
-                if (idx !in OLF_START until OLF_END) throw IllegalStateException("OLFMAP index fuera de OLF: $idx")
+                val type = c[4]
+                val clazz = c[5]
+                val superclass = c[6]
+                val nt = c[7]
+                if (idx !in 0 until N) throw IllegalStateException("OLFMAP index fuera de FBC103: $idx")
                 if (bodyId[idx] != bid) throw IllegalStateException("OLFMAP bodyId mismatch idx=$idx expected=${bodyId[idx]} got=$bid")
                 if (side !in -1..1) throw IllegalStateException("OLFMAP sideCode invalido bodyId=$bid")
                 if (!seen.add(bid)) throw IllegalStateException("OLFMAP bodyId duplicado=$bid")
+                if (!type.startsWith("ORN_")) throw IllegalStateException("OLFMAP no-ORN bodyId=$bid type=$type")
+                if (clazz != "olfactory") throw IllegalStateException("OLFMAP class no olfactory bodyId=$bid class=$clazz")
+                if (superclass != "cb_sensory") throw IllegalStateException("OLFMAP superclass inesperada bodyId=$bid superclass=$superclass")
+                if (c[13] != "AN") throw IllegalStateException("OLFMAP entryNerve inesperado bodyId=$bid entryNerve=${c[13]}")
+                if (nt.lowercase() != "acetylcholine") throw IllegalStateException("OLFMAP NT inesperado bodyId=$bid nt=$nt")
+                indices[rowNo] = idx
                 olfactorySide[idx] = side.toByte()
             }
-            if (seen.size != parsed.size) throw IllegalStateException("OLFMAP bodyId duplicado")
+            indices.sort()
+            for (i in indices.indices) {
+                if (i > 0 && indices[i] == indices[i - 1]) throw IllegalStateException("OLFMAP indice duplicado=${indices[i]}")
+            }
+            olfactoryNeuronIndices = indices
+            val left = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == -1 }
+            val right = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == 1 }
+            val unknown = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == 0 }
+            if (left != 12 || right != 27 || unknown != 6) {
+                throw IllegalStateException("OLFMAP lateralidad L=$left R=$right U=$unknown esperado L=12 R=27 U=6")
+            }
+        }
+
+        private fun isOlfactoryNeuron(index: Int): Boolean {
+            return index >= 0 && index < N && olfactoryNeuronIndices.binarySearch(index) >= 0
         }
 
         private fun antennaOdorConcentration(foodX: Float, foodY: Float, side: Int): Float {
@@ -787,7 +815,7 @@ class MainActivity : Activity() {
             val left = antennaOdorConcentration(sx, sy, -1)
             val right = antennaOdorConcentration(sx, sy, 1)
             val bilateral = (left + right) * .5f
-            for (i in OLF_START until OLF_END) {
+            for (i in olfactoryNeuronIndices) {
                 val c = when (olfactorySide[i].toInt()) {
                     -1 -> left
                     1 -> right
@@ -1107,13 +1135,14 @@ class MainActivity : Activity() {
                 brainDisplayIds.add(idx)
             }
 
-            fun addPopulation(start: Int, end: Int, count: Int) {
-                val size = end - start
+            fun addPopulation(start: Int, end: Int, count: Int, excludeOlfactory: Boolean = false) {
+                val candidates = if (excludeOlfactory) (start until end).filterNot { isOlfactoryNeuron(it) } else (start until end).toList()
+                val size = candidates.size
                 if (size <= 0 || count <= 0) return
                 val take = min(count, size)
                 for (j in 0 until take) {
-                    val idx = if (take == 1) start else
-                        start + ((j.toLong() * (size - 1).toLong()) / (take - 1).toLong()).toInt()
+                    val idx = candidates[if (take == 1) 0 else
+                        ((j.toLong() * (size - 1).toLong()) / (take - 1).toLong()).toInt()]
                     addId(idx)
                 }
             }
@@ -1122,9 +1151,9 @@ class MainActivity : Activity() {
             // VNC/halting populations. This is presentation only: every displayed
             // neuron and every displayed edge still comes from the real graph.
             addPopulation(VIS_START, VIS_END, 42)
-            addPopulation(OLF_START, OLF_END, 20)
+            for (j in 0 until min(20, olfactoryNeuronIndices.size)) addId(olfactoryNeuronIndices[j * olfactoryNeuronIndices.size / min(20, olfactoryNeuronIndices.size)])
             addPopulation(GUST_START, GUST_END, 12)
-            addPopulation(MECH_START, MECH_END, 12)
+            addPopulation(MECH_START, MECH_END, 12, excludeOlfactory = true)
             addPopulation(OTHER_START, OTHER_END, 92)
             addPopulation(DESC_START, DESC_END, 28)
             addPopulation(ASC_START, ASC_END, 18)
@@ -1263,16 +1292,18 @@ class MainActivity : Activity() {
             return FloatArray(12) { idx -> contact * gain * when (idx % 4) { 0 -> .8f; 1 -> 1f; 2 -> .8f; else -> .55f } }
         }
 
-        private fun injectSensoryPopulation(start: Int, end: Int, pattern: FloatArray, gain: Float) {
+        private fun injectSensoryPopulation(start: Int, end: Int, pattern: FloatArray, gain: Float, excludeOlfactory: Boolean = false) {
             if (start < 0 || end < start || end > N) {
                 throw IllegalStateException("poblacion sensorial fuera de rango: $start..$end / N=$N")
             }
             val size = end - start
             if (size <= 0 || pattern.isEmpty()) return
             for (i in 0 until size) {
+                val index = start + i
+                if (excludeOlfactory && isOlfactoryNeuron(index)) continue
                 val channel = ((i * 17) % pattern.size)
                 val micro = .72f + .28f * sin((i * 0.043f) + channel * .61f).let { (it + 1f) * .5f }
-                sensoryCurrent[start + i] += pattern[channel] * gain * micro
+                sensoryCurrent[index] += pattern[channel] * gain * micro
             }
         }
 
@@ -1305,7 +1336,7 @@ class MainActivity : Activity() {
             injectSensoryPopulation(VIS_START, VIS_END, combinedVisual, SENSORY_VIS_GAIN)
             injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_GAIN * (1f - satiety * .45f))
             injectSensoryPopulation(GUST_START, GUST_END, tastePattern, SENSORY_GUST_GAIN)
-            injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN)
+            injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN, excludeOlfactory = true)
 
             lightDirectionalBias = ((lightPattern[0] - lightPattern[2]) /
                 (lightPattern[0] + lightPattern[2] + .001f)).coerceIn(-1f, 1f)
@@ -1319,7 +1350,7 @@ class MainActivity : Activity() {
             wallDistanceCache = wall
             wallSignalCache = wallSignal
             for (i in MECH_START until SENSOR_END) {
-                sensoryCurrent[i] += wallSignal * .055f
+                if (!isOlfactoryNeuron(i)) sensoryCurrent[i] += wallSignal * .055f
             }
 
             lightDrive = combinedVisual[10].coerceIn(0f, 1f)
@@ -1665,6 +1696,23 @@ class MainActivity : Activity() {
 
         private fun populationRate(a: Int, b: Int): Float {
             return count(a, b).toFloat() / (b - a).toFloat()
+        }
+
+        private fun olfactoryPopulationRate(): Float {
+            if (olfactoryNeuronIndices.isEmpty()) return 0f
+            var firedCount = 0
+            for (i in olfactoryNeuronIndices) if (fired[i]) firedCount++
+            return firedCount.toFloat() / olfactoryNeuronIndices.size.toFloat()
+        }
+
+        private fun mechanosensoryPopulationRate(): Float {
+            val total = (MECH_END - MECH_START) - olfactoryNeuronIndices.count { it in MECH_START until MECH_END }
+            if (total <= 0) return 0f
+            var firedCount = 0
+            for (i in MECH_START until MECH_END) {
+                if (!isOlfactoryNeuron(i) && fired[i]) firedCount++
+            }
+            return firedCount.toFloat() / total.toFloat()
         }
 
         private fun descendingRoleRate(role: Int): Float {
@@ -2029,9 +2077,9 @@ class MainActivity : Activity() {
             val danger = if (dangerOn) gaussian(hypot(dangerX - flyX, dangerY - flyY), .36f) else 0f
 
             val visualRate = populationRate(VIS_START, VIS_END)
-            val olfactoryRate = populationRate(OLF_START, OLF_END)
+            val olfactoryRate = olfactoryPopulationRate()
             val gustatoryRate = populationRate(GUST_START, GUST_END)
-            val mechanosensoryRate = populationRate(MECH_START, MECH_END)
+            val mechanosensoryRate = mechanosensoryPopulationRate()
             val descendingRate = populationRate(DESC_START, DESC_END)
             val ascendingRate = populationRate(ASC_START, ASC_END)
             val centralRate = populationRate(OTHER_START, OTHER_END)
@@ -2330,7 +2378,7 @@ class MainActivity : Activity() {
             val topMotorText = if (topMotorIds[0] >= 0) "${bodyId[topMotorIds[0]]} ${motorRoleLabel(motorRole[topMotorIds[0]].toInt())} ${"%.1f".format(topMotorHz[0])}Hz" else "—"
             c.drawText("TOP DN   $topDnText", rightX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("TOP MN  $topMotorText", rightX + dp(9f), bodyY + dp(43f), paint)
-            c.drawText("OLF L/C/R ${"%.2f".format(olfInputLeftCache)}/${"%.2f".format(olfInputCenterCache)}/${"%.2f".format(olfInputRightCache)}   bias ${"%+.3f".format(foodDirectionalBias)}", rightX + dp(9f), bodyY + dp(57f), paint)
+            c.drawText("OLF ORN L/C/R ${"%.2f".format(olfInputLeftCache)}/${"%.2f".format(olfInputCenterCache)}/${"%.2f".format(olfInputRightCache)}   bias ${"%+.3f".format(foodDirectionalBias)}", rightX + dp(9f), bodyY + dp(57f), paint)
             c.drawText("WALL ${"%.3f".format(wallDistanceCache)} / ${"%.2f".format(wallSignalCache)}   MECH ${(mechanosensoryRateDisplay * 100).toInt()}%   OLF ANATOMICAL-MAPPED", rightX + dp(9f), bodyY + dp(71f), paint)
 
             // Larger neural map: the visual center of the final interface.
@@ -2341,8 +2389,8 @@ class MainActivity : Activity() {
 
 
         private fun regionColor(id: Int): Int = when {
+            isOlfactoryNeuron(id) -> Color.rgb(45, 190, 105)
             id in VIS_START until VIS_END -> Color.rgb(55, 145, 235)
-            id in OLF_START until OLF_END -> Color.rgb(45, 190, 105)
             id in GUST_START until GUST_END -> Color.rgb(238, 190, 42)
             id in MECH_START until MECH_END -> Color.rgb(238, 125, 48)
             id in DESC_START until DESC_END -> Color.rgb(218, 75, 175)
@@ -2352,8 +2400,8 @@ class MainActivity : Activity() {
         }
 
         private fun regionRateForId(id: Int): Float = when {
+            isOlfactoryNeuron(id) -> olfactoryRateDisplay
             id in VIS_START until VIS_END -> visualRateDisplay
-            id in OLF_START until OLF_END -> olfactoryRateDisplay
             id in GUST_START until GUST_END -> gustatoryRateDisplay
             id in MECH_START until MECH_END -> mechanosensoryRateDisplay
             id in DESC_START until DESC_END -> descendingRateDisplay
@@ -2434,6 +2482,13 @@ class MainActivity : Activity() {
                 val u = ((id * 1103515245L + 12345L) and 0x7fffffffL) / 2147483647f
                 val v2 = ((id * 1664525L + 1013904223L) and 0x7fffffffL) / 2147483647f
                 return when {
+                    isOlfactoryNeuron(id) -> {
+                        val olfSide = olfactorySide[id].toInt()
+                        floatArrayOf(
+                            x + w * (if (olfSide < 0) .40f else if (olfSide > 0) .60f else .50f) + (u - .5f) * w * .07f,
+                            y + h * (.48f + v2 * .18f)
+                        )
+                    }
                     id in VIS_START until VIS_END -> {
                         val left = side < 0
                         floatArrayOf(

@@ -44,12 +44,22 @@ jobs:
           echo '2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2  build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather' | sha256sum -c -
           echo 'OFFICIAL ANNOTATIONS: OK'
 
+      - name: Download exact official MaleCNS neurotransmitters
+        run: |
+          set -euo pipefail
+          mkdir -p build/malecns_raw
+          URL='https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/body-neurotransmitters-male-cns-v1.0.feather'
+          curl -fL --retry 4 --retry-delay 2 "$URL" -o build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather
+          echo '95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621  build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather' | sha256sum -c -
+          echo 'OFFICIAL NEUROTRANSMITTERS: OK'
+
       - name: Build and validate anatomical olfactory input map
         run: |
           set -euo pipefail
           python -m py_compile tools/build_olfactory_input_map.py tools/test_olfactory_input_map.py
           python tools/build_olfactory_input_map.py \
             --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --neurotransmitters build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather \
             --fbc103 app/src/main/res/raw/malecns_reduced.bin \
             --output app/src/main/assets/olfactory_input_map.tsv \
             --report build/OLF_INPUT_MAP_REPORT.json
@@ -87,9 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           NT='build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather'
-          URL='https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/body-neurotransmitters-male-cns-v1.0.feather'
-          curl -fL --retry 4 --retry-delay 2 "$URL" -o "$NT"
-          echo '95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621  build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather' | sha256sum -c -
+          test -s "$NT"
           python -m py_compile tools/build_fbr10_dynamics.py tools/validate_fbr10_dynamics.py
           python tools/build_fbr10_dynamics.py --nt "$NT" --output app/src/main/res/raw/malecns_fbr10_dynamics.bin
           python tools/validate_fbr10_dynamics.py
@@ -120,7 +128,8 @@ jobs:
           grep -Fq 'injectOlfactoryPopulation' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'drawNeuralDiagnosticCard' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'DIAGNÓSTICO NEURONAL · SOLO LECTURA' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'NEURAL OBSERVATORY' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'olfactoryNeuronIndices' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'loadOlfactoryInputMap()' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FOOD_OLF_GAIN = 6.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FBC103' V1.15.2_VNC_MOTOR_SEMANTICS.md
 
@@ -142,6 +151,12 @@ jobs:
           assert 'bodyId\\\\ttype' not in s, 'VNCSEM header must not contain literal backslash-t sequences'
           assert 'MOTOR_FUNCTION_JUMP' in s
           assert 'externalContext' not in s
+          assert 'INDEX-CYCLIC' not in s
+          assert 'FOOD_OLF_PATTERN_CAP' not in s
+          assert 'for (i in olfactoryNeuronIndices)' in s
+          assert 'excludeOlfactory = true' in s
+          assert 'olfactoryPopulationRate()' in s
+          assert 'mechanosensoryPopulationRate()' in s
           print('KOTLIN STRUCTURE: OK')
           PY
 
@@ -171,8 +186,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "versionCode='127'"
-          echo "$BADGING" | grep -Fq "versionName='1.15.8'"
+          echo "$BADGING" | grep -Fq "versionCode='128'"
+          echo "$BADGING" | grep -Fq "versionName='1.16.0'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
@@ -186,3 +201,5 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+
