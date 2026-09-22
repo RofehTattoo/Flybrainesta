@@ -9,8 +9,11 @@ assert 'def is_olfactory_orn' in B
 assert 'route_olfactory_forward' in B
 assert 'route_olfactory_motor' in B
 assert 'protected_orns' in B
-assert 'extra_pool = traced[\n            ~traced.bodyId.isin(selected_ids_now)\n            & ~traced["is_olfactory_orn"]' in B
+assert 'extra_pool = annotated[\n            ~annotated.bodyId.isin(selected_ids_now)\n            & ~annotated["is_olfactory_orn"]' in B
 assert 'entryNerve' in B
+assert 'annotations[annotations["status"]' not in B
+assert 'official release contains 166,700' in B
+assert 'len(annotated)' in B
 assert 'side_from_nerve' not in B
 assert 'sc == "ol_sensory"' not in B
 import ast

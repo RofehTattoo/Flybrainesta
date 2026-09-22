@@ -249,17 +249,18 @@ def main(root: Path) -> None:
         download(raw / name, name)
 
     annotations = pd.read_feather(raw / FILES["annotations"])
-    if "status" in annotations.columns:
-        traced = annotations[annotations["status"].astype(str).str.lower().eq("traced")].copy()
-    else:
-        traced = annotations.copy()
-    traced = traced[traced["superclass"].notna()].copy()
-    traced["bodyId"] = traced["bodyId"].astype(np.int64)
-    traced = traced.drop_duplicates("bodyId").sort_values("bodyId").reset_index(drop=True)
-    if len(traced) < TARGET:
-        raise RuntimeError(f"Only {len(traced)} traced annotated neurons available; expected >= {TARGET}")
+    # MaleCNS v1.0 reduction universe: every annotated neuronal entry with an
+    # assigned superclass. Do NOT restrict the source graph to status=="Traced".
+    # The official release contains 166,700 such annotated neurons; the ORN
+    # census of 2,639 is defined on this same universe. Status is provenance
+    # metadata and is not a node-selection filter.
+    annotated = annotations[annotations["superclass"].notna()].copy()
+    annotated["bodyId"] = annotated["bodyId"].astype(np.int64)
+    annotated = annotated.drop_duplicates("bodyId").sort_values("bodyId").reset_index(drop=True)
+    if len(annotated) < TARGET:
+        raise RuntimeError(f"Only {len(annotated)} annotated neurons available; expected >= {TARGET}")
 
-    ids = traced["bodyId"].to_numpy(np.int64)
+    ids = annotated["bodyId"].to_numpy(np.int64)
     degree = np.zeros(len(ids), dtype=np.float64)
 
     # One streaming pass over the 1.1 GB weighted graph to measure connectivity.
@@ -279,9 +280,9 @@ def main(root: Path) -> None:
         if bi % 50 == 0:
             print(f"degree pass batch {bi}/{reader.num_record_batches}", flush=True)
 
-    traced["degree"] = degree
-    counts = traced.groupby("superclass", sort=True).size().to_dict()
-    total = len(traced)
+    annotated["degree"] = degree
+    counts = annotated.groupby("superclass", sort=True).size().to_dict()
+    total = len(annotated)
 
     # V1.04 functional-route analysis. The reduction now preferentially preserves
     # measured two-hop pathways in the published graph instead of using a single
@@ -289,22 +290,22 @@ def main(root: Path) -> None:
     # full connectome contains paths of the form sensor -> candidate -> DN and
     # DN -> candidate -> VNC motor neuron, separately for forward, turning and
     # escape-related routes. No edge is invented by this analysis.
-    traced["is_olfactory_orn"] = traced.apply(is_olfactory_orn, axis=1)
-    traced["channel"] = traced.apply(classify_channel, axis=1)
-    traced["motor_role"] = traced.apply(classify_motor_role, axis=1)
-    traced["descending_role"] = traced.apply(classify_descending_role, axis=1)
-    traced["halt_role"] = traced.apply(classify_halt_role, axis=1)
+    annotated["is_olfactory_orn"] = annotated.apply(is_olfactory_orn, axis=1)
+    annotated["channel"] = annotated.apply(classify_channel, axis=1)
+    annotated["motor_role"] = annotated.apply(classify_motor_role, axis=1)
+    annotated["descending_role"] = annotated.apply(classify_descending_role, axis=1)
+    annotated["halt_role"] = annotated.apply(classify_halt_role, axis=1)
 
-    is_sensory = traced["channel"].to_numpy(np.int8) < 4
-    is_desc = traced["superclass"].astype(str).eq("descending_neuron").to_numpy()
-    is_motor = traced["superclass"].astype(str).eq("vnc_motor").to_numpy()
-    channel = traced["channel"].to_numpy(np.int8)
-    desc_role = traced["descending_role"].to_numpy(np.int8)
-    motor_role = traced["motor_role"].to_numpy(np.int8)
-    halt_role = traced["halt_role"].to_numpy(np.int8)
-    is_olfactory = traced["is_olfactory_orn"].to_numpy(bool)
+    is_sensory = annotated["channel"].to_numpy(np.int8) < 4
+    is_desc = annotated["superclass"].astype(str).eq("descending_neuron").to_numpy()
+    is_motor = annotated["superclass"].astype(str).eq("vnc_motor").to_numpy()
+    channel = annotated["channel"].to_numpy(np.int8)
+    desc_role = annotated["descending_role"].to_numpy(np.int8)
+    motor_role = annotated["motor_role"].to_numpy(np.int8)
+    halt_role = annotated["halt_role"].to_numpy(np.int8)
+    is_olfactory = annotated["is_olfactory_orn"].to_numpy(bool)
 
-    orn_source = traced[is_olfactory].copy()
+    orn_source = annotated[is_olfactory].copy()
     orn_type_counts_source = orn_source.groupby("type", sort=True).size().to_dict()
     if len(orn_source) != 2639:
         raise RuntimeError(f"MaleCNS v1.0 ORN census changed: expected 2639, found {len(orn_source)}")
@@ -519,16 +520,16 @@ def main(root: Path) -> None:
     route_olfactory_forward_n = normalize_score(route_olfactory_forward)
     route_olfactory_motor_n = normalize_score(route_olfactory_motor)
     route_halt_n = normalize_score(route_halt)
-    degree_n = normalize_score(traced["degree"].to_numpy(np.float64))
+    degree_n = normalize_score(annotated["degree"].to_numpy(np.float64))
 
-    traced["route_forward"] = route_forward_n
-    traced["route_turn"] = route_turn_n
-    traced["route_escape"] = route_escape_n
-    traced["route_sensorimotor"] = route_sensorimotor_n
-    traced["route_olfactory_forward"] = route_olfactory_forward_n
-    traced["route_olfactory_motor"] = route_olfactory_motor_n
-    traced["route_halt"] = route_halt_n
-    traced["route_score"] = (
+    annotated["route_forward"] = route_forward_n
+    annotated["route_turn"] = route_turn_n
+    annotated["route_escape"] = route_escape_n
+    annotated["route_sensorimotor"] = route_sensorimotor_n
+    annotated["route_olfactory_forward"] = route_olfactory_forward_n
+    annotated["route_olfactory_motor"] = route_olfactory_motor_n
+    annotated["route_halt"] = route_halt_n
+    annotated["route_score"] = (
         0.30 * route_forward_n
         + 0.22 * route_turn_n
         + 0.34 * route_escape_n
@@ -543,16 +544,16 @@ def main(root: Path) -> None:
     # 3) reserve a substantial quota for measured two-hop functional routes;
     # 4) fill remaining slots proportionally by superclass, ranked by route score
     #    and then degree. This explicitly protects intermediate premotor cells.
-    forced = traced[traced["superclass"].astype(str).isin({"descending_neuron", "vnc_motor"}) | (halt_role > 0)].copy()
+    forced = annotated[annotated["superclass"].astype(str).isin({"descending_neuron", "vnc_motor"}) | (halt_role > 0)].copy()
 
-    type_col = "type" if "type" in traced.columns else None
+    type_col = "type" if "type" in annotated.columns else None
     if type_col is None:
-        traced["type"] = traced["bodyId"].astype(str)
+        annotated["type"] = annotated["bodyId"].astype(str)
         type_col = "type"
-    traced[type_col] = traced[type_col].fillna("").astype(str)
+    annotated[type_col] = annotated[type_col].fillna("").astype(str)
 
     type_rep = (
-        traced.sort_values(["degree", "bodyId"], ascending=[False, True])
+        annotated.sort_values(["degree", "bodyId"], ascending=[False, True])
         .drop_duplicates(["superclass", type_col], keep="first")
     )
 
@@ -611,9 +612,9 @@ def main(root: Path) -> None:
         raise AssertionError(("seed exceeds target", len(seed), TARGET))
 
     seed_ids = set(seed.bodyId.astype(int).tolist())
-    pool = traced[
-        ~traced.bodyId.isin(seed_ids)
-        & ~traced["is_olfactory_orn"]
+    pool = annotated[
+        ~annotated.bodyId.isin(seed_ids)
+        & ~annotated["is_olfactory_orn"]
     ].copy()
 
     # Route preservation is intended to protect intermediate circuit cells,
@@ -715,9 +716,9 @@ def main(root: Path) -> None:
         raise AssertionError(("route seed exceeds target", len(seed), TARGET))
 
     seed_ids = set(seed.bodyId.astype(int).tolist())
-    pool = traced[
-        ~traced.bodyId.isin(seed_ids)
-        & ~traced["is_olfactory_orn"]
+    pool = annotated[
+        ~annotated.bodyId.isin(seed_ids)
+        & ~annotated["is_olfactory_orn"]
     ].copy()
 
     pool_counts = pool.groupby("superclass", sort=True).size().to_dict()
@@ -750,9 +751,9 @@ def main(root: Path) -> None:
 
     if len(selected) < TARGET:
         selected_ids_now = set(selected.bodyId.astype(int).tolist())
-        extra_pool = traced[
-            ~traced.bodyId.isin(selected_ids_now)
-            & ~traced["is_olfactory_orn"]
+        extra_pool = annotated[
+            ~annotated.bodyId.isin(selected_ids_now)
+            & ~annotated["is_olfactory_orn"]
         ]
         selected = pd.concat(
             [
@@ -1042,7 +1043,7 @@ def main(root: Path) -> None:
         "sha256": fbc_sha,
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,
-        "selection": "exactly 16,669 traced annotated neurons; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), all 54 ORN types are represented, and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
+        "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), all 54 ORN types are represented, and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
         "source": BASE,
         "neurons_source": int(total),
         "neurons_retained": TARGET,
