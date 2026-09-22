@@ -49,28 +49,194 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import pandas as pd
-          p='build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather'
-          a=pd.read_feather(p)
-          def c(v):
+
+          p = 'build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather'
+          a = pd.read_feather(p)
+
+          def norm(v):
               return '' if pd.isna(v) else str(v).strip()
-          sc=a['superclass'].map(c).str.lower()
-          cl=a['class'].map(c).str.lower()
-          typ=a['type'].map(c).str.upper()
-          nerve=a['entryNerve'].map(c).str.upper()
-          base=a[sc.eq('cb_sensory') & cl.eq('olfactory') & typ.str.startswith('ORN_')].copy()
-          selected=base[nerve.isin(['AN','MXLBN'])]
-          print(f'ORN BASE (cb_sensory + olfactory + ORN_*): {len(base)}')
-          print(f'ORN SELECTED BY ENTRY NERVE (AN/MXLBN): {len(selected)}')
-          print('ENTRY NERVE COUNTS:')
-          print(nerve.loc[base.index].value_counts(dropna=False).to_string())
-          missing=base.loc[~base.index.isin(selected.index),
-              ['bodyId','type','class','superclass','entryNerve','somaSide','rootSide','status']]
-          print('ORN CANDIDATES EXCLUDED BY CURRENT ENTRY-NERVE FILTER:')
-          print(missing.to_string(index=False))
-          if len(base)==2639 and len(selected)!=2639:
-              print('DIAGNOSIS: the 2639 census is present before entryNerve filtering; the current nerve filter is excluding valid ORNs.')
-          elif len(base)!=2639:
-              print('DIAGNOSIS: the mismatch is NOT explained solely by entryNerve filtering; inspect the base ORN predicate.')
+
+          sc = a['superclass'].map(norm).str.lower()
+          cl = a['class'].map(norm).str.lower()
+          typ = a['type'].map(norm).str.upper()
+          nerve = a['entryNerve'].map(norm).str.upper()
+
+          # ------------------------------------------------------------
+          # DEFINICIONES INDEPENDIENTES
+          # ------------------------------------------------------------
+
+          m_sc_cb = sc.eq('cb_sensory')
+          m_class_olf = cl.eq('olfactory')
+          m_type_orn_prefix = typ.str.startswith('ORN_')
+          m_type_orn_any = typ.str.contains('ORN', regex=False)
+
+          # A: selector ORN actualmente utilizado
+          mask_A = m_sc_cb & m_class_olf & m_type_orn_prefix
+
+          # B/C/D: combinaciones para localizar qué predicado excluye filas
+          mask_B = m_sc_cb & m_class_olf
+          mask_C = m_sc_cb & m_type_orn_prefix
+          mask_D = m_class_olf & m_type_orn_prefix
+
+          # E: cualquier type que contenga ORN
+          mask_E = m_type_orn_any
+
+          # ------------------------------------------------------------
+          # CENSOS
+          # ------------------------------------------------------------
+
+          print('')
+          print('============================================================')
+          print('MALECNS v1.0 ORN CENSUS DIAGNOSTIC')
+          print('============================================================')
+          print(f'TOTAL ANNOTATION ROWS: {len(a)}')
+          print(f'UNIQUE bodyId: {a["bodyId"].nunique()}')
+          print('')
+
+          print('INDEPENDENT CENSUSES:')
+          print(f'B cb_sensory + olfactory:          {int(mask_B.sum())}')
+          print(f'C cb_sensory + ORN_*:              {int(mask_C.sum())}')
+          print(f'D olfactory + ORN_*:               {int(mask_D.sum())}')
+          print(f'E type contains "ORN":              {int(mask_E.sum())}')
+          print(f'A cb_sensory + olfactory + ORN_*:   {int(mask_A.sum())}')
+          print('')
+
+          # ------------------------------------------------------------
+          # ENTRY NERVE
+          # ------------------------------------------------------------
+
+          selected = mask_A & nerve.isin(['AN', 'MXLBN'])
+
+          print('ENTRY NERVE:')
+          print(f'A selected by AN/MXLBN:             {int(selected.sum())}')
+          print('')
+          print(nerve.loc[mask_A].value_counts(dropna=False).to_string())
+          print('')
+
+          # ------------------------------------------------------------
+          # DIFERENCIAS ENTRE CONJUNTOS
+          # ------------------------------------------------------------
+
+          def show_diff(title, left_mask, right_mask):
+              idx = a.index[left_mask & ~right_mask]
+              print('')
+              print('------------------------------------------------------------')
+              print(title)
+              print(f'COUNT: {len(idx)}')
+              print('------------------------------------------------------------')
+
+              if len(idx):
+                  cols = [
+                      'bodyId',
+                      'type',
+                      'class',
+                      'superclass',
+                      'entryNerve',
+                      'somaSide',
+                      'rootSide',
+                      'status'
+                  ]
+                  print(a.loc[idx, cols].to_string(index=False))
+              else:
+                  print('(none)')
+
+          show_diff(
+              'B - A : cb_sensory + olfactory BUT NOT ORN_*',
+              mask_B,
+              mask_A
+          )
+
+          show_diff(
+              'C - A : cb_sensory + ORN_* BUT NOT olfactory',
+              mask_C,
+              mask_A
+          )
+
+          show_diff(
+              'D - A : olfactory + ORN_* BUT NOT cb_sensory',
+              mask_D,
+              mask_A
+          )
+
+          show_diff(
+              'E - A : type contains ORN BUT does NOT satisfy A',
+              mask_E,
+              mask_A
+          )
+
+          # ------------------------------------------------------------
+          # CANDIDATOS SOSPECHOSOS
+          #
+          # Cualquier fila que parezca ORN por al menos uno de los
+          # criterios, pero que no entre en A.
+          # ------------------------------------------------------------
+
+          suspicious = (mask_B | mask_C | mask_D | mask_E) & ~mask_A
+
+          print('')
+          print('============================================================')
+          print('ALL SUSPICIOUS ORN CANDIDATES OUTSIDE A')
+          print('============================================================')
+          print(f'COUNT: {int(suspicious.sum())}')
+
+          if suspicious.any():
+              cols = [
+                  'bodyId',
+                  'type',
+                  'class',
+                  'superclass',
+                  'entryNerve',
+                  'somaSide',
+                  'rootSide',
+                  'status'
+              ]
+              print(a.loc[suspicious, cols].to_string(index=False))
+          else:
+              print('(none)')
+
+          # ------------------------------------------------------------
+          # DISTRIBUCIONES DE LOS CAMPOS RELEVANTES
+          # ------------------------------------------------------------
+
+          print('')
+          print('============================================================')
+          print('OLFACTORY CLASS TYPE DISTRIBUTION')
+          print('============================================================')
+
+          olf_rows = a.loc[m_class_olf, ['type', 'superclass', 'entryNerve']].copy()
+
+          if len(olf_rows):
+              print(olf_rows.groupby(
+                  ['superclass', 'type', 'entryNerve'],
+                  dropna=False
+              ).size().sort_values(ascending=False).to_string())
+          else:
+              print('(none)')
+
+          print('')
+          print('============================================================')
+          print('ORN-LIKE TYPE DISTRIBUTION')
+          print('============================================================')
+
+          orn_like = a.loc[m_type_orn_any, ['type', 'class', 'superclass', 'entryNerve']].copy()
+
+          if len(orn_like):
+              print(orn_like.groupby(
+                  ['type', 'class', 'superclass', 'entryNerve'],
+                  dropna=False
+              ).size().sort_values(ascending=False).to_string())
+          else:
+              print('(none)')
+
+          print('')
+          print('============================================================')
+          print('END ORN CENSUS DIAGNOSTIC')
+          print('============================================================')
+
+          if len(a.loc[mask_A]) == 2639:
+              print('RESULT: BASE ORN CENSUS = 2639 PASS')
+          else:
+              print(f'RESULT: BASE ORN CENSUS = {int(mask_A.sum())} / EXPECTED 2639')
           PY
 
       - name: Download exact official MaleCNS neurotransmitters
