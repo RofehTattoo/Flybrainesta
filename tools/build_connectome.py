@@ -29,6 +29,13 @@ APP_VERSION_CODE = 131
 REDUCTION_ID = "FBR-10-OLF1"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
+
+# Four MaleCNS v1.0 cells are anatomically annotated as olfactory/cb_sensory
+# ORNs entering through the antennal nerve, but their published `type` field is
+# NULL. They are part of the official 2,639-cell ORN census and must therefore
+# be recognized without inventing a type label.
+UNTYPED_ORN_BODY_IDS = frozenset({242812, 242908, 488209, 956041})
+
 FORMAT_MAGIC = b"FBC103\x00\x00"
 FORMAT_VERSION = 103
 NODE_SIZE = 26
@@ -69,16 +76,30 @@ def clean(x):
 
 
 def is_olfactory_orn(row) -> bool:
-    """True only for real MaleCNS olfactory receptor neurons (ORNs)."""
+    """True only for real MaleCNS olfactory receptor neurons (ORNs).
+
+    The normal MaleCNS ORN annotation has an ORN_* type. Four published
+    MaleCNS v1.0 ORNs are an explicit annotation exception: they are
+    cb_sensory + olfactory + AN cells whose `type` is NULL. Their bodyIds
+    come directly from the official annotation and are not assigned a
+    synthetic type here.
+    """
     sc = clean(row.get("superclass", "")).strip().lower()
     cl = clean(row.get("class", "")).strip().lower()
     typ = clean(row.get("type", "")).strip().upper()
     nerve = clean(row.get("entryNerve", "")).strip().upper()
+    try:
+        body_id = int(row.get("bodyId", -1))
+    except (TypeError, ValueError):
+        body_id = -1
+
+    is_published_untype_orn = body_id in UNTYPED_ORN_BODY_IDS
+
     return (
         sc == "cb_sensory"
         and cl == "olfactory"
-        and typ.startswith("ORN_")
         and nerve in {"AN", "MXLBN"}
+        and (typ.startswith("ORN_") or is_published_untype_orn)
     )
 
 
@@ -794,7 +815,10 @@ def main(root: Path) -> None:
     selected_orns = selected[selected["is_olfactory_orn"]].copy()
     if len(selected_orns) != TARGET_ORNS:
         raise AssertionError(f"selected ORNs={len(selected_orns)} expected={TARGET_ORNS}")
-    retained_orn_types = selected_orns["type"].astype(str).nunique()
+    # The four official untyped ORNs have no published `type` value.
+    # Count only actual published ORN type labels when validating the 54 types;
+    # do not invent a synthetic type for the four NULL annotations.
+    retained_orn_types = selected_orns["type"].dropna().astype(str).nunique()
     if retained_orn_types != EXPECTED_ORN_TYPES:
         raise AssertionError(
             f"selected ORN types={retained_orn_types} expected={EXPECTED_ORN_TYPES}"
