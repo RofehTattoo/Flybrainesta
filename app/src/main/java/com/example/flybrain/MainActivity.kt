@@ -13,7 +13,10 @@ import android.media.SoundPool
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
+import android.view.Gravity
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -35,11 +38,64 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        window.statusBarColor = Color.rgb(11, 16, 20)
+        window.navigationBarColor = Color.rgb(11, 16, 20)
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(247, 247, 247))
+            setBackgroundColor(Color.rgb(247, 248, 249))
             clipToPadding = true
         }
+
+        // UI-only identity header. It does not participate in the simulation.
+        val identity = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(10.dp(), 6.dp(), 12.dp(), 6.dp())
+            setBackgroundColor(Color.rgb(11, 18, 22))
+        }
+        val icon = ImageView(this).apply {
+            setImageResource(R.drawable.flybrain_official)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }
+        identity.addView(icon, LinearLayout.LayoutParams(48.dp(), 48.dp()))
+
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(10.dp(), 0, 0, 0)
+        }
+        val wordmark = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val flyText = TextView(this).apply {
+            text = "FLY"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(245, 247, 248))
+        }
+        val brainText = TextView(this).apply {
+            text = "BRAIN"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(105, 188, 241))
+        }
+        wordmark.addView(flyText)
+        wordmark.addView(brainText)
+        brand.addView(wordmark)
+        brand.addView(TextView(this).apply {
+            text = "EXPLORE A TINY MIND"
+            textSize = 7.5f
+            letterSpacing = .28f
+            setTextColor(Color.rgb(190, 198, 202))
+        })
+        identity.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+        identity.addView(TextView(this).apply {
+            text = "MaleCNS v1.0"
+            textSize = 8.5f
+            setTextColor(Color.rgb(139, 151, 158))
+        })
+        root.addView(identity, LinearLayout.LayoutParams(-1, 62.dp()))
 
         root.setOnApplyWindowInsetsListener { view, insets ->
             val bars = if (Build.VERSION.SDK_INT >= 30) {
@@ -53,33 +109,35 @@ class MainActivity : Activity() {
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(6.dp(), 5.dp(), 6.dp(), 5.dp())
-            setBackgroundColor(Color.rgb(226, 226, 226))
+            setPadding(7.dp(), 5.dp(), 7.dp(), 5.dp())
+            setBackgroundColor(Color.rgb(15, 23, 28))
         }
 
         fun makeButton(label: String) = Button(this).apply {
             text = label
-            textSize = 13f
+            textSize = 12.5f
             isAllCaps = false
             minHeight = 0
             minWidth = 0
+            setTextColor(Color.rgb(236, 241, 244))
             setPadding(1.dp(), 0, 1.dp(), 0)
+            stateListAnimator = null
         }
 
-        val food = makeButton("COMIDA")
-        val light = makeButton("LUZ")
-        val danger = makeButton("PELIGRO")
-        val reset = makeButton("↻ RESET")
-        val bh = 60.dp()
+        val food = makeButton("◉  COMIDA")
+        val light = makeButton("☼  LUZ")
+        val danger = makeButton("△  PELIGRO")
+        val reset = makeButton("↻  RESET")
+        val bh = 54.dp()
         listOf(food, light, danger, reset).forEach { button ->
             controls.addView(
                 button,
                 LinearLayout.LayoutParams(0, bh, 1f).apply {
-                    setMargins(2.dp(), 0, 2.dp(), 0)
+                    setMargins(3.dp(), 0, 3.dp(), 0)
                 }
             )
         }
-        root.addView(controls, LinearLayout.LayoutParams(-1, 70.dp()))
+        root.addView(controls, LinearLayout.LayoutParams(-1, 64.dp()))
 
         val sim = FlyView()
         root.addView(sim, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -473,25 +531,30 @@ class MainActivity : Activity() {
         }
 
         private fun styleButton(button: Button, active: Boolean, selected: Boolean, accent: Int) {
-            button.background = GradientDrawable().apply {
-                cornerRadius = 12.dp().toFloat()
-                setColor(if (active) Color.rgb(232, 246, 235) else Color.rgb(245, 245, 245))
-                setStroke(if (selected) 4 else 1, if (selected) accent else Color.rgb(155, 155, 155))
+            val fill = when {
+                active -> Color.rgb(31, 45, 51)
+                else -> Color.rgb(28, 36, 41)
             }
-            button.alpha = if (active) 1f else .68f
+            button.background = GradientDrawable().apply {
+                cornerRadius = 13.dp().toFloat()
+                setColor(fill)
+                setStroke(if (selected) 2 else 1, if (selected) accent else Color.rgb(66, 78, 85))
+            }
+            button.setTextColor(if (active) Color.WHITE else Color.rgb(214, 221, 224))
+            button.alpha = if (active || selected) 1f else .82f
         }
 
         fun updateButtons() {
             foodButton?.let {
-                it.text = if (foodOn) "COMIDA  ON" else "COMIDA"
+                it.text = if (foodOn) "◉  COMIDA  ON" else "◉  COMIDA"
                 styleButton(it, foodOn, selectedStimulus == 0, Color.rgb(35, 120, 70))
             }
             lightButton?.let {
-                it.text = if (lightOn) "LUZ  ON" else "LUZ"
+                it.text = if (lightOn) "☼  LUZ  ON" else "☼  LUZ"
                 styleButton(it, lightOn, selectedStimulus == 1, Color.rgb(210, 145, 10))
             }
             dangerButton?.let {
-                it.text = if (dangerOn) "PELIGRO  ON" else "PELIGRO"
+                it.text = if (dangerOn) "△  PELIGRO  ON" else "△  PELIGRO"
                 styleButton(it, dangerOn, selectedStimulus == 2, Color.rgb(190, 45, 45))
             }
         }
@@ -2265,7 +2328,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.16.0 · FOOD / OLFACTORY CLEAN", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.16.1 · FOOD / OLFACTORY CLEAN", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(8.4f)
@@ -2627,121 +2690,158 @@ class MainActivity : Activity() {
 
 
         private fun drawFly(c: Canvas, px: Float, py: Float, angle: Float) {
+            // UI-only rendering. Coordinates remain tied to flyX/flyY/heading;
+            // this method does not modify simulation state or physics.
             c.save()
             c.rotate(Math.toDegrees(angle.toDouble()).toFloat() + 90f, px, py)
-
-            val s = (min(width.toFloat(), sceneBottom()) / 520f).coerceIn(1.05f, 1.45f)
+            val s = (min(width.toFloat(), sceneBottom()) / 520f).coerceIn(.92f, 1.35f)
             c.scale(s, s, px, py)
 
-            // Soft shadow under the body.
+            val dark = Color.rgb(42, 34, 30)
+            val brown = Color.rgb(102, 70, 48)
+            val amber = Color.rgb(177, 126, 78)
+            val amberHi = Color.rgb(213, 164, 103)
+
+            // Ground shadow.
             paint.style = Paint.Style.FILL
-            paint.color = Color.argb(38, 0, 0, 0)
-            c.drawOval(px - 30f, py + 56f, px + 30f, py + 68f, paint)
+            paint.color = Color.argb(34, 0, 0, 0)
+            c.drawOval(px - 42f, py + 108f, px + 42f, py + 121f, paint)
 
-            // Six articulated legs, arranged in the characteristic drosophila pattern.
-            paint.strokeCap = Paint.Cap.ROUND
-            paint.strokeWidth = 3.1f
-            paint.color = Color.rgb(42, 35, 33)
-            val legY = floatArrayOf(-24f, 0f, 24f)
-            for ((q, yy) in legY.withIndex()) {
-                val spread = when (q) { 0 -> 32f; 1 -> 38f; else -> 34f }
-                val kneeY = yy + when (q) { 0 -> -16f; 1 -> 0f; else -> 16f }
-                c.drawLine(px - 11f, py + yy, px - spread, py + kneeY, paint)
-                c.drawLine(px - spread, py + kneeY, px - spread - 22f, py + kneeY + when (q) { 0 -> -4f; 1 -> 4f; else -> 8f }, paint)
-                c.drawLine(px + 11f, py + yy, px + spread, py + kneeY, paint)
-                c.drawLine(px + spread, py + kneeY, px + spread + 22f, py + kneeY + when (q) { 0 -> -4f; 1 -> 4f; else -> 8f }, paint)
-            }
-
-            // Animated wings: the beat is a visual consequence of measured wing
-            // activity and/or movement. It never feeds back into the neural model.
+            // Transparent wings, posterior to the thorax, with real-looking veins.
             val wingVisual = max(wingActivityCache, jumpActivityCache())
-            val wingBeat = sin(wingBeatPhase) * (3f + 12f * wingVisual)
-            val wingAlpha = (55f + 35f * wingVisual).toInt().coerceIn(45, 95)
+            val wingBeat = sin(wingBeatPhase) * (2.5f + 9f * wingVisual)
+            val wingAlpha = (62f + 38f * wingVisual).toInt().coerceIn(55, 105)
+            val wingColor = Color.argb(wingAlpha, 175, 202, 218)
+            val wingStroke = Color.argb(175, 92, 117, 132)
 
-            paint.style = Paint.Style.FILL
-            paint.color = Color.argb(wingAlpha, 175, 205, 220)
-            val wingL = android.graphics.Path().apply {
-                moveTo(px - 7f, py - 18f)
-                cubicTo(px - 46f, py - 72f, px - 105f, py - 92f, px - 122f, py - 58f)
-                cubicTo(px - 132f, py - 35f, px - 82f, py - 8f, px - 13f, py - 2f)
-                close()
+            fun drawWing(sign: Float) {
+                val attachX = px + sign * 14f
+                val path = android.graphics.Path().apply {
+                    moveTo(attachX, py + 8f)
+                    cubicTo(px + sign * 54f, py + 22f, px + sign * 92f, py + 68f, px + sign * 112f, py + 92f)
+                    cubicTo(px + sign * 125f, py + 108f, px + sign * 116f, py + 122f, px + sign * 92f, py + 119f)
+                    cubicTo(px + sign * 56f, py + 114f, px + sign * 30f, py + 70f, px + sign * 5f, py + 22f)
+                    close()
+                }
+                c.save()
+                c.rotate(sign * wingBeat, attachX, py + 8f)
+                paint.style = Paint.Style.FILL
+                paint.color = wingColor
+                c.drawPath(path, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1.15f
+                paint.color = wingStroke
+                c.drawPath(path, paint)
+                c.drawLine(attachX, py + 12f, px + sign * 105f, py + 103f, paint)
+                c.drawLine(attachX, py + 13f, px + sign * 89f, py + 73f, paint)
+                c.drawLine(attachX, py + 14f, px + sign * 72f, py + 48f, paint)
+                c.drawLine(px + sign * 52f, py + 35f, px + sign * 104f, py + 106f, paint)
+                c.restore()
             }
-            val wingR = android.graphics.Path().apply {
-                moveTo(px + 7f, py - 18f)
-                cubicTo(px + 46f, py - 72f, px + 105f, py - 92f, px + 122f, py - 58f)
-                cubicTo(px + 132f, py - 35f, px + 82f, py - 8f, px + 13f, py - 2f)
-                close()
-            }
-            c.save()
-            c.rotate(-wingBeat, px - 7f, py - 18f)
-            c.drawPath(wingL, paint)
-            c.restore()
-            c.save()
-            c.rotate(wingBeat, px + 7f, py - 18f)
-            c.drawPath(wingR, paint)
-            c.restore()
+            drawWing(-1f)
+            drawWing(1f)
 
+            // Six legs: coxa, femur, tibia and a small tarsus tip.
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.1f
-            paint.color = Color.argb(150, 105, 135, 150)
-            c.save()
-            c.rotate(-wingBeat, px - 7f, py - 18f)
-            c.drawLine(px - 15f, py - 20f, px - 102f, py - 58f, paint)
-            c.drawLine(px - 20f, py - 20f, px - 80f, py - 72f, paint)
-            c.drawLine(px - 32f, py - 18f, px - 112f, py - 42f, paint)
-            c.restore()
-            c.save()
-            c.rotate(wingBeat, px + 7f, py - 18f)
-            c.drawLine(px + 15f, py - 20f, px + 102f, py - 58f, paint)
-            c.drawLine(px + 20f, py - 20f, px + 80f, py - 72f, paint)
-            c.drawLine(px + 32f, py - 18f, px + 112f, py - 42f, paint)
-            c.restore()
-
-            // Segmented abdomen, broad and tapered like the reference image.
-            paint.style = Paint.Style.FILL
-            paint.color = Color.rgb(48, 43, 42)
-            c.drawOval(px - 25f, py + 8f, px + 25f, py + 112f, paint)
-            val abdomen = arrayOf(
-                floatArrayOf(15f, 42f), floatArrayOf(42f, 62f), floatArrayOf(62f, 81f),
-                floatArrayOf(81f, 98f), floatArrayOf(98f, 112f)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeWidth = 3.0f
+            paint.color = dark
+            val legData = arrayOf(
+                floatArrayOf(-20f, -18f, -46f, -38f, -68f, -54f),
+                floatArrayOf(-23f, 2f, -53f, 4f, -80f, -4f),
+                floatArrayOf(-19f, 23f, -43f, 46f, -68f, 57f),
+                floatArrayOf(20f, -18f, 46f, -38f, 68f, -54f),
+                floatArrayOf(23f, 2f, 53f, 4f, 80f, -4f),
+                floatArrayOf(19f, 23f, 43f, 46f, 68f, 57f)
             )
-            for ((i, seg) in abdomen.withIndex()) {
-                paint.color = if (i % 2 == 0) Color.rgb(92, 70, 56) else Color.rgb(55, 49, 47)
-                c.drawRoundRect(px - 22f, py + seg[0], px + 22f, py + seg[1], 7f, 7f, paint)
+            for (v in legData) {
+                c.drawLine(px + v[0], py + v[1], px + v[2], py + v[3], paint)
+                c.drawLine(px + v[2], py + v[3], px + v[4], py + v[5], paint)
+                c.drawLine(px + v[4], py + v[5], px + v[4] + if (v[4] < 0f) -8f else 8f, py + v[5] + 2f, paint)
             }
 
-            // Thorax with darker dorsal plates.
-            paint.color = Color.rgb(59, 53, 51)
-            c.drawOval(px - 31f, py - 36f, px + 31f, py + 28f, paint)
-            paint.color = Color.rgb(70, 63, 59)
-            c.drawOval(px - 27f, py - 30f, px + 27f, py + 7f, paint)
-
-            // Head and two large red compound eyes.
-            paint.color = Color.rgb(50, 45, 44)
-            c.drawOval(px - 26f, py - 72f, px + 26f, py - 29f, paint)
-            paint.color = Color.rgb(150, 39, 34)
-            c.drawOval(px - 43f, py - 70f, px - 8f, py - 38f, paint)
-            c.drawOval(px + 8f, py - 70f, px + 43f, py - 38f, paint)
-            paint.color = Color.rgb(226, 92, 66)
-            c.drawOval(px - 35f, py - 63f, px - 18f, py - 48f, paint)
-            c.drawOval(px + 18f, py - 63f, px + 35f, py - 48f, paint)
-
-            // Antennae and aristae.
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.8f
-            paint.color = Color.rgb(43, 36, 34)
-            c.drawLine(px - 11f, py - 69f, px - 29f, py - 94f, paint)
-            c.drawLine(px + 11f, py - 69f, px + 29f, py - 94f, paint)
-            c.drawLine(px - 29f, py - 94f, px - 41f, py - 105f, paint)
-            c.drawLine(px + 29f, py - 94f, px + 41f, py - 105f, paint)
+            // Halteres behind the thorax.
             paint.style = Paint.Style.FILL
-            c.drawCircle(px - 42f, py - 106f, 2.2f, paint)
-            c.drawCircle(px + 42f, py - 106f, 2.2f, paint)
+            paint.color = Color.rgb(213, 164, 103)
+            c.drawCircle(px - 37f, py + 42f, 4.5f, paint)
+            c.drawCircle(px + 37f, py + 42f, 4.5f, paint)
+            paint.strokeWidth = 1.4f
+            paint.style = Paint.Style.STROKE
+            c.drawLine(px - 34f, py + 39f, px - 25f, py + 24f, paint)
+            c.drawLine(px + 34f, py + 39f, px + 25f, py + 24f, paint)
 
-            // Small haltere hints behind the thorax.
-            paint.color = Color.rgb(72, 62, 57)
-            c.drawCircle(px - 39f, py + 5f, 5f, paint)
-            c.drawCircle(px + 39f, py + 5f, 5f, paint)
+            // Tapered, strongly segmented abdomen of a male Drosophila.
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(48, 40, 36)
+            val abdomen = android.graphics.Path().apply {
+                moveTo(px - 23f, py + 28f)
+                cubicTo(px - 30f, py + 52f, px - 25f, py + 101f, px, py + 123f)
+                cubicTo(px + 25f, py + 101f, px + 30f, py + 52f, px + 23f, py + 28f)
+                close()
+            }
+            c.drawPath(abdomen, paint)
+            val segY = floatArrayOf(42f, 56f, 70f, 84f, 97f, 109f)
+            for (i in segY.indices) {
+                paint.color = if (i % 2 == 0) Color.rgb(92, 66, 49) else Color.rgb(57, 48, 43)
+                val half = 22f - i * 2.1f
+                c.drawRoundRect(px - half, py + segY[i], px + half, py + segY[i] + 9f, 4f, 4f, paint)
+            }
+            // Dark posterior tip characteristic of the male.
+            paint.color = Color.rgb(34, 28, 27)
+            c.drawOval(px - 10f, py + 104f, px + 10f, py + 123f, paint)
+
+            // Thorax: broad, hairy and slightly lighter dorsally.
+            paint.color = Color.rgb(72, 55, 45)
+            c.drawOval(px - 34f, py - 38f, px + 34f, py + 37f, paint)
+            paint.color = Color.rgb(116, 82, 54)
+            c.drawOval(px - 27f, py - 31f, px + 27f, py + 25f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.2f
+            paint.color = Color.argb(150, 46, 36, 31)
+            for (i in -2..2) c.drawLine(px + i * 7f, py - 25f, px + i * 6f, py + 18f, paint)
+
+            // Fine thoracic bristles.
+            paint.strokeWidth = 1.1f
+            paint.color = Color.rgb(62, 47, 40)
+            for (i in -3..3) {
+                c.drawLine(px + i * 7f, py - 27f, px + i * 8f, py - 36f, paint)
+                c.drawLine(px + i * 7f, py + 24f, px + i * 9f, py + 32f, paint)
+            }
+
+            // Head and large red compound eyes.
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(63, 49, 43)
+            c.drawOval(px - 28f, py - 76f, px + 28f, py - 25f, paint)
+            paint.color = Color.rgb(125, 27, 25)
+            c.drawOval(px - 48f, py - 73f, px - 8f, py - 34f, paint)
+            c.drawOval(px + 8f, py - 73f, px + 48f, py - 34f, paint)
+            // Eye facet highlights.
+            paint.color = Color.rgb(205, 59, 45)
+            for (yy in -64..-43 step 9) {
+                c.drawCircle(px - 28f, py + yy, 2.1f, paint)
+                c.drawCircle(px - 17f, py + yy + 3f, 1.7f, paint)
+                c.drawCircle(px + 28f, py + yy, 2.1f, paint)
+                c.drawCircle(px + 17f, py + yy + 3f, 1.7f, paint)
+            }
+
+            // Antennae with aristae.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.7f
+            paint.color = dark
+            c.drawLine(px - 12f, py - 69f, px - 30f, py - 94f, paint)
+            c.drawLine(px + 12f, py - 69f, px + 30f, py - 94f, paint)
+            c.drawLine(px - 30f, py - 94f, px - 46f, py - 108f, paint)
+            c.drawLine(px + 30f, py - 94f, px + 46f, py - 108f, paint)
+            paint.style = Paint.Style.FILL
+            c.drawCircle(px - 47f, py - 109f, 2f, paint)
+            c.drawCircle(px + 47f, py - 109f, 2f, paint)
+
+            // Proboscis/mouthparts.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f
+            paint.color = Color.rgb(70, 48, 40)
+            c.drawLine(px - 8f, py - 29f, px - 15f, py - 20f, paint)
+            c.drawLine(px + 8f, py - 29f, px + 15f, py - 20f, paint)
             c.restore()
         }
 

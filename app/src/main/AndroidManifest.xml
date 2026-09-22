@@ -1,7 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:theme="@style/AppTheme"
-        android:label="FlyBrain V1.11"
+        android:label="FlyBrain V1.16.1"
+        android:icon="@drawable/flybrain_official"
+        android:roundIcon="@drawable/flybrain_official"
         android:allowBackup="false"
         android:supportsRtl="true">
         <activity

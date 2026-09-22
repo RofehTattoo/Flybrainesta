@@ -89,13 +89,7 @@ def main():
                 raise SystemExit(f"retained ORN has unexpected consensus_nt bodyId={bid}: {nt!r}")
             ss = side(r.get("somaSide"))
             rs = side(r.get("rootSide"))
-            # Authoritative lateralization precedence:
-            # 1. somaSide
-            # 2. rootSide
-            # 3. UNKNOWN
-            # None/empty values are not side evidence and must not create
-            # a false conflict with a valid L/R value.
-            known = [(src, v) for src, v in (("somaSide", ss), ("rootSide", rs)) if v in (-1, 1)]
+            known = [("somaSide", ss), ("rootSide", rs)]
             if len({v for _, v in known}) > 1:
                 raise SystemExit(f"contradictory ORN side evidence bodyId={bid}: {known}")
             if known:

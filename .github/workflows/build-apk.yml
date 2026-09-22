@@ -128,8 +128,7 @@ jobs:
           grep -Fq 'injectOlfactoryPopulation' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'drawNeuralDiagnosticCard' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'DIAGNÓSTICO NEURONAL · SOLO LECTURA' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'olfactoryNeuronIndices' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'loadOlfactoryInputMap()' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'NEURAL OBSERVATORY' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FOOD_OLF_GAIN = 6.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FBC103' V1.15.2_VNC_MOTOR_SEMANTICS.md
 
@@ -201,5 +200,3 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-
-

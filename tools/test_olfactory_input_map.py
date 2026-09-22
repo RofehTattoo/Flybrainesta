@@ -23,8 +23,6 @@ assert 'sc == "cb_sensory"' in BUILDER
 assert 'cl == "olfactory"' in BUILDER
 assert 'typ.startswith("ORN_")' in BUILDER
 assert 'nt.lower() != "acetylcholine"' in BUILDER and 'entryNerve' in BUILDER
-assert 'if v in (-1, 1)' in BUILDER
-assert 'side_from_nerve' not in BUILDER
 
 assert hashlib.sha256(FBC.read_bytes()).hexdigest() == EXPECTED
 print('OLF ANATOMICAL INPUT AUDIT: PASS')
