@@ -193,6 +193,12 @@ class MainActivity : Activity() {
         private val V_REST = -0.72f
         private val V_THRESHOLD = -0.50f
         private val V_RESET = -0.84f
+        // V1.16.2: keep the intended 20 ms membrane time constant but integrate
+        // the leak analytically. The former Euler term used 50 s^-1 with dt=20 ms,
+        // making (1 - tau^-1*dt) = 0 and erasing all subthreshold membrane memory
+        // at every neural tick. This change affects only numerical integration; it
+        // does not modify FBC103, FBD104, topology, sensory mapping, or motor rules.
+        private val TAU_MEMBRANE_SECONDS = 0.020f
 
         private val VIS_START = GeneratedConnectomeMeta.VIS_START
         private val VIS_END = GeneratedConnectomeMeta.VIS_END
@@ -1441,6 +1447,7 @@ class MainActivity : Activity() {
             // V1.04: a spike creates a short-lived synaptic trace. The temporal
             // trace is applied to the published retained graph; it does not alter topology.
             val synDecay = exp((-dt / .005f).toDouble()).toFloat()
+            val membraneDecay = exp((-dt / TAU_MEMBRANE_SECONDS).toDouble()).toFloat()
             for (i in 0 until N) {
                 synTrace[i] = (synTrace[i] * synDecay + if (prevFired[i]) 1f else 0f).coerceAtMost(3f)
             }
@@ -1586,15 +1593,15 @@ class MainActivity : Activity() {
 
                 val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
                 lastSynDrive[i] = synCurrent
-                // IMPORTANT: sensoryCurrent is applied AFTER the membrane leak.
-                // With dt=.020 s and tau_m=.020 s, the old expression
-                //     v += (V_REST - v) * 50 * dt + input
-                // reduces to v = V_REST + input. When input had already been
-                // written into v by sense(), the leak erased it completely.
-                // Treating sensory input as an external drive here preserves the
-                // intended causal path: stimulus -> sensory spike -> connectome.
+                // V1.16.2: analytic membrane leak. With tau_m=20 ms and a 20 ms
+                // neural step, the exact retention factor is exp(-1)=0.367879, so
+                // the membrane retains physical temporal state instead of being
+                // reset to V_REST by the Euler factor 1 - dt/tau = 0.
+                // Sensory/synaptic terms remain per-step voltage kicks exactly as
+                // before; only the leak integration is corrected.
                 val externalCurrent = if (i < SENSOR_END) sensoryCurrent[i] else 0f
-                v[i] += ((V_REST - v[i]) * 50.0f - adapt[i]) * dt +
+                val membraneLeak = (V_REST - v[i]) * (1f - membraneDecay)
+                v[i] += membraneLeak - adapt[i] * dt +
                     synCurrent + externalCurrent + centralNoise
                 fired[i] = v[i] >= V_THRESHOLD
 
@@ -2328,7 +2335,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.16.1 · FOOD / OLFACTORY CLEAN", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.16.2 · FOOD / OLFACTORY CLEAN", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(8.4f)

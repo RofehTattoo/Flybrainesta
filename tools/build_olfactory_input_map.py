@@ -87,13 +87,18 @@ def main():
             nt = nt_by.get(bid, "")
             if nt.lower() != "acetylcholine":
                 raise SystemExit(f"retained ORN has unexpected consensus_nt bodyId={bid}: {nt!r}")
+            # Authoritative lateralization: somaSide -> rootSide -> UNKNOWN.
+            # entryNerve identifies ORNs (AN) but NEVER participates in lateralization.
             ss = side(r.get("somaSide"))
             rs = side(r.get("rootSide"))
-            known = [("somaSide", ss), ("rootSide", rs)]
-            if len({v for _, v in known}) > 1:
+            known = [(src, value) for src, value in (("somaSide", ss), ("rootSide", rs))
+                     if value in (-1, 1)]
+            if len({value for _, value in known}) > 1:
                 raise SystemExit(f"contradictory ORN side evidence bodyId={bid}: {known}")
-            if known:
-                code, source = known[0][1], known[0][0]
+            if ss in (-1, 1):
+                code, source = ss, "somaSide"
+            elif rs in (-1, 1):
+                code, source = rs, "rootSide"
             else:
                 code, source = 0, "unknown"
             out.append({
@@ -128,7 +133,7 @@ def main():
         w.writeheader(); w.writerows(out)
 
     rep = {
-        "version": "1.16.0-ORN-AUDIT",
+        "version": "1.16.2-ORN-AUDIT",
         "status": "PASS",
         "annotation_sha256": ANN_SHA,
         "neurotransmitter_sha256": NT_SHA,

@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.16.0-FOOD-OLFACTORY · frozen FBR-10 + FBD104 + VNC semantics
+name: Build FlyBrain APK V1.16.2-FOOD-OLFACTORY-TEMPORAL · frozen FBR-10 + FBD104 + VNC semantics
 
 on:
   workflow_dispatch:
@@ -112,13 +112,16 @@ jobs:
           python tools/validate_frozen_connectome.py
           grep -Fq 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60' FBR10_CONNECTOME_FINAL_AUDIT.md
 
-      - name: Validate V1.16.0-FOOD-OLFACTORY identity and source invariants
+      - name: Validate V1.16.2-FOOD-OLFACTORY-TEMPORAL identity and source invariants
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 128' app/build.gradle.kts
-          grep -Fq 'versionName = "1.16.0"' app/build.gradle.kts
-          grep -Fq 'APP_VERSION = "1.16.0"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION_CODE = 128' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'versionCode = 130' app/build.gradle.kts
+          grep -Fq 'versionName = "1.16.2"' app/build.gradle.kts
+          grep -Fq 'APP_VERSION = "1.16.2"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION_CODE = 130' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'FLYBRAIN V1.16.2 · FOOD / OLFACTORY CLEAN' app/src/main/java/com/example/flybrain/MainActivity.kt
+          test -s app/src/main/res/drawable-nodpi/flybrain_official.png
+          grep -Fq 'olfactoryNeuronIndices' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'loadVncMotorSemantics()' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'vnc_motor_semantics.tsv' app/src/main/java/com/example/flybrain/MainActivity.kt
@@ -128,9 +131,14 @@ jobs:
           grep -Fq 'injectOlfactoryPopulation' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'drawNeuralDiagnosticCard' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'DIAGNÓSTICO NEURONAL · SOLO LECTURA' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'NEURAL OBSERVATORY' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FOOD_OLF_GAIN = 6.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FBC103' V1.15.2_VNC_MOTOR_SEMANTICS.md
+
+      - name: Validate V1.16.2 membrane integration
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/test_neural_time_integration.py
+          python tools/test_neural_time_integration.py
 
       - name: Validate Kotlin source structure
         run: |
@@ -174,10 +182,10 @@ jobs:
           print('FBD104: OK')
           PY
 
-      - name: Compile APK V1.16.0-FOOD-OLFACTORY
+      - name: Compile APK V1.16.2-FOOD-OLFACTORY-TEMPORAL
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK V1.16.0-FOOD-OLFACTORY
+      - name: Verify APK V1.16.2-FOOD-OLFACTORY-TEMPORAL
         run: |
           set -euo pipefail
           APK='app/build/outputs/apk/debug/app-debug.apk'
@@ -185,8 +193,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "versionCode='128'"
-          echo "$BADGING" | grep -Fq "versionName='1.16.0'"
+          echo "$BADGING" | grep -Fq "versionCode='130'"
+          echo "$BADGING" | grep -Fq "versionName='1.16.2'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
@@ -196,7 +204,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.16.0-FOOD-OLFACTORY-APK
+          name: FlyBrain-V1.16.2-FOOD-OLFACTORY-TEMPORAL-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

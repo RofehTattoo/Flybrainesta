@@ -33,8 +33,8 @@ assert 'foodDirectionalBias' not in body
 for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 45', 'EXPECTED_SIDE = {"L": 12, "R": 27, "U": 6}', 'neurotransmitters']:
     assert token in BUILDER, token
 
-assert 'APP_VERSION = "1.16.0"' in META
-assert 'APP_VERSION_CODE = 128' in META
+assert 'APP_VERSION = "1.16.2"' in META
+assert 'APP_VERSION_CODE = 130' in META
 assert hashlib.sha256(FBC.read_bytes()).hexdigest() == EXPECTED
 
 print('OLF ANATOMICAL INPUT STATIC AUDIT: PASS')

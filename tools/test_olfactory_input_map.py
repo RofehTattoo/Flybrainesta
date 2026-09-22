@@ -23,6 +23,12 @@ assert 'sc == "cb_sensory"' in BUILDER
 assert 'cl == "olfactory"' in BUILDER
 assert 'typ.startswith("ORN_")' in BUILDER
 assert 'nt.lower() != "acetylcholine"' in BUILDER and 'entryNerve' in BUILDER
+assert 'entryNerve' in BUILDER  # ORN provenance/selection only
+side_block = BUILDER[BUILDER.index('ss = side'):BUILDER.index('out.append({', BUILDER.index('ss = side'))]
+assert 'entryNerve' not in side_block
+assert 'if ss in (-1, 1):' in side_block
+assert 'elif rs in (-1, 1):' in side_block
+assert 'code, source = 0, "unknown"' in side_block
 
 assert hashlib.sha256(FBC.read_bytes()).hexdigest() == EXPECTED
 print('OLF ANATOMICAL INPUT AUDIT: PASS')
