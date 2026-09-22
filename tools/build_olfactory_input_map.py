@@ -1,95 +1,155 @@
 #!/usr/bin/env python3
-"""Build the runtime OLF input map from the official MaleCNS v1.0 annotations.
+"""Build the runtime olfactory input map from the official MaleCNS v1.0 data.
 
-This does not create neurons or edges and does not modify FBC103. It only answers:
-for each retained OLF neuron, what published anatomical side evidence is available
-for routing an environmental odor signal into that real neuron?
-
-Priority for side evidence:
-1. somaSide
-2. rootSide
-3. entryNerve text containing an explicit L/R token
-Conflicts are failed closed. Unknown/central neurons receive bilateral input at
-runtime rather than being assigned a fabricated side.
+The frozen FBC103 index ranges are not used to decide what is olfactory.  The
+olfactory population is derived from the actual retained neurons whose official
+MaleCNS annotations say superclass=cb_sensory, class=olfactory and type=ORN_*.
+The neurotransmitter table is cross-checked as an additional provenance guard.
+No neuron or edge is created or modified by this tool.
 """
 from __future__ import annotations
-import argparse, csv, hashlib, json, re
+import argparse, csv, hashlib, json
 from pathlib import Path
 import pyarrow.feather as feather
 from fbc103_reader import read_fbc103, sha256
 
-ANN_SHA="2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
-FBC_SHA="bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
-OLF_START, OLF_END = 618, 739
+ANN_SHA = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
+NT_SHA = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
+FBC_SHA = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
+EXPECTED_ORNS = 45
+EXPECTED_SIDE = {"L": 12, "R": 27, "U": 6}
+
 
 def clean(v):
-    if v is None: return ""
-    if hasattr(v,'as_py'): v=v.as_py()
+    if v is None:
+        return ""
+    if hasattr(v, "as_py"):
+        v = v.as_py()
     return str(v).strip()
 
+
 def side(v):
-    x=clean(v).upper()
-    if x in {'L','LEFT'}: return -1
-    if x in {'R','RIGHT'}: return 1
-    if x in {'B','BILATERAL','LR','L/R','R/L'}: return 0
+    x = clean(v).upper()
+    if x in {"L", "LEFT"}: return -1
+    if x in {"R", "RIGHT"}: return 1
+    if x in {"B", "BILATERAL", "LR", "L/R", "R/L"}: return 0
     return None
 
-def side_from_nerve(v):
-    x=clean(v).upper()
-    if not x: return None
-    # Require an explicit side token; do not infer from arbitrary letters.
-    toks=re.split(r'[^A-Z0-9]+',x)
-    vals=[]
-    for t in toks:
-        if t in {'L','LEFT'}: vals.append(-1)
-        elif t in {'R','RIGHT'}: vals.append(1)
-    if not vals: return None
-    if all(v==vals[0] for v in vals): return vals[0]
-    return 0
-
 def main():
-    ap=argparse.ArgumentParser()
-    ap.add_argument('--annotations',required=True)
-    ap.add_argument('--fbc103',required=True)
-    ap.add_argument('--output',required=True)
-    ap.add_argument('--report',required=True)
-    args=ap.parse_args()
-    annp=Path(args.annotations); fbc=Path(args.fbc103)
-    if sha256(annp)!=ANN_SHA: raise SystemExit('official annotation SHA mismatch')
-    nodes=read_fbc103(fbc)
-    rows=[r for r in nodes if OLF_START <= r['index'] < OLF_END]
-    if len(rows)!=121: raise SystemExit(f'OLF block={len(rows)} expected 121')
-    cols=['bodyId','superclass','type','class','subclass','instance','receptorType','rootSide','somaSide','entryNerve']
-    table=feather.read_table(annp,columns=cols)
-    by={}
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--annotations", required=True)
+    ap.add_argument("--neurotransmitters", required=True)
+    ap.add_argument("--fbc103", required=True)
+    ap.add_argument("--output", required=True)
+    ap.add_argument("--report", required=True)
+    args = ap.parse_args()
+
+    annp = Path(args.annotations)
+    ntp = Path(args.neurotransmitters)
+    fbc = Path(args.fbc103)
+    if sha256(annp) != ANN_SHA: raise SystemExit("official annotation SHA mismatch")
+    if sha256(ntp) != NT_SHA: raise SystemExit("official neurotransmitter SHA mismatch")
+    nodes = read_fbc103(fbc)
+    if sha256(fbc) != FBC_SHA: raise SystemExit("FBC103 SHA mismatch")
+
+    cols = ["bodyId", "superclass", "type", "class", "subclass", "instance",
+            "receptorType", "rootSide", "somaSide", "entryNerve"]
+    table = feather.read_table(annp, columns=cols)
+    by = {}
     for r in table.to_pylist():
-        bid=int(r['bodyId'])
-        if bid in by: raise SystemExit(f'duplicate bodyId={bid}')
-        by[bid]=r
-    out=[]; counts={"somaSide":0,"rootSide":0,"entryNerve":0,"bilateral_or_unknown":0}
-    for n in rows:
-        bid=int(n['bodyId']); r=by.get(bid)
-        if r is None: raise SystemExit(f'missing annotation bodyId={bid}')
-        ss=side(r.get('somaSide')); rs=side(r.get('rootSide')); es=side_from_nerve(r.get('entryNerve'))
-        explicit=[('somaSide',ss),('rootSide',rs),('entryNerve',es)]
-        known=[(src,v) for src,v in explicit if v in (-1,1)]
-        if len({v for _,v in known})>1:
-            raise SystemExit(f'contradictory OLF side evidence bodyId={bid}: {explicit}')
-        if known:
-            code=known[0][1]; source=known[0][0]; counts[source]+=1
-        else:
-            code=0; source='bilateral_or_unknown'; counts[source]+=1
-        out.append({
-          'index':n['index'],'bodyId':bid,'sideCode':code,'sideSource':source,
-          'type':clean(r.get('type')),'class':clean(r.get('class')),'subclass':clean(r.get('subclass')),
-          'instance':clean(r.get('instance')),'receptorType':clean(r.get('receptorType')),
-          'rootSide':clean(r.get('rootSide')),'somaSide':clean(r.get('somaSide')),'entryNerve':clean(r.get('entryNerve'))})
-    out.sort(key=lambda x:x['index'])
-    p=Path(args.output); p.parent.mkdir(parents=True,exist_ok=True)
-    fields=list(out[0])
-    with p.open('w',newline='',encoding='utf-8') as f:
-        w=csv.DictWriter(f,fieldnames=fields,delimiter='\t',lineterminator='\n'); w.writeheader(); w.writerows(out)
-    rep={'version':'1.16.0','status':'PASS','annotation_sha256':ANN_SHA,'fbc103_sha256':FBC_SHA,'fbc103_modified':False,'olf_retained':121,'side_sources':counts,'policy':'Only explicit official side evidence is used. Conflicts fail closed. Missing/central side is represented as bilateral/unknown; no side is fabricated.'}
-    Path(args.report).write_text(json.dumps(rep,indent=2,sort_keys=True),encoding='utf-8')
-    print(json.dumps(rep,indent=2))
-if __name__=='__main__': main()
+        bid = int(r["bodyId"])
+        if bid in by: raise SystemExit(f"duplicate bodyId={bid}")
+        by[bid] = r
+
+    nt_table = feather.read_table(ntp, columns=["body", "consensus_nt"])
+    nt_values = {}
+    for r in nt_table.to_pylist():
+        bid = int(r["body"])
+        nt_values.setdefault(bid, set()).add(clean(r.get("consensus_nt")).lower())
+    nt_by = {}
+    for bid, values in nt_values.items():
+        values.discard("")
+        if len(values) > 1:
+            raise SystemExit(f"multiple consensus_nt values bodyId={bid}: {sorted(values)}")
+        nt_by[bid] = next(iter(values), "")
+
+    # The authoritative olfactory population is the intersection of FBC103 and
+    # the official ORN annotation, not the historical 618..738 index block.
+    out = []
+    for n in nodes:
+        bid = int(n["bodyId"])
+        r = by.get(bid)
+        if r is None: continue
+        sc = clean(r.get("superclass"))
+        cl = clean(r.get("class"))
+        typ = clean(r.get("type"))
+        if sc == "cb_sensory" and cl == "olfactory" and typ.startswith("ORN_") and clean(r.get("entryNerve")).upper() == "AN":
+            nt = nt_by.get(bid, "")
+            if nt.lower() != "acetylcholine":
+                raise SystemExit(f"retained ORN has unexpected consensus_nt bodyId={bid}: {nt!r}")
+            ss = side(r.get("somaSide"))
+            rs = side(r.get("rootSide"))
+            # Authoritative side precedence:
+            # 1. somaSide
+            # 2. rootSide
+            # 3. UNKNOWN
+            # entryNerve identifies the ORN population but is never used for lateralization.
+            if ss in (-1, 1):
+                code, source = ss, "somaSide"
+            elif rs in (-1, 1):
+                code, source = rs, "rootSide"
+            else:
+                code, source = 0, "unknown"
+            out.append({
+                "index": n["index"], "bodyId": bid, "sideCode": code, "sideSource": source,
+                "type": typ, "class": cl, "superclass": sc, "consensus_nt": nt,
+                "subclass": clean(r.get("subclass")), "instance": clean(r.get("instance")),
+                "receptorType": clean(r.get("receptorType")), "rootSide": clean(r.get("rootSide")),
+                "somaSide": clean(r.get("somaSide")), "entryNerve": clean(r.get("entryNerve")),
+            })
+
+    out.sort(key=lambda x: x["index"])
+    if len(out) != EXPECTED_ORNS:
+        raise SystemExit(f"retained real ORNs={len(out)} expected={EXPECTED_ORNS}")
+
+    side_counts = {"L": sum(r["sideCode"] == -1 for r in out),
+                   "R": sum(r["sideCode"] == 1 for r in out),
+                   "U": sum(r["sideCode"] == 0 for r in out)}
+    if side_counts != EXPECTED_SIDE:
+        raise SystemExit(f"ORN side counts={side_counts} expected={EXPECTED_SIDE}")
+    if any(not r["type"].startswith("ORN_") or r["class"] != "olfactory" or r["superclass"] != "cb_sensory" or r["consensus_nt"].lower() != "acetylcholine" for r in out):
+        raise SystemExit("ORN provenance validation failed")
+
+    # Guard against the historical visual block being accidentally selected.
+    visual_ids = {int(n["bodyId"]) for n in nodes[618:739]}
+    if visual_ids.intersection({r["bodyId"] for r in out}):
+        raise SystemExit("historical 618..738 visual OLF block overlaps real ORN map")
+
+    p = Path(args.output); p.parent.mkdir(parents=True, exist_ok=True)
+    fields = list(out[0])
+    with p.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fields, delimiter="\t", lineterminator="\n")
+        w.writeheader(); w.writerows(out)
+
+    rep = {
+        "version": "1.16.0-ORN-AUDIT",
+        "status": "PASS",
+        "annotation_sha256": ANN_SHA,
+        "neurotransmitter_sha256": NT_SHA,
+        "fbc103_sha256": FBC_SHA,
+        "fbc103_modified": False,
+        "olf_retained": len(out),
+        "historical_olf_block": {"start": 618, "end": 739, "used_for_olfactory_input": False},
+        "side_counts": side_counts,
+        "type_counts": {t: sum(r["type"] == t for r in out) for t in sorted({r["type"] for r in out})},
+        "all_class_olfactory": True,
+        "all_superclass_cb_sensory": True,
+        "all_consensus_nt_acetylcholine": True,
+        "policy": "Only retained MaleCNS ORNs with official olfactory annotations are mapped. Lateralization uses somaSide, then rootSide, otherwise UNKNOWN; entryNerve is provenance only and is never used for lateralization. No neurons or edges are created.",
+    }
+    Path(args.report).write_text(json.dumps(rep, indent=2, sort_keys=True), encoding="utf-8")
+    print(json.dumps(rep, indent=2))
+
+
+if __name__ == "__main__":
+    main()
