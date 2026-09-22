@@ -248,6 +248,178 @@ jobs:
           echo '95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621  build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather' | sha256sum -c -
           echo 'OFFICIAL NEUROTRANSMITTERS: OK'
 
+
+      - name: Diagnose four missing MaleCNS ORNs
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          ANNOTATIONS = 'build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather'
+          NEUROTRANSMITTERS = 'build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather'
+          TARGET_IDS = [242812, 242908, 488209, 956041]
+
+          def norm(v):
+              return '' if pd.isna(v) else str(v).strip()
+
+          def print_section(title):
+              print('')
+              print('=' * 80)
+              print(title)
+              print('=' * 80)
+
+          annotations = pd.read_feather(ANNOTATIONS)
+          nt = pd.read_feather(NEUROTRANSMITTERS)
+
+          print_section('FOUR MISSING ORN DIAGNOSTIC')
+          print('TARGET BODY IDS:')
+          print(TARGET_IDS)
+
+          print_section('ANNOTATIONS FILE STRUCTURE')
+          print(f'Rows: {len(annotations)}')
+          print(f'Columns ({len(annotations.columns)}):')
+          for c in annotations.columns:
+              print(f'  {c}: {annotations[c].dtype}')
+
+          print_section('NEUROTRANSMITTER FILE STRUCTURE')
+          print(f'Rows: {len(nt)}')
+          print(f'Columns ({len(nt.columns)}):')
+          for c in nt.columns:
+              print(f'  {c}: {nt[c].dtype}')
+
+          if 'bodyId' not in annotations.columns:
+              raise RuntimeError('Annotations file has no bodyId column')
+
+          target_rows = annotations.loc[annotations['bodyId'].isin(TARGET_IDS)].copy()
+
+          print_section('TARGET ANNOTATION ROWS')
+          print(f'Rows found: {len(target_rows)}')
+          if len(target_rows):
+              print(target_rows.to_string(index=False))
+          else:
+              print('NO TARGET ROWS FOUND')
+
+          print_section('TARGET BODYID UNIQUENESS')
+          for body_id in TARGET_IDS:
+              rows = annotations.loc[annotations['bodyId'].eq(body_id)]
+              print(f'bodyId {body_id}: {len(rows)} annotation row(s)')
+
+          core_fields = [
+              'bodyId', 'type', 'class', 'superclass', 'subclass',
+              'instance', 'receptorType', 'entryNerve', 'somaSide',
+              'rootSide', 'status'
+          ]
+          available_core = [c for c in core_fields if c in annotations.columns]
+
+          print_section('TARGET CORE ANATOMICAL FIELDS')
+          if len(target_rows):
+              print(target_rows[available_core].sort_values('bodyId').to_string(index=False))
+
+          print_section('TARGET RECORDS — COMPLETE DICTIONARIES')
+          for body_id in TARGET_IDS:
+              rows = annotations.loc[annotations['bodyId'].eq(body_id)]
+              print('')
+              print(f'BODYID {body_id}')
+              if rows.empty:
+                  print('  NOT FOUND')
+                  continue
+              for record in rows.to_dict(orient='records'):
+                  clean = {}
+                  for key, value in record.items():
+                      if pd.isna(value):
+                          clean[key] = None
+                      elif hasattr(value, 'item'):
+                          try:
+                              clean[key] = value.item()
+                          except Exception:
+                              clean[key] = str(value)
+                      else:
+                          clean[key] = value
+                  print(json.dumps(clean, ensure_ascii=False, default=str))
+
+          sc = annotations['superclass'].map(norm).str.lower()
+          cl = annotations['class'].map(norm).str.lower()
+          typ = annotations['type'].map(norm).str.upper()
+
+          normal_orn_mask = (
+              sc.eq('cb_sensory')
+              & cl.eq('olfactory')
+              & typ.str.startswith('ORN_')
+          )
+          normal_orns = annotations.loc[normal_orn_mask].copy()
+
+          print_section('NORMAL ORN COMPARISON')
+          print(f'Normal ORN rows: {len(normal_orns)}')
+
+          comparison_fields = [
+              'bodyId', 'type', 'class', 'superclass', 'subclass',
+              'instance', 'receptorType', 'entryNerve', 'somaSide',
+              'rootSide', 'status'
+          ]
+          available_comparison = [c for c in comparison_fields if c in annotations.columns]
+
+          for field in available_comparison:
+              if field == 'bodyId':
+                  continue
+              print('')
+              print(f'NORMAL ORN DISTRIBUTION — {field}')
+              print(normal_orns[field].map(norm).value_counts(dropna=False).head(100).to_string())
+
+          print_section('TARGET VALUES VS NORMAL ORN VALUES')
+          for body_id in TARGET_IDS:
+              rows = annotations.loc[annotations['bodyId'].eq(body_id)]
+              print('')
+              print(f'BODYID {body_id}')
+              if rows.empty:
+                  print('  NOT FOUND')
+                  continue
+              row = rows.iloc[0]
+              for field in available_comparison:
+                  if field == 'bodyId':
+                      continue
+                  value = row[field]
+                  value_norm = '<NULL>' if pd.isna(value) else str(value).strip()
+                  normal_values = set(
+                      normal_orns[field].dropna().astype(str).str.strip().tolist()
+                  )
+                  present = 'NULL' if value_norm == '<NULL>' else (
+                      'PRESENT' if value_norm in normal_values else 'NEW_VALUE'
+                  )
+                  print(f'  {field}: {value_norm!r} [{present}]')
+
+          print_section('TARGET NEUROTRANSMITTER RECORDS')
+          if 'bodyId' not in nt.columns:
+              raise RuntimeError('Neurotransmitter file has no bodyId column')
+          nt_target = nt.loc[nt['bodyId'].isin(TARGET_IDS)].copy()
+          print(f'Neurotransmitter rows found: {len(nt_target)}')
+          if len(nt_target):
+              print(nt_target.to_string(index=False))
+          else:
+              print('NO TARGET NEUROTRANSMITTER ROWS FOUND')
+
+          print_section('NEUROTRANSMITTER ROW COUNT PER TARGET')
+          for body_id in TARGET_IDS:
+              rows = nt.loc[nt['bodyId'].eq(body_id)]
+              print(f'bodyId {body_id}: {len(rows)} row(s)')
+              if len(rows):
+                  print(rows.to_string(index=False))
+
+          print_section('DIAGNOSTIC SUMMARY')
+          print('Expected ORN census: 2639')
+          print('Current ORN_* census: 2635')
+          print('Difference: 4')
+          print('')
+          print('The four candidates are:')
+          for body_id in TARGET_IDS:
+              print(f'  {body_id}')
+          print('')
+          print('No source data has been modified.')
+          print('This step is READ-ONLY.')
+          print('')
+          print('END FOUR MISSING ORN DIAGNOSTIC')
+          PY
+
       - name: Download exact official MaleCNS connectome weights
         run: |
           set -euo pipefail
