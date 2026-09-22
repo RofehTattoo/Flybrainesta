@@ -389,9 +389,9 @@ jobs:
                   print(f'  {field}: {value_norm!r} [{present}]')
 
           print_section('TARGET NEUROTRANSMITTER RECORDS')
-          if 'bodyId' not in nt.columns:
-              raise RuntimeError('Neurotransmitter file has no bodyId column')
-          nt_target = nt.loc[nt['bodyId'].isin(TARGET_IDS)].copy()
+          if 'body' not in nt.columns:
+              raise RuntimeError('Neurotransmitter file has no body column')
+          nt_target = nt.loc[nt['body'].isin(TARGET_IDS)].copy()
           print(f'Neurotransmitter rows found: {len(nt_target)}')
           if len(nt_target):
               print(nt_target.to_string(index=False))
@@ -400,7 +400,7 @@ jobs:
 
           print_section('NEUROTRANSMITTER ROW COUNT PER TARGET')
           for body_id in TARGET_IDS:
-              rows = nt.loc[nt['bodyId'].eq(body_id)]
+              rows = nt.loc[nt['body'].eq(body_id)]
               print(f'bodyId {body_id}: {len(rows)} row(s)')
               if len(rows):
                   print(rows.to_string(index=False))
