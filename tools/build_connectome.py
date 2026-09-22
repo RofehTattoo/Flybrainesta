@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.13.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.17.0 FBR-10-OLF1.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 10% of the 166,691-neuron census by
@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import hashlib
 import struct
 import urllib.request
 from pathlib import Path
@@ -23,6 +24,11 @@ import pyarrow.ipc as ipc
 
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
+FLYBRAIN_RELEASE = "1.17.0"
+APP_VERSION_CODE = 131
+REDUCTION_ID = "FBR-10-OLF1"
+TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
+EXPECTED_ORN_TYPES = 54
 FORMAT_MAGIC = b"FBC103\x00\x00"
 FORMAT_VERSION = 103
 NODE_SIZE = 26
@@ -62,6 +68,20 @@ def clean(x):
     return str(x)
 
 
+def is_olfactory_orn(row) -> bool:
+    """True only for real MaleCNS olfactory receptor neurons (ORNs)."""
+    sc = clean(row.get("superclass", "")).strip().lower()
+    cl = clean(row.get("class", "")).strip().lower()
+    typ = clean(row.get("type", "")).strip().upper()
+    nerve = clean(row.get("entryNerve", "")).strip().upper()
+    return (
+        sc == "cb_sensory"
+        and cl == "olfactory"
+        and typ.startswith("ORN_")
+        and nerve in {"AN", "MXLBN"}
+    )
+
+
 def classify_channel(row) -> int:
     """0 visual, 1 olfactory, 2 gustatory, 3 mechanosensory/proprioceptive, 4 other."""
     sc = clean(row.get("superclass", ""))
@@ -71,10 +91,13 @@ def classify_channel(row) -> int:
     inst = clean(row.get("instance", "")).lower()
     name = clean(row.get("name", "")).lower()
     text = " ".join((cl, sub, typ, inst, name))
+    # Only anatomically identified ORNs are assigned to the olfactory channel.
+    # This deliberately prevents the historical ol_sensory visual cells (R7/R8)
+    # from being mislabeled as olfactory.
+    if is_olfactory_orn(row):
+        return 1
     if sc in {"visual_projection", "visual_centrifugal"} or "visual" in text or "optic lobe" in text:
         return 0
-    if sc == "ol_sensory" or "olf" in text or "antennal lobe" in text:
-        return 1
     if "gust" in text or "taste" in text:
         return 2
     if sc in {"vnc_sensory", "sensory_ascending", "sensory_descending"}:
@@ -266,6 +289,7 @@ def main(root: Path) -> None:
     # full connectome contains paths of the form sensor -> candidate -> DN and
     # DN -> candidate -> VNC motor neuron, separately for forward, turning and
     # escape-related routes. No edge is invented by this analysis.
+    traced["is_olfactory_orn"] = traced.apply(is_olfactory_orn, axis=1)
     traced["channel"] = traced.apply(classify_channel, axis=1)
     traced["motor_role"] = traced.apply(classify_motor_role, axis=1)
     traced["descending_role"] = traced.apply(classify_descending_role, axis=1)
@@ -278,6 +302,16 @@ def main(root: Path) -> None:
     desc_role = traced["descending_role"].to_numpy(np.int8)
     motor_role = traced["motor_role"].to_numpy(np.int8)
     halt_role = traced["halt_role"].to_numpy(np.int8)
+    is_olfactory = traced["is_olfactory_orn"].to_numpy(bool)
+
+    orn_source = traced[is_olfactory].copy()
+    orn_type_counts_source = orn_source.groupby("type", sort=True).size().to_dict()
+    if len(orn_source) != 2639:
+        raise RuntimeError(f"MaleCNS v1.0 ORN census changed: expected 2639, found {len(orn_source)}")
+    if len(orn_type_counts_source) != EXPECTED_ORN_TYPES:
+        raise RuntimeError(
+            f"MaleCNS v1.0 ORN type census changed: expected {EXPECTED_ORN_TYPES}, found {len(orn_type_counts_source)}"
+        )
 
     role_counts_source = np.bincount(desc_role[is_desc], minlength=5)
     missing_roles = [
@@ -405,6 +439,16 @@ def main(root: Path) -> None:
         0.0,
         sensor_in.sum(axis=0) * cell_to_motor[1:].sum(axis=0)
     ))
+    # Explicit olfactory sensorimotor preservation. This is still a measured
+    # topology score over published edges; it never creates or rewrites an edge.
+    # The first term protects real ORN -> candidate -> forward-DN intermediates;
+    # the second protects real ORN -> candidate -> motor sensorimotor bridges.
+    route_olfactory_forward = np.sqrt(
+        np.maximum(0.0, sensor_in[1] * cell_to_desc[1])
+    )
+    route_olfactory_motor = np.sqrt(
+        np.maximum(0.0, sensor_in[1] * cell_to_motor[1:].sum(axis=0))
+    )
 
     # Halt-route protection. These scores are measured from published edges and
     # are used only to choose which real neurons survive the 10% reduction.
@@ -453,6 +497,7 @@ def main(root: Path) -> None:
             ("forward", route_forward),
             ("turn", route_turn),
             ("escape", route_escape),
+            ("olfactory_forward", route_olfactory_forward),
         )
         if not np.any(score > 0)
     ]
@@ -471,6 +516,8 @@ def main(root: Path) -> None:
     route_turn_n = normalize_score(route_turn)
     route_escape_n = normalize_score(route_escape)
     route_sensorimotor_n = normalize_score(route_sensorimotor)
+    route_olfactory_forward_n = normalize_score(route_olfactory_forward)
+    route_olfactory_motor_n = normalize_score(route_olfactory_motor)
     route_halt_n = normalize_score(route_halt)
     degree_n = normalize_score(traced["degree"].to_numpy(np.float64))
 
@@ -478,12 +525,16 @@ def main(root: Path) -> None:
     traced["route_turn"] = route_turn_n
     traced["route_escape"] = route_escape_n
     traced["route_sensorimotor"] = route_sensorimotor_n
+    traced["route_olfactory_forward"] = route_olfactory_forward_n
+    traced["route_olfactory_motor"] = route_olfactory_motor_n
     traced["route_halt"] = route_halt_n
     traced["route_score"] = (
-        0.32 * route_forward_n
-        + 0.25 * route_turn_n
-        + 0.38 * route_escape_n
-        + 0.18 * route_sensorimotor_n
+        0.30 * route_forward_n
+        + 0.22 * route_turn_n
+        + 0.34 * route_escape_n
+        + 0.14 * route_sensorimotor_n
+        + 0.24 * route_olfactory_forward_n
+        + 0.12 * route_olfactory_motor_n
     )
 
     # Selection strategy for V1.04:
@@ -505,16 +556,53 @@ def main(root: Path) -> None:
         .drop_duplicates(["superclass", type_col], keep="first")
     )
 
-    seed = pd.concat([forced, type_rep], ignore_index=True).drop_duplicates("bodyId")
+    # Protect 10% of the published ORN population (264/2639) and ensure that
+    # all 54 published ORN types remain represented. Selection is deterministic
+    # and still ranked only by measured connectivity/route support.
+    orn_protected_parts = []
+    remaining_orn = TARGET_ORNS
+    for orn_type, group in orn_source.groupby("type", sort=True):
+        if remaining_orn <= 0:
+            break
+        take = min(4, len(group), remaining_orn)
+        part = group.sort_values(
+            ["route_olfactory_forward", "route_olfactory_motor", "degree", "bodyId"],
+            ascending=[False, False, False, True],
+        ).head(take)
+        orn_protected_parts.append(part)
+        remaining_orn -= len(part)
+    if remaining_orn > 0:
+        selected_orn_ids = set(
+            pd.concat(orn_protected_parts, ignore_index=True).bodyId.astype(int).tolist()
+            if orn_protected_parts else []
+        )
+        extra_orn = orn_source[~orn_source.bodyId.isin(selected_orn_ids)].sort_values(
+            ["route_olfactory_forward", "route_olfactory_motor", "degree", "bodyId"],
+            ascending=[False, False, False, True],
+        )
+        orn_protected_parts.append(extra_orn.head(remaining_orn))
+        remaining_orn -= min(remaining_orn, len(extra_orn))
+    if remaining_orn != 0:
+        raise AssertionError(("unable to reserve requested ORNs", TARGET_ORNS, remaining_orn))
+    protected_orns = pd.concat(orn_protected_parts, ignore_index=True).drop_duplicates("bodyId")
+
+    seed = pd.concat([forced, type_rep, protected_orns], ignore_index=True).drop_duplicates("bodyId")
 
     if len(seed) > TARGET:
         forced_ids = set(forced.bodyId.astype(int).tolist())
+        protected_orn_ids = set(protected_orns.bodyId.astype(int).tolist())
         keep_forced = forced.drop_duplicates("bodyId")
-        optional_types = type_rep[~type_rep.bodyId.isin(forced_ids)].sort_values(
+        keep_orn = protected_orns.drop_duplicates("bodyId")
+        protected_core = pd.concat([keep_forced, keep_orn], ignore_index=True).drop_duplicates("bodyId")
+        if len(protected_core) > TARGET:
+            raise AssertionError(("forced+ORN protection exceeds target", len(protected_core), TARGET))
+        optional_types = type_rep[
+            ~type_rep.bodyId.isin(set(protected_core.bodyId.astype(int).tolist()))
+        ].sort_values(
             ["route_score", "degree", "bodyId"], ascending=[False, False, True]
         )
         seed = pd.concat(
-            [keep_forced, optional_types.head(max(0, TARGET - len(keep_forced)))],
+            [protected_core, optional_types.head(max(0, TARGET - len(protected_core)))],
             ignore_index=True,
         ).drop_duplicates("bodyId")
 
@@ -523,7 +611,10 @@ def main(root: Path) -> None:
         raise AssertionError(("seed exceeds target", len(seed), TARGET))
 
     seed_ids = set(seed.bodyId.astype(int).tolist())
-    pool = traced[~traced.bodyId.isin(seed_ids)].copy()
+    pool = traced[
+        ~traced.bodyId.isin(seed_ids)
+        & ~traced["is_olfactory_orn"]
+    ].copy()
 
     # Route preservation is intended to protect intermediate circuit cells,
     # not to spend the route quota on sensory/DN/MN populations already handled
@@ -545,6 +636,8 @@ def main(root: Path) -> None:
         "route_forward": 650,
         "route_turn": 600,
         "route_sensorimotor": 450,
+        "route_olfactory_forward": 700,
+        "route_olfactory_motor": 350,
     }
     route_parts = []
     route_ids = set()
@@ -581,8 +674,24 @@ def main(root: Path) -> None:
         route_ids.update(turn_seed.bodyId.astype(int).tolist())
         remaining_slots -= len(turn_seed)
 
+    # Explicitly reserve central bridge cells with measured ORN-driven route support.
+    # This is the key structural correction for long-range food recruitment.
+    for score_col in ("route_olfactory_forward", "route_olfactory_motor"):
+        if remaining_slots <= 0:
+            break
+        quota = route_quota[score_col]
+        candidates = intermediate_pool[~intermediate_pool.bodyId.isin(route_ids)].sort_values(
+            [score_col, "route_olfactory_forward", "route_olfactory_motor", "degree", "bodyId"],
+            ascending=[False, False, False, False, True],
+        )
+        part = candidates.head(min(quota, remaining_slots))
+        if len(part):
+            route_parts.append(part)
+            route_ids.update(part.bodyId.astype(int).tolist())
+            remaining_slots -= len(part)
+
     for score_col, quota in route_quota.items():
-        if score_col in ("route_turn", "route_halt"):
+        if score_col in ("route_turn", "route_halt", "route_olfactory_forward", "route_olfactory_motor"):
             continue
         if remaining_slots <= 0:
             break
@@ -606,7 +715,10 @@ def main(root: Path) -> None:
         raise AssertionError(("route seed exceeds target", len(seed), TARGET))
 
     seed_ids = set(seed.bodyId.astype(int).tolist())
-    pool = traced[~traced.bodyId.isin(seed_ids)].copy()
+    pool = traced[
+        ~traced.bodyId.isin(seed_ids)
+        & ~traced["is_olfactory_orn"]
+    ].copy()
 
     pool_counts = pool.groupby("superclass", sort=True).size().to_dict()
     raw_extra = {sc: n * remaining_slots / max(1, len(pool)) for sc, n in pool_counts.items()}
@@ -638,7 +750,10 @@ def main(root: Path) -> None:
 
     if len(selected) < TARGET:
         selected_ids_now = set(selected.bodyId.astype(int).tolist())
-        extra_pool = traced[~traced.bodyId.isin(selected_ids_now)]
+        extra_pool = traced[
+            ~traced.bodyId.isin(selected_ids_now)
+            & ~traced["is_olfactory_orn"]
+        ]
         selected = pd.concat(
             [
                 selected,
@@ -652,12 +767,16 @@ def main(root: Path) -> None:
 
     if len(selected) > TARGET:
         forced_ids = set(forced.bodyId.astype(int).tolist())
-        keep_forced = selected[selected.bodyId.isin(forced_ids)]
-        optional = selected[~selected.bodyId.isin(forced_ids)].sort_values(
+        protected_orn_ids = set(protected_orns.bodyId.astype(int).tolist())
+        protected_ids = forced_ids | protected_orn_ids
+        keep_protected = selected[selected.bodyId.isin(protected_ids)]
+        if len(keep_protected) > TARGET:
+            raise AssertionError(("protected cells exceed target", len(keep_protected), TARGET))
+        optional = selected[~selected.bodyId.isin(protected_ids)].sort_values(
             ["route_score", "degree", "bodyId"], ascending=[False, False, True]
         )
         selected = pd.concat(
-            [keep_forced, optional.head(max(0, TARGET - len(keep_forced)))],
+            [keep_protected, optional.head(max(0, TARGET - len(keep_protected)))],
             ignore_index=True,
         )
 
@@ -665,11 +784,20 @@ def main(root: Path) -> None:
     if len(selected) != TARGET:
         raise AssertionError((len(selected), TARGET))
 
-    for route_name in ("route_forward", "route_turn", "route_escape"):
+    for route_name in ("route_forward", "route_turn", "route_escape", "route_olfactory_forward"):
         if not np.any(selected[route_name].to_numpy(np.float64) > 0):
             raise AssertionError(
                 f"selected set contains no non-zero measured {route_name} cell"
             )
+
+    selected_orns = selected[selected["is_olfactory_orn"]].copy()
+    if len(selected_orns) != TARGET_ORNS:
+        raise AssertionError(f"selected ORNs={len(selected_orns)} expected={TARGET_ORNS}")
+    retained_orn_types = selected_orns["type"].astype(str).nunique()
+    if retained_orn_types != EXPECTED_ORN_TYPES:
+        raise AssertionError(
+            f"selected ORN types={retained_orn_types} expected={EXPECTED_ORN_TYPES}"
+        )
 
     # Stable anatomical ordering: sensory channels first, then descending,
     # ascending, motor and the remaining central/intrinsic populations. This
@@ -705,6 +833,8 @@ def main(root: Path) -> None:
     route_forward_selected = selected["route_forward"].to_numpy(np.float64)
     route_turn_selected = selected["route_turn"].to_numpy(np.float64)
     route_escape_selected = selected["route_escape"].to_numpy(np.float64)
+    route_olfactory_forward_selected = selected["route_olfactory_forward"].to_numpy(np.float64)
+    route_olfactory_motor_selected = selected["route_olfactory_motor"].to_numpy(np.float64)
     halt_role_selected = selected["halt_role"].to_numpy(np.int8)
 
     # Neurotransmitter predictions provide the sign model used by the simulator.
@@ -862,6 +992,8 @@ def main(root: Path) -> None:
         for src, dst, weight in edges:
             f.write(struct.pack("<iif", int(src), int(dst), float(weight)))
 
+    fbc_sha = hashlib.sha256(out.read_bytes()).hexdigest()
+
     def block_range(block_id):
         idxs = np.where(selected["block"].to_numpy(np.int8) == block_id)[0]
         return (int(idxs.min()), int(idxs.max()+1)) if len(idxs) else (0,0)
@@ -882,7 +1014,7 @@ def main(root: Path) -> None:
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}
 
-    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FlyBrain V1.13"\n    const val FORMAT_MAGIC = "FBC103"\n    const val FORMAT_VERSION = 103\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET, len(edges), contacts,
+    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FBR-10-OLF1 · FBD104 · VNCSEM102"\n    const val FLYBRAIN_VERSION = "1.17.0"\n    const val FLYBRAIN_VERSION_CODE = 131\n    const val APP_VERSION = "1.17.0"\n    const val APP_VERSION_CODE = 131\n    const val REDUCTION_ID = "FBR-10-OLF1"\n    const val RETAINED_OLFACTORY_ORNS = %d\n    const val RETAINED_OLFACTORY_ORN_TYPES = %d\n    const val BINARY_SHA256 = "%s"\n    const val FORMAT_MAGIC = "FBC103"\n    const val FORMAT_VERSION = 103\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_JUMP = 6\n    const val MOTOR_OTHER = 7\n}\n' % (TARGET_ORNS, EXPECTED_ORN_TYPES, fbc_sha, TARGET, len(edges), contacts,
        population_ranges["visual"][0], population_ranges["visual"][1], population_ranges["olfactory"][0], population_ranges["olfactory"][1],
        ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
        desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]))
@@ -904,15 +1036,26 @@ def main(root: Path) -> None:
 
     report = {
         "dataset": "MaleCNS v1.0",
-        "flybrain_version": "1.13",
+        "flybrain_version": FLYBRAIN_RELEASE,
+        "reduction": REDUCTION_ID,
         "binary_format": "FBC103",
+        "sha256": fbc_sha,
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,
-        "selection": "exactly 16,669 traced annotated neurons; all descending and VNC motor neurons are retained; published neuron types are represented where possible; measured two-hop sensor-to-DN and DN-to-intermediate-to-motor route cells are preferentially retained by functional family; remaining quota is stratified by superclass and ranked by route score then degree",
+        "selection": "exactly 16,669 traced annotated neurons; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), all 54 ORN types are represented, and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
         "source": BASE,
         "neurons_source": int(total),
         "neurons_retained": TARGET,
         "edges_retained": len(edges),
+        "olfactory_orns_source": int(len(orn_source)),
+        "olfactory_orns_retained": int(len(selected_orns)),
+        "olfactory_orn_types_source": int(len(orn_type_counts_source)),
+        "olfactory_orn_types_retained": int(retained_orn_types),
+        "olfactory_orn_target": TARGET_ORNS,
+        "olfactory_route_forward_source_nonzero": int((route_olfactory_forward > 0).sum()),
+        "olfactory_route_forward_selected_nonzero": int((route_olfactory_forward_selected > 0).sum()),
+        "olfactory_route_motor_source_nonzero": int((route_olfactory_motor > 0).sum()),
+        "olfactory_route_motor_selected_nonzero": int((route_olfactory_motor_selected > 0).sum()),
         "candidate_edges_between_retained_neurons": candidate_edges,
         "unresolved_edges_omitted": unresolved_edges,
         "contacts_retained_signed": contacts,
@@ -937,11 +1080,13 @@ def main(root: Path) -> None:
         "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
         "halt_role_definition": "FG and BB are walk-OFF halt populations; BRK is the VNC brake population; roles are annotation metadata only and do not create edges",
         "descending_role_definition": "published behavioural cell-type names plus conservative annotation keywords; descriptive metadata only and never a synthetic current source",
-        "route_score_definition": "route-family topology scores combine measured sensor->DN and DN->candidate->motor components from published edges; forward uses all sensory modalities, turn uses visual input, escape uses visual/mechanosensory threat input; scores are selection/readout metadata only and never create edges",
+        "route_score_definition": "route-family topology scores combine measured published edges; generic forward uses all sensory modalities, while explicit olfactory preservation uses real ORN->candidate->forward-DN and ORN->candidate->motor support; scores are selection/readout metadata only and never create edges",
         "route_score_source_counts": source_route_counts,
         "route_score_selected_counts": selected_route_counts,
         "halt_selected_nonzero": int((halt_role_selected > 0).sum()),
         "route_quota_requested": route_quota,
+        "olfactory_orn_type_counts_source": {str(k): int(v) for k,v in orn_type_counts_source.items()},
+        "olfactory_orn_type_counts_retained": {str(k): int(v) for k,v in selected_orns.groupby("type").size().to_dict().items()},
         "retained_sensor_to_desc_edges": int(retained_sensor_desc_edges),
         "retained_desc_to_motor_edges": int(retained_desc_motor_edges),
         "retained_sensor_to_desc_contacts": int(retained_sensor_desc.sum()),

@@ -30,9 +30,9 @@ def sha256(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def read_fbc103(path: Path) -> list[dict]:
+def read_fbc103(path: Path, expected_sha: str | None = FBC_SHA) -> list[dict]:
     data = path.read_bytes()
-    if sha256(path) != FBC_SHA:
+    if expected_sha is not None and sha256(path) != expected_sha:
         raise ValueError("FBC103 SHA mismatch")
     if data[:8] != b"FBC103\x00\x00":
         raise ValueError("FBC103 magic mismatch")

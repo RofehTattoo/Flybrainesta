@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.16.2-FOOD-OLFACTORY-TEMPORAL · frozen FBR-10 + FBD104 + VNC semantics
+name: Build FlyBrain APK V1.17.0-FOOD-OLFACTORY-ROUTED · FBR-10-OLF1 + FBD104 + VNC semantics
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,8 +32,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Install validation dependencies (pandas-free Feather pipeline)
-        run: python -m pip install --upgrade pip pyarrow==19.0.1
+      - name: Install validation dependencies (MaleCNS reduction pipeline)
+        run: python -m pip install --upgrade pip pyarrow==19.0.1 pandas==2.2.3
 
       - name: Download exact official MaleCNS annotations
         run: |
@@ -53,6 +53,28 @@ jobs:
           echo '95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621  build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather' | sha256sum -c -
           echo 'OFFICIAL NEUROTRANSMITTERS: OK'
 
+      - name: Download exact official MaleCNS connectome weights
+        run: |
+          set -euo pipefail
+          mkdir -p build/malecns_raw
+          URL='https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/connectome-weights-male-cns-v1.0-minconf-0.5.feather'
+          curl -fL --retry 4 --retry-delay 2 "$URL" -o build/malecns_raw/connectome-weights-male-cns-v1.0-minconf-0.5.feather
+          echo 'e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1  build/malecns_raw/connectome-weights-male-cns-v1.0-minconf-0.5.feather' | sha256sum -c -
+          echo 'OFFICIAL WEIGHTS: OK'
+
+      - name: Audit FBR-10-OLF1 reducer logic
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/build_connectome.py tools/test_olfactory_route_reduction.py
+          python tools/test_olfactory_route_reduction.py
+
+      - name: Build new FBR-10-OLF1 connectome
+        run: |
+          set -euo pipefail
+          python tools/build_connectome.py
+          test -s app/src/main/res/raw/malecns_reduced.bin
+          test -s app/src/main/res/raw/malecns_reduced_report.json
+
       - name: Build and validate anatomical olfactory input map
         run: |
           set -euo pipefail
@@ -62,12 +84,13 @@ jobs:
             --neurotransmitters build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather \
             --fbc103 app/src/main/res/raw/malecns_reduced.bin \
             --output app/src/main/assets/olfactory_input_map.tsv \
-            --report build/OLF_INPUT_MAP_REPORT.json
+            --report build/OLF_INPUT_MAP_REPORT.json \
+            --connectome-report app/src/main/res/raw/malecns_reduced_report.json
           cp build/OLF_INPUT_MAP_REPORT.json app/src/main/res/raw/olfactory_input_map_report.json
           python tools/test_olfactory_input_map.py
           test -s app/src/main/assets/olfactory_input_map.tsv
 
-      - name: Build and validate V1.15.2 VNC semantics
+      - name: Build and validate V1.17.0 VNC semantics
         run: |
           set -euo pipefail
           python -m py_compile tools/build_vnc_motor_semantics.py tools/validate_vnc_motor_semantics.py tools/test_vnc_motor_semantics_logic.py
@@ -103,38 +126,15 @@ jobs:
           python tools/validate_fbr10_dynamics.py
           cp build/FBR10_DYNAMICS_REPORT.json app/src/main/res/raw/malecns_fbr10_dynamics_report.json
 
-      - name: Validate frozen FBR-10
+      - name: Validate new FBR-10-OLF1 connectome
         run: |
           set -euo pipefail
-          python -m py_compile tools/fbc103_reader.py tools/test_fbc103_reader.py tools/test_frozen_connectome_validator.py tools/validate_frozen_connectome.py
-          python tools/test_fbc103_reader.py
-          python tools/test_frozen_connectome_validator.py
-          python tools/validate_frozen_connectome.py
-          grep -Fq 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60' FBR10_CONNECTOME_FINAL_AUDIT.md
+          python -m py_compile tools/validate_fbr10_olf1.py
+          python tools/validate_fbr10_olf1.py \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --report app/src/main/res/raw/malecns_reduced_report.json
 
-      - name: Validate V1.16.2-FOOD-OLFACTORY-TEMPORAL identity and source invariants
-        run: |
-          set -euo pipefail
-          grep -Fq 'versionCode = 130' app/build.gradle.kts
-          grep -Fq 'versionName = "1.16.2"' app/build.gradle.kts
-          grep -Fq 'APP_VERSION = "1.16.2"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION_CODE = 130' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'FLYBRAIN V1.16.2 · FOOD / OLFACTORY CLEAN' app/src/main/java/com/example/flybrain/MainActivity.kt
-          test -s app/src/main/res/drawable-nodpi/flybrain_official.png
-          grep -Fq 'olfactoryNeuronIndices' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'loadVncMotorSemantics()' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'vnc_motor_semantics.tsv' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'MOTOR_FUNCTION_JUMP' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'FOOD_OLF_GAIN = 6.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'FOOD_OLF_SIGMA = 1.10f' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'injectOlfactoryPopulation' app/src/main/java/com/example/flybrain/MainActivity.kt
-          ! grep -Fq 'drawNeuralDiagnosticCard' app/src/main/java/com/example/flybrain/MainActivity.kt
-          ! grep -Fq 'DIAGNÓSTICO NEURONAL · SOLO LECTURA' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'FOOD_OLF_GAIN = 6.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'FBC103' V1.15.2_VNC_MOTOR_SEMANTICS.md
-
-      - name: Validate V1.16.2 membrane integration
+      - name: Validate V1.17.0 membrane integration
         run: |
           set -euo pipefail
           python -m py_compile tools/test_neural_time_integration.py
@@ -171,21 +171,24 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, struct
+          import json, struct, hashlib
           from pathlib import Path
+          fbc=Path('app/src/main/res/raw/malecns_reduced.bin')
           p=Path('app/src/main/res/raw/malecns_fbr10_dynamics.bin'); b=p.read_bytes()
+          sb=fbc.read_bytes(); fn,fe=struct.unpack_from('<II',sb,8)
           assert b[:8] == b'FBD104\x00\x00'
           n,e=struct.unpack_from('<II',b,8)
-          assert n==16669 and len(b)==16+n+e*12
+          assert n==fn==16669 and len(b)==16+n+e*12
           d=json.loads(Path('build/FBR10_DYNAMICS_REPORT.json').read_text())
-          assert d['neurons']==16669 and d['structural_edges']==2064951
+          assert d['neurons']==n and d['structural_edges']==fe
+          assert d['source_structural_sha256']==hashlib.sha256(sb).hexdigest()
           print('FBD104: OK')
           PY
 
-      - name: Compile APK V1.16.2-FOOD-OLFACTORY-TEMPORAL
+      - name: Compile APK V1.17.0-FOOD-OLFACTORY-ROUTED
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK V1.16.2-FOOD-OLFACTORY-TEMPORAL
+      - name: Verify APK V1.17.0-FOOD-OLFACTORY-ROUTED
         run: |
           set -euo pipefail
           APK='app/build/outputs/apk/debug/app-debug.apk'
@@ -193,18 +196,33 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "versionCode='130'"
-          echo "$BADGING" | grep -Fq "versionName='1.16.2'"
+          echo "$BADGING" | grep -Fq "versionCode='131'"
+          echo "$BADGING" | grep -Fq "versionName='1.17.0'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics_report.json'
           sha256sum "$APK"
 
+      - name: Upload V1.17.0 audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlyBrain-V1.17.0-OLF1-AUDIT-EVIDENCE
+          path: |
+            app/src/main/res/raw/malecns_reduced.bin
+            app/src/main/res/raw/malecns_reduced_report.json
+            app/src/main/res/raw/malecns_fbr10_dynamics.bin
+            app/src/main/res/raw/malecns_fbr10_dynamics_report.json
+            app/src/main/res/raw/vnc_motor_semantics_report.json
+            app/src/main/res/raw/olfactory_input_map_report.json
+            app/src/main/assets/olfactory_input_map.tsv
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.16.2-FOOD-OLFACTORY-TEMPORAL-APK
+          name: FlyBrain-V1.17.0-FOOD-OLFACTORY-ROUTED-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

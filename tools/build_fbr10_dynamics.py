@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build the signed/normalized dynamics layer for the frozen FBR-10 graph.
+"""Build the signed/normalized dynamics layer for the current FBR-10 release graph.
 
-The structural FBC103 artifact is NEVER modified. This tool derives a separate
+The structural FBC103 artifact is not modified by this tool. It derives a separate
 runtime dynamics artifact from:
-  - app/src/main/res/raw/malecns_reduced.bin (frozen FBR-10 topology/metadata)
+  - app/src/main/res/raw/malecns_reduced.bin (current FBR-10 topology/metadata)
   - official MaleCNS v1.0 body-neurotransmitters Feather table
 
 Neurotransmitter convention is intentionally the same convention historically
@@ -41,7 +41,7 @@ NT_SIGN = {
 }
 NODE_BYTES = 26
 EDGE_BYTES = 12
-EXPECTED_STRUCTURAL_SHA256 = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
+BASELINE_STRUCTURAL_SHA256 = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
 EXPECTED_NT_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
 
 
@@ -103,12 +103,12 @@ def load_nt(path: Path):
     return mapping, conflicts, sum(len(v) for v in grouped.values())
 
 
-def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool):
+def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected_structural_sha: str | None):
     structural = root / "app" / "src" / "main" / "res" / "raw" / "malecns_reduced.bin"
     structural_hash = sha256_file(structural)
     nt_hash = sha256_file(nt_path)
-    if not allow_unpinned and structural_hash != EXPECTED_STRUCTURAL_SHA256:
-        raise RuntimeError(f"FBC103 SHA256 mismatch: {structural_hash} != {EXPECTED_STRUCTURAL_SHA256}")
+    if not allow_unpinned and expected_structural_sha is not None and structural_hash != expected_structural_sha:
+        raise RuntimeError(f"FBC103 SHA256 mismatch: {structural_hash} != {expected_structural_sha}")
     if not allow_unpinned and nt_hash != EXPECTED_NT_SHA256:
         raise RuntimeError(f"neurotransmitter SHA256 mismatch: {nt_hash} != {EXPECTED_NT_SHA256}")
     n, structural_edges, body_ids, edges = load_structural(structural)
@@ -181,7 +181,8 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool):
         "inhibitory_contacts": i_contact,
         "source_structural_sha256": structural_hash,
         "source_nt_sha256": nt_hash,
-        "pinned_sources_enforced": not allow_unpinned,
+        "official_nt_source_pinned": not allow_unpinned,
+        "structural_source_pinned": expected_structural_sha is not None and not allow_unpinned,
         "output_sha256": sha256_file(output),
     }
     report_path = root / "build" / "FBR10_DYNAMICS_REPORT.json"
@@ -195,6 +196,7 @@ if __name__ == "__main__":
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     ap.add_argument("--nt", type=Path, required=True)
     ap.add_argument("--allow-unpinned", action="store_true", help="allow non-pinned source hashes for local development only")
+    ap.add_argument("--expected-structural-sha", default=None, help="pin a specific FBC103 SHA when required by a release")
     ap.add_argument(
         "--output",
         type=Path,
@@ -203,4 +205,4 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if not args.output.is_absolute():
         args.output = args.root / args.output
-    main(args.root, args.nt, args.output, args.allow_unpinned)
+    main(args.root, args.nt, args.output, args.allow_unpinned, args.expected_structural_sha)

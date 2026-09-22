@@ -1,4 +1,6 @@
-**Current development release:** V1.16.2-FOOD-OLFACTORY-TEMPORAL / versionCode 130. Anatomical OLF input map derived from official MaleCNS v1.0 annotations; FBC103/FBD104/VNC semantics remain frozen.
+**Current development release:** V1.17.0-FOOD-OLFACTORY-ROUTED / versionCode 131. Regenerates the exact 16,669-neuron FBR-10 reduction from official MaleCNS v1.0 with explicit preservation of 264 real ORNs (10% of the 2,639 ORN census, rounded) and measured olfactory-to-locomotion route intermediates; FBC103 remains format-compatible and FBD104 is regenerated from the release graph in CI.
+
+V1.17.0 was introduced after controlled V1.16.2 testing showed that olfactory input could recruit motor output only at close-range contact. The reducer now preserves a larger, type-complete ORN sample and explicitly retains measured ORN-driven forward sensorimotor bridge cells; no synthetic neurons or edges are added.
 
 # FlyBrain V1.15.2 — VNC Motor Semantics
 

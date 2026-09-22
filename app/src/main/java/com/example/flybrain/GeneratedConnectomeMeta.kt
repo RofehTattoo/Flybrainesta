@@ -1,18 +1,23 @@
 package com.example.flybrain
 
-/** FBR-10 validated MaleCNS v1.0 induced subgraph. Generated from the exact official source files. */
+/** Bootstrap metadata for FBR-10-OLF1; CI regenerates all graph-derived fields from MaleCNS v1.0. */
 object GeneratedConnectomeMeta {
-    const val VERSION = "MaleCNS v1.0 · FBR-10 · 16,669 · FROZEN · FBD104 · VNCSEM102"
-    const val FLYBRAIN_VERSION = "1.14"
-    const val FLYBRAIN_VERSION_CODE = 114
-    // Application diagnostic build layered on top of the frozen V1.14 connectome.
-    const val APP_VERSION = "1.16.2"
-    const val APP_VERSION_CODE = 130
+    const val VERSION = "MaleCNS v1.0 · FBR-10-OLF1 · CI-GENERATED · FBD104 · VNCSEM102"
+    const val FLYBRAIN_VERSION = "1.17.0"
+    const val FLYBRAIN_VERSION_CODE = 131
+    // Application metadata for the CI-generated FBR-10-OLF1 release graph.
+    const val APP_VERSION = "1.17.0"
+    const val APP_VERSION_CODE = 131
+    const val REDUCTION_ID = "FBR-10-OLF1"
+    const val RETAINED_OLFACTORY_ORNS = 264
+    const val RETAINED_OLFACTORY_ORN_TYPES = 54
     const val DYNAMICS_FORMAT = "FBD104"
     const val DYNAMICS_NORMALIZATION_SCALE = 0.42f
     const val SOURCE_NEURONS = 166700
     const val SOURCE_EDGES = 25582938
     const val SOURCE_CONTACTS = 124177617L
+    // Bootstrap binary is still the previously frozen FBC103. CI replaces this
+    // file immediately after generating the FBR-10-OLF1 release graph.
     const val BINARY_SHA256 = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
     const val FORMAT_MAGIC = "FBC103"
     const val FORMAT_VERSION = 103

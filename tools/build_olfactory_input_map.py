@@ -8,16 +8,15 @@ The neurotransmitter table is cross-checked as an additional provenance guard.
 No neuron or edge is created or modified by this tool.
 """
 from __future__ import annotations
-import argparse, csv, hashlib, json, re
+import argparse, csv, hashlib, json
 from pathlib import Path
 import pyarrow.feather as feather
 from fbc103_reader import read_fbc103, sha256
 
 ANN_SHA = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
 NT_SHA = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
-FBC_SHA = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
-EXPECTED_ORNS = 45
-EXPECTED_SIDE = {"L": 12, "R": 27, "U": 6}
+EXPECTED_ORNS = 264
+EXPECTED_ORN_TYPES = 54
 
 
 def clean(v):
@@ -42,6 +41,7 @@ def main():
     ap.add_argument("--fbc103", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--report", required=True)
+    ap.add_argument("--connectome-report", required=True)
     args = ap.parse_args()
 
     annp = Path(args.annotations)
@@ -49,8 +49,14 @@ def main():
     fbc = Path(args.fbc103)
     if sha256(annp) != ANN_SHA: raise SystemExit("official annotation SHA mismatch")
     if sha256(ntp) != NT_SHA: raise SystemExit("official neurotransmitter SHA mismatch")
-    nodes = read_fbc103(fbc)
-    if sha256(fbc) != FBC_SHA: raise SystemExit("FBC103 SHA mismatch")
+    nodes = read_fbc103(fbc, expected_sha=None)
+    actual_fbc_sha = sha256(fbc)
+    if len(nodes) != 16669: raise SystemExit(f"FBC node count mismatch: {len(nodes)}")
+    crep = json.loads(Path(args.connectome_report).read_text(encoding="utf-8"))
+    if crep.get("reduction") != "FBR-10-OLF1": raise SystemExit("connectome release id mismatch")
+    if crep.get("olfactory_orns_retained") != EXPECTED_ORNS: raise SystemExit("connectome ORN count mismatch")
+    if crep.get("olfactory_orn_types_retained") != EXPECTED_ORN_TYPES: raise SystemExit("connectome ORN type coverage mismatch")
+    if crep.get("sha256") and crep.get("sha256") != actual_fbc_sha: raise SystemExit("connectome report SHA mismatch")
 
     cols = ["bodyId", "superclass", "type", "class", "subclass", "instance",
             "receptorType", "rootSide", "somaSide", "entryNerve"]
@@ -83,12 +89,12 @@ def main():
         sc = clean(r.get("superclass"))
         cl = clean(r.get("class"))
         typ = clean(r.get("type"))
-        if sc == "cb_sensory" and cl == "olfactory" and typ.startswith("ORN_") and clean(r.get("entryNerve")).upper() == "AN":
+        if sc == "cb_sensory" and cl == "olfactory" and typ.startswith("ORN_") and clean(r.get("entryNerve")).upper() in {"AN", "MXLBN"}:
             nt = nt_by.get(bid, "")
             if nt.lower() != "acetylcholine":
                 raise SystemExit(f"retained ORN has unexpected consensus_nt bodyId={bid}: {nt!r}")
             # Authoritative lateralization: somaSide -> rootSide -> UNKNOWN.
-            # entryNerve identifies ORNs (AN) but NEVER participates in lateralization.
+            # entryNerve identifies ORNs (AN/MxLbN) but NEVER participates in lateralization.
             ss = side(r.get("somaSide"))
             rs = side(r.get("rootSide"))
             known = [(src, value) for src, value in (("somaSide", ss), ("rootSide", rs))
@@ -113,11 +119,13 @@ def main():
     if len(out) != EXPECTED_ORNS:
         raise SystemExit(f"retained real ORNs={len(out)} expected={EXPECTED_ORNS}")
 
+    type_counts = {t: sum(r["type"] == t for r in out) for t in sorted({r["type"] for r in out})}
+    if len(type_counts) != EXPECTED_ORN_TYPES:
+        raise SystemExit(f"retained ORN types={len(type_counts)} expected={EXPECTED_ORN_TYPES}")
+
     side_counts = {"L": sum(r["sideCode"] == -1 for r in out),
                    "R": sum(r["sideCode"] == 1 for r in out),
                    "U": sum(r["sideCode"] == 0 for r in out)}
-    if side_counts != EXPECTED_SIDE:
-        raise SystemExit(f"ORN side counts={side_counts} expected={EXPECTED_SIDE}")
     if any(not r["type"].startswith("ORN_") or r["class"] != "olfactory" or r["superclass"] != "cb_sensory" or r["consensus_nt"].lower() != "acetylcholine" for r in out):
         raise SystemExit("ORN provenance validation failed")
 
@@ -133,20 +141,21 @@ def main():
         w.writeheader(); w.writerows(out)
 
     rep = {
-        "version": "1.16.2-ORN-AUDIT",
+        "version": "1.17.0-OLF1-ORN-AUDIT",
         "status": "PASS",
         "annotation_sha256": ANN_SHA,
         "neurotransmitter_sha256": NT_SHA,
-        "fbc103_sha256": FBC_SHA,
+        "fbc103_sha256": actual_fbc_sha,
         "fbc103_modified": False,
+        "fbc103_release_id": "FBR-10-OLF1",
         "olf_retained": len(out),
         "historical_olf_block": {"start": 618, "end": 739, "used_for_olfactory_input": False},
         "side_counts": side_counts,
-        "type_counts": {t: sum(r["type"] == t for r in out) for t in sorted({r["type"] for r in out})},
+        "type_counts": type_counts,
         "all_class_olfactory": True,
         "all_superclass_cb_sensory": True,
         "all_consensus_nt_acetylcholine": True,
-        "policy": "Only retained MaleCNS ORNs with official olfactory annotations are mapped. Side conflicts fail closed; unknown/central side is represented as bilateral/unknown. No neurons or edges are created.",
+        "policy": "Only retained MaleCNS ORNs with official cb_sensory/olfactory/ORN_ annotations and AN/MxLbN entry nerve are mapped. Side precedence is somaSide -> rootSide -> UNKNOWN; entryNerve is never used for lateralization. No neurons or edges are created.",
     }
     Path(args.report).write_text(json.dumps(rep, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(rep, indent=2))

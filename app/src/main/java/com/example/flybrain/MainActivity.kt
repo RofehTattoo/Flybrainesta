@@ -175,11 +175,13 @@ class MainActivity : Activity() {
         // layer. They are model parameters, not an adaptive controller.
         private val SENSORY_VIS_GAIN = 0.70f
         private val SENSORY_OLF_GAIN = 1.00f
-        // V1.16.0: food/olfaction uses an official-annotation-derived per-OLF map.
+        // V1.17.0: food/olfaction uses an official-annotation-derived per-ORN map.
         // The gain is an environmental sensor calibration parameter only; it never
         // writes motor state or a turn command.
         private val FOOD_OLF_GAIN = 6.00f
         private val FOOD_OLF_SIGMA = 1.10f
+        private val EXPECTED_RETAINED_OLFACTORY_ORNS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORNS
+        private val EXPECTED_RETAINED_OLFACTORY_ORN_TYPES = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORN_TYPES
         private val SENSORY_GUST_GAIN = 0.85f
         private val SENSORY_MECH_GAIN = 0.70f
 
@@ -193,7 +195,7 @@ class MainActivity : Activity() {
         private val V_REST = -0.72f
         private val V_THRESHOLD = -0.50f
         private val V_RESET = -0.84f
-        // V1.16.2: keep the intended 20 ms membrane time constant but integrate
+        // V1.16.2+: keep the intended 20 ms membrane time constant but integrate
         // the leak analytically. The former Euler term used 50 s^-1 with dt=20 ms,
         // making (1 - tau^-1*dt) = 0 and erasing all subthreshold membrane memory
         // at every neural tick. This change affects only numerical integration; it
@@ -820,10 +822,13 @@ class MainActivity : Activity() {
                 if (header != expectedHeader) throw IllegalStateException("OLFMAP cabecera inesperada")
                 reader.readLines()
             }
-            if (parsed.size != 45) {
-                throw IllegalStateException("OLFMAP filas=${parsed.size} esperado=45")
+            if (parsed.size != EXPECTED_RETAINED_OLFACTORY_ORNS) {
+                throw IllegalStateException(
+                    "OLFMAP filas=${parsed.size} esperado=$EXPECTED_RETAINED_OLFACTORY_ORNS"
+                )
             }
             val seen = HashSet<Long>(parsed.size * 2)
+            val types = HashSet<String>(EXPECTED_RETAINED_OLFACTORY_ORN_TYPES * 2)
             val indices = IntArray(parsed.size)
             for ((rowNo, line) in parsed.withIndex()) {
                 val c = line.split('\t')
@@ -832,6 +837,7 @@ class MainActivity : Activity() {
                 val bid = c[1].toLong()
                 val side = c[2].toInt()
                 val type = c[4]
+                types.add(type)
                 val clazz = c[5]
                 val superclass = c[6]
                 val nt = c[7]
@@ -842,8 +848,15 @@ class MainActivity : Activity() {
                 if (!type.startsWith("ORN_")) throw IllegalStateException("OLFMAP no-ORN bodyId=$bid type=$type")
                 if (clazz != "olfactory") throw IllegalStateException("OLFMAP class no olfactory bodyId=$bid class=$clazz")
                 if (superclass != "cb_sensory") throw IllegalStateException("OLFMAP superclass inesperada bodyId=$bid superclass=$superclass")
-                if (c[13] != "AN") throw IllegalStateException("OLFMAP entryNerve inesperado bodyId=$bid entryNerve=${c[13]}")
-                if (nt.lowercase() != "acetylcholine") throw IllegalStateException("OLFMAP NT inesperado bodyId=$bid nt=$nt")
+                val entryNerve = c[13].uppercase()
+                if (entryNerve != "AN" && entryNerve != "MXLBN") {
+                    throw IllegalStateException(
+                        "OLFMAP entryNerve inesperado bodyId=$bid entryNerve=${c[13]}"
+                    )
+                }
+                if (nt.lowercase() != "acetylcholine") {
+                    throw IllegalStateException("OLFMAP NT inesperado bodyId=$bid nt=$nt")
+                }
                 indices[rowNo] = idx
                 olfactorySide[idx] = side.toByte()
             }
@@ -855,8 +868,18 @@ class MainActivity : Activity() {
             val left = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == -1 }
             val right = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == 1 }
             val unknown = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == 0 }
-            if (left != 12 || right != 27 || unknown != 6) {
-                throw IllegalStateException("OLFMAP lateralidad L=$left R=$right U=$unknown esperado L=12 R=27 U=6")
+            if (left + right + unknown != EXPECTED_RETAINED_OLFACTORY_ORNS) {
+                throw IllegalStateException(
+                    "OLFMAP lateralidad inconsistente L=$left R=$right U=$unknown total=$EXPECTED_RETAINED_OLFACTORY_ORNS"
+                )
+            }
+            if (left == 0 || right == 0) {
+                throw IllegalStateException("OLFMAP debe conservar evidencia bilateral: L=$left R=$right U=$unknown")
+            }
+            if (types.size != EXPECTED_RETAINED_OLFACTORY_ORN_TYPES) {
+                throw IllegalStateException(
+                    "OLFMAP tipos ORN=${types.size} esperado=$EXPECTED_RETAINED_OLFACTORY_ORN_TYPES"
+                )
             }
         }
 
@@ -2335,7 +2358,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.16.2 · FOOD / OLFACTORY CLEAN", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.17.0 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(8.4f)

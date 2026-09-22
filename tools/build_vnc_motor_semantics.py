@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build the V1.15.2 VNC motor semantics layer from official MaleCNS annotations.
+"""Build the V1.17.0 VNC motor semantics layer from official MaleCNS annotations.
 
-This script never rewrites FBC103. It reads the frozen FBR-10 binary only to
-recover the retained bodyIds and previous role bytes for audit comparison.
+This script never rewrites FBC103. It reads the current release FBR-10-OLF1 binary
+only to recover the retained bodyIds and previous role bytes for audit comparison.
 The official annotation Feather is the sole source of anatomical class/side/
 type/subclass/neuromere/exit-nerve data.
 """
@@ -11,12 +11,10 @@ import argparse, csv, hashlib, json, struct
 from collections import Counter
 from pathlib import Path
 import pyarrow.feather as feather
-from fbc103_reader import FBC_SHA as SHARED_FBC_SHA, read_fbc103
+from fbc103_reader import read_fbc103
 
-FBC_SHA = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
 ANN_SHA = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
 N = 16669
-MOTOR_START, MOTOR_END = 4278, 4986
 EXPECTED = {"LEG":381, "ABDOMEN":214, "WING":67, "NECK":24, "HALTERE":16, "OTHER":6}
 EXPECTED_SIDE = {"L":355, "R":353}
 ROLE_NAMES = {1:"LEG",2:"WING",3:"HALTERE",4:"NECK",5:"ABDOMEN",6:"OTHER",7:"OLD_OTHER",0:"NON_MOTOR"}
@@ -79,7 +77,8 @@ def main():
     args=ap.parse_args()
     ann_path=Path(args.annotations); fbc=Path(args.fbc103)
     if sha256(ann_path)!=ANN_SHA: raise SystemExit("official annotation SHA mismatch")
-    fbc_nodes = read_fbc103(fbc)
+    fbc_nodes = read_fbc103(fbc, expected_sha=None)
+    actual_fbc_sha = sha256(fbc)
     body = [r["bodyId"] for r in fbc_nodes]
     old_role = [r["role"] for r in fbc_nodes]
     old_side = [r["side"] for r in fbc_nodes]
@@ -137,8 +136,8 @@ def main():
     with out.open('w',newline='',encoding='utf-8') as f:
         w=csv.DictWriter(f,fieldnames=list(rows[0]),delimiter='\t',lineterminator='\n'); w.writeheader(); w.writerows(rows)
     report={
-        'version':'1.15.2','status':'PASS','source':'MaleCNS v1.0 official body annotations',
-        'annotation_sha256':ANN_SHA,'fbc103_sha256':FBC_SHA,'fbc103_modified':False,
+        'version':'1.17.0','status':'PASS','source':'MaleCNS v1.0 official body annotations',
+        'annotation_sha256':ANN_SHA,'fbc103_sha256':actual_fbc_sha,'fbc103_modified':False,
         'neurons_fbr10':N,'vnc_motor_rows':len(rows),'counts':dict(counts),'sides':dict(sides),
         'functional_tags':dict(Counter(x['functionalTag'] for x in rows)),
         'raw_official_class_census':dict(raw_class_counts),

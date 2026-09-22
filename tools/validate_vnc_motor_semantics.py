@@ -10,11 +10,10 @@ import argparse, csv, hashlib, json, struct
 from collections import Counter
 from pathlib import Path
 import pyarrow.feather as feather
-from fbc103_reader import FBC_SHA as SHARED_FBC_SHA, read_fbc103
+from fbc103_reader import read_fbc103
 
-FBC_SHA="bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
 ANN_SHA="2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
-N=16669; MOTOR_START=4278; MOTOR_END=4986
+N=16669
 EXPECTED={"LEG":381,"ABDOMEN":214,"WING":67,"NECK":24,"HALTERE":16,"OTHER":6}
 EXPECTED_SIDE={"L":355,"R":353}
 SUBCLASS_TO_CLASS={"fl":"LEG","ml":"LEG","hl":"LEG","wm":"WING","nm":"NECK","hm":"HALTERE","ad":"ABDOMEN","xm":"OTHER"}
@@ -48,7 +47,8 @@ def main():
     a=ap.parse_args()
 
     assert sha(a.annotations)==ANN_SHA, "annotation SHA mismatch"
-    fbc_nodes = read_fbc103(Path(a.fbc103))
+    fbc_nodes = read_fbc103(Path(a.fbc103), expected_sha=None)
+    actual_fbc_sha = sha(Path(a.fbc103))
     ids = [r["bodyId"] for r in fbc_nodes]
     old = [r["role"] for r in fbc_nodes]
     retained=set(ids)
@@ -111,18 +111,18 @@ def main():
     report=json.loads(Path(a.report).read_text())
     assert report["status"]=="PASS"
     assert report["annotation_sha256"]==ANN_SHA
-    assert report["fbc103_sha256"]==FBC_SHA
+    assert report["fbc103_sha256"]==actual_fbc_sha
     assert report["vnc_motor_rows"]==708
     assert report["counts"]==dict(counts)
     assert report["sides"]==dict(sides)
     assert report["fbc103_modified"] is False
-    assert sha(a.fbc103)==FBC_SHA
+    assert sha(a.fbc103)==actual_fbc_sha
 
     print("VNC-01 708/708 official motor set: PASS")
     print("VNC-02 355L/353R: PASS")
     print("VNC-03 anatomical census: PASS")
     print("VNC-04 official row-by-row semantic match: PASS")
-    print("VNC-05 FBC103 SHA unchanged: PASS")
+    print("VNC-05 current FBC103 SHA matches semantic report: PASS")
     print("VNC-06 FBD104 untouched by this layer: PASS (build-level invariant)")
     print("class completions:", report.get("class_completion_bodyIds", []))
     print("reclassified from frozen role byte:", report["reclassified_from_old_fbc103"])
