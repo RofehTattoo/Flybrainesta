@@ -117,8 +117,11 @@ class MainActivity : Activity() {
         // layer. They are model parameters, not an adaptive controller.
         private val SENSORY_VIS_GAIN = 0.70f
         private val SENSORY_OLF_GAIN = 1.00f
-        // V1.15.5 FOOD-TUNE-B: olfactory source gain increased to 6.00; distance kernel unchanged.
+        // V1.16.0: food/olfaction uses an official-annotation-derived per-OLF map.
+        // The gain is an environmental sensor calibration parameter only; it never
+        // writes motor state or a turn command.
         private val FOOD_OLF_GAIN = 6.00f
+        private val FOOD_OLF_SIGMA = 1.10f
         private val SENSORY_GUST_GAIN = 0.85f
         private val SENSORY_MECH_GAIN = 0.70f
 
@@ -162,6 +165,9 @@ class MainActivity : Activity() {
         private val descendingRole = ByteArray(N)
         // Real MaleCNS body IDs for the selected neurons. Presentation/diagnostic only.
         private val bodyId = LongArray(N)
+        // Official-annotation-derived olfactory side: -1=L, +1=R, 0=bilateral/unknown.
+        // This is sensory input metadata, not a behavioral command.
+        private val olfactorySide = ByteArray(N)
         private val topDnIds = IntArray(6) { -1 }
         private val topDnHz = FloatArray(6)
         private val topDnDelta = FloatArray(6)
@@ -342,6 +348,12 @@ class MainActivity : Activity() {
         private var lightDrive = 0f
         private var dangerDrive = 0f
         private var foodDirectionalBias = 0f
+        private var olfInputLeftCache = 0f
+        private var olfInputCenterCache = 0f
+        private var olfInputRightCache = 0f
+        private var olfInputFrontCache = 0f
+        private var olfInputRearCache = 0f
+        private val olfProjectionMode = "INDEX-CYCLIC"
         private var lightDirectionalBias = 0f
         private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
@@ -559,6 +571,11 @@ class MainActivity : Activity() {
             lightDrive = 0f
             dangerDrive = 0f
             foodDirectionalBias = 0f
+            olfInputLeftCache = 0f
+            olfInputCenterCache = 0f
+            olfInputRightCache = 0f
+            olfInputFrontCache = 0f
+            olfInputRearCache = 0f
             lightDirectionalBias = 0f
             dangerDirectionalBias = 0f
             dangerLoom = 0f
@@ -724,6 +741,69 @@ class MainActivity : Activity() {
             }
         }
 
+        private fun loadOlfactoryInputMap() {
+            val parsed = assets.open("olfactory_input_map.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
+                val header = reader.readLine() ?: throw IllegalStateException("OLFMAP cabecera ausente")
+                val expectedHeader = "index\tbodyId\tsideCode\tsideSource\ttype\tclass\tsubclass\tinstance\treceptorType\trootSide\tsomaSide\tentryNerve"
+                if (header != expectedHeader) throw IllegalStateException("OLFMAP cabecera inesperada")
+                reader.readLines()
+            }
+            if (parsed.size != (OLF_END - OLF_START)) {
+                throw IllegalStateException("OLFMAP filas=${parsed.size} esperado=${OLF_END - OLF_START}")
+            }
+            val seen = HashSet<Long>(parsed.size * 2)
+            for (line in parsed) {
+                val c = line.split('\t')
+                if (c.size != 12) throw IllegalStateException("OLFMAP esquema inesperado: ${c.size} columnas")
+                val idx = c[0].toInt()
+                val bid = c[1].toLong()
+                val side = c[2].toInt()
+                if (idx !in OLF_START until OLF_END) throw IllegalStateException("OLFMAP index fuera de OLF: $idx")
+                if (bodyId[idx] != bid) throw IllegalStateException("OLFMAP bodyId mismatch idx=$idx expected=${bodyId[idx]} got=$bid")
+                if (side !in -1..1) throw IllegalStateException("OLFMAP sideCode invalido bodyId=$bid")
+                if (!seen.add(bid)) throw IllegalStateException("OLFMAP bodyId duplicado=$bid")
+                olfactorySide[idx] = side.toByte()
+            }
+            if (seen.size != parsed.size) throw IllegalStateException("OLFMAP bodyId duplicado")
+        }
+
+        private fun antennaOdorConcentration(foodX: Float, foodY: Float, side: Int): Float {
+            // Two virtual antenna sampling points are a physical sensor-interface
+            // model only. They are not a neural shortcut: the resulting current is
+            // injected only into the retained OLF neurons and must propagate through
+            // FBR-10 to affect behavior.
+            val forward = .018f
+            val lateral = .018f * side.toFloat()
+            val ca = cos(heading)
+            val sa = sin(heading)
+            val ax = flyX + ca * forward - sa * lateral
+            val ay = flyY + sa * forward + ca * lateral
+            val d = hypot(foodX - ax, foodY - ay)
+            return gaussian(d, FOOD_OLF_SIGMA)
+        }
+
+        private fun injectOlfactoryPopulation(enabled: Boolean, sx: Float, sy: Float, gain: Float) {
+            if (!enabled) return
+            val left = antennaOdorConcentration(sx, sy, -1)
+            val right = antennaOdorConcentration(sx, sy, 1)
+            val bilateral = (left + right) * .5f
+            for (i in OLF_START until OLF_END) {
+                val c = when (olfactorySide[i].toInt()) {
+                    -1 -> left
+                    1 -> right
+                    else -> bilateral
+                }
+                sensoryCurrent[i] += c * gain
+            }
+            olfInputLeftCache = left * gain
+            olfInputCenterCache = bilateral * gain
+            olfInputRightCache = right * gain
+            olfInputFrontCache = 0f
+            olfInputRearCache = 0f
+            foodDirectionalBias = ((left - right) / (left + right + .001f)).coerceIn(-1f, 1f)
+            foodDrive = (bilateral * gain).coerceIn(0f, 1f)
+        }
+
         private fun loadVncMotorSemantics() {
             val parsed = assets.open("vnc_motor_semantics.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
                 val header = reader.readLine() ?: throw IllegalStateException("VNCSEM cabecera ausente")
@@ -826,6 +906,7 @@ class MainActivity : Activity() {
                     }
                 }
 
+                loadOlfactoryInputMap()
                 loadVncMotorSemantics()
 
                 // Build fixed VNC motor-role denominators from the official-annotation-derived VNC semantics layer.
@@ -1175,20 +1256,6 @@ class MainActivity : Activity() {
         // Olfactory concentration is primarily scalar; a small bilateral asymmetry
         // provides a plausible route for odor-guided steering without encoding a
         // hard-coded turn command.
-        private fun encodeOdor(enabled: Boolean, sx: Float, sy: Float, gain: Float): FloatArray {
-            if (!enabled) return FloatArray(12)
-            val dx = sx - flyX
-            val dy = sy - flyY
-            val d = hypot(dx, dy)
-            val concentration = gaussian(d, 1.10f)
-            val rel = atan2(sin(atan2(dy, dx) - heading), cos(atan2(dy, dx) - heading))
-            val bilateral = (sin(rel) * .28f).coerceIn(-.28f, .28f)
-            val left = (concentration * (1f + bilateral) * gain).coerceIn(0f, 3f)
-            val right = (concentration * (1f - bilateral) * gain).coerceIn(0f, 3f)
-            return floatArrayOf(left, concentration * gain, right, concentration * .65f * gain, concentration * .35f * gain,
-                left, concentration * gain, right, concentration * .65f * gain, concentration * .35f * gain, concentration * gain, 0f)
-        }
-
         private fun encodeTaste(enabled: Boolean, sx: Float, sy: Float, gain: Float): FloatArray {
             if (!enabled) return FloatArray(12)
             val d = hypot(sx - flyX, sy - flyY)
@@ -1214,7 +1281,6 @@ class MainActivity : Activity() {
             // External sensory drive is a per-step current, not an accumulating state.
             // Clear it before encoding the current environmental state.
             java.util.Arrays.fill(sensoryCurrent, 0f)
-            val foodPattern = encodeOdor(foodOn, foodX, foodY, FOOD_OLF_GAIN * (1f - satiety * .45f))
             val tastePattern = encodeTaste(foodOn, foodX, foodY, 2.35f * (1f - satiety * .35f))
             val lightPattern = encodeStimulus(lightOn, lightX, lightY, 1.55f)
             val dangerPattern = encodeStimulus(dangerOn, dangerX, dangerY, 2.15f)
@@ -1234,14 +1300,13 @@ class MainActivity : Activity() {
             }
 
             // Environmental signals enter only measured sensory populations.
-            // Direction is represented by left/centre/right/front/rear activity.
+            // Olfaction is mapped neuron-by-neuron from official MaleCNS annotations;
+            // there is no index-cyclic projection or synthetic micro-pattern.
             injectSensoryPopulation(VIS_START, VIS_END, combinedVisual, SENSORY_VIS_GAIN)
-            injectSensoryPopulation(OLF_START, OLF_END, foodPattern, SENSORY_OLF_GAIN)
+            injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_GAIN * (1f - satiety * .45f))
             injectSensoryPopulation(GUST_START, GUST_END, tastePattern, SENSORY_GUST_GAIN)
             injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN)
 
-            foodDirectionalBias = ((foodPattern[0] - foodPattern[2]) /
-                (foodPattern[0] + foodPattern[2] + .001f)).coerceIn(-1f, 1f)
             lightDirectionalBias = ((lightPattern[0] - lightPattern[2]) /
                 (lightPattern[0] + lightPattern[2] + .001f)).coerceIn(-1f, 1f)
             dangerDirectionalBias = ((dangerPattern[0] - dangerPattern[2]) /
@@ -1257,7 +1322,6 @@ class MainActivity : Activity() {
                 sensoryCurrent[i] += wallSignal * .055f
             }
 
-            foodDrive = foodPattern[10].coerceIn(0f, 1f)
             lightDrive = combinedVisual[10].coerceIn(0f, 1f)
             dangerDrive = (dangerPattern[10] * .35f + visualThreatPattern[10] * .65f).coerceIn(0f, 1f)
 
@@ -1341,7 +1405,6 @@ class MainActivity : Activity() {
             haltGateDisplay = haltEvidenceDisplay
 
             val threatDemand = dangerDrive.coerceIn(0f, 1f)
-            val feedingDemand = (foodDrive * .55f + populationRate(GUST_START, GUST_END) * .45f).coerceIn(0f, 1f)
             val wakeDemand = max(threatDemand, lightDrive * .35f)
 
             // V1.12 HOMEOSTAT: this is a diagnostic/internal-state model of the
@@ -1670,7 +1733,7 @@ class MainActivity : Activity() {
             // enough: approach also needs an olfactory/gustatory target signal.
             val approachNeural = (dnForward * .45f + forwardRouteActivity * .35f +
                 forwardMotor * .20f).coerceIn(0f, 1f)
-            val approachContext = (foodContext * (.65f + .35f * abs(foodDirectionalBias))).coerceIn(0f, 1f)
+            val approachContext = foodContext
             val approach = (approachNeural * approachContext *
                 (1f - threatContext * .90f)).coerceIn(0f, 1f)
 
@@ -2154,7 +2217,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.15.7 · NEURAL OBSERVATORY", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.16.0 · FOOD / OLFACTORY CLEAN", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(8.4f)
@@ -2267,10 +2330,11 @@ class MainActivity : Activity() {
             val topMotorText = if (topMotorIds[0] >= 0) "${bodyId[topMotorIds[0]]} ${motorRoleLabel(motorRole[topMotorIds[0]].toInt())} ${"%.1f".format(topMotorHz[0])}Hz" else "—"
             c.drawText("TOP DN   $topDnText", rightX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("TOP MN  $topMotorText", rightX + dp(9f), bodyY + dp(43f), paint)
-            c.drawText("WALL ${"%.3f".format(wallDistanceCache)} / ${"%.2f".format(wallSignalCache)}   MECH ${(mechanosensoryRateDisplay * 100).toInt()}%", rightX + dp(9f), bodyY + dp(57f), paint)
+            c.drawText("OLF L/C/R ${"%.2f".format(olfInputLeftCache)}/${"%.2f".format(olfInputCenterCache)}/${"%.2f".format(olfInputRightCache)}   bias ${"%+.3f".format(foodDirectionalBias)}", rightX + dp(9f), bodyY + dp(57f), paint)
+            c.drawText("WALL ${"%.3f".format(wallDistanceCache)} / ${"%.2f".format(wallSignalCache)}   MECH ${(mechanosensoryRateDisplay * 100).toInt()}%   OLF ANATOMICAL-MAPPED", rightX + dp(9f), bodyY + dp(71f), paint)
 
             // Larger neural map: the visual center of the final interface.
-            val mapTop = bodyY + cardH + dp(8f)
+            val mapTop = bodyY + cardH + dp(18f)
             val mapBottom = height - dp(14f)
             drawBrainMap(c, dp(14f), mapTop, width - dp(28f), max(dp(120f), mapBottom - mapTop))
         }

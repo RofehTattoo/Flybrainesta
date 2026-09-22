@@ -1,4 +1,4 @@
-name: Build FlyBrain APK V1.15.7-UI · frozen FBR-10 + FBD104 + VNC semantics
+name: Build FlyBrain APK V1.16.0-FOOD-OLFACTORY · frozen FBR-10 + FBD104 + VNC semantics
 
 on:
   workflow_dispatch:
@@ -43,6 +43,19 @@ jobs:
           curl -fL --retry 4 --retry-delay 2 "$URL" -o build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather
           echo '2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2  build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather' | sha256sum -c -
           echo 'OFFICIAL ANNOTATIONS: OK'
+
+      - name: Build and validate anatomical olfactory input map
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/build_olfactory_input_map.py tools/test_olfactory_input_map.py
+          python tools/build_olfactory_input_map.py \
+            --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --output app/src/main/assets/olfactory_input_map.tsv \
+            --report build/OLF_INPUT_MAP_REPORT.json
+          cp build/OLF_INPUT_MAP_REPORT.json app/src/main/res/raw/olfactory_input_map_report.json
+          python tools/test_olfactory_input_map.py
+          test -s app/src/main/assets/olfactory_input_map.tsv
 
       - name: Build and validate V1.15.2 VNC semantics
         run: |
@@ -91,19 +104,20 @@ jobs:
           python tools/validate_frozen_connectome.py
           grep -Fq 'bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60' FBR10_CONNECTOME_FINAL_AUDIT.md
 
-      - name: Validate V1.15.7-UI identity and source invariants
+      - name: Validate V1.16.0-FOOD-OLFACTORY identity and source invariants
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 126' app/build.gradle.kts
-          grep -Fq 'versionName = "1.15.7"' app/build.gradle.kts
-          grep -Fq 'APP_VERSION = "1.15.7"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
-          grep -Fq 'APP_VERSION_CODE = 126' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'versionCode = 128' app/build.gradle.kts
+          grep -Fq 'versionName = "1.16.0"' app/build.gradle.kts
+          grep -Fq 'APP_VERSION = "1.16.0"' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
+          grep -Fq 'APP_VERSION_CODE = 128' app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt
           grep -Fq 'FBD104' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'loadVncMotorSemantics()' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'vnc_motor_semantics.tsv' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'MOTOR_FUNCTION_JUMP' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'FOOD_OLF_GAIN = 6.00f' app/src/main/java/com/example/flybrain/MainActivity.kt
-          grep -Fq 'val concentration = gaussian(d, 1.10f)' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'FOOD_OLF_SIGMA = 1.10f' app/src/main/java/com/example/flybrain/MainActivity.kt
+          grep -Fq 'injectOlfactoryPopulation' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'drawNeuralDiagnosticCard' app/src/main/java/com/example/flybrain/MainActivity.kt
           ! grep -Fq 'DIAGNÓSTICO NEURONAL · SOLO LECTURA' app/src/main/java/com/example/flybrain/MainActivity.kt
           grep -Fq 'NEURAL OBSERVATORY' app/src/main/java/com/example/flybrain/MainActivity.kt
@@ -146,10 +160,10 @@ jobs:
           print('FBD104: OK')
           PY
 
-      - name: Compile APK V1.15.7-UI
+      - name: Compile APK V1.16.0-FOOD-OLFACTORY
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK V1.15.7-UI
+      - name: Verify APK V1.16.0-FOOD-OLFACTORY
         run: |
           set -euo pipefail
           APK='app/build/outputs/apk/debug/app-debug.apk'
@@ -157,8 +171,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           BADGING="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK")"
-          echo "$BADGING" | grep -Fq "versionCode='126'"
-          echo "$BADGING" | grep -Fq "versionName='1.15.7'"
+          echo "$BADGING" | grep -Fq "versionCode='127'"
+          echo "$BADGING" | grep -Fq "versionName='1.15.8'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
@@ -168,7 +182,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlyBrain-V1.15.7-UI-APK
+          name: FlyBrain-V1.16.0-FOOD-OLFACTORY-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

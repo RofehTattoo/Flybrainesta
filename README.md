@@ -1,4 +1,4 @@
-**Current development release:** V1.15.5-FOOD-TUNE-B / versionCode 123. Single-parameter food experiment: olfactory source gain 2.25 → 3.00; FBC103/FBD104/VNC semantics remain frozen.
+**Current development release:** V1.16.0-FOOD-OLFACTORY-CLEAN / versionCode 129. Anatomical OLF input map derived from official MaleCNS v1.0 annotations; FBC103/FBD104/VNC semantics remain frozen.
 
 # FlyBrain V1.15.2 — VNC Motor Semantics
 
