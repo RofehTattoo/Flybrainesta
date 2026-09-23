@@ -81,6 +81,17 @@ jobs:
           # E: cualquier type que contenga ORN
           mask_E = m_type_orn_any
 
+          # Official ORN census is defined by anatomy (cb_sensory + olfactory),
+          # not by the presence of a typed ORN_* label. The four official
+          # source ORNs below intentionally have NULL `type`.
+          official_orn_mask = mask_B
+          typed_orn_mask = mask_A
+          official_orn_count = int(official_orn_mask.sum())
+          typed_orn_count = int(typed_orn_mask.sum())
+          untyped_orn_mask = official_orn_mask & ~typed_orn_mask
+          untyped_orn_ids = sorted(a.loc[untyped_orn_mask, 'bodyId'].astype(int).tolist())
+          expected_untyped_orn_ids = [242812, 242908, 488209, 956041]
+
           # ------------------------------------------------------------
           # CENSOS
           # ------------------------------------------------------------
@@ -233,10 +244,29 @@ jobs:
           print('END ORN CENSUS DIAGNOSTIC')
           print('============================================================')
 
-          if len(a.loc[mask_A]) == 2639:
-              print('RESULT: BASE ORN CENSUS = 2639 PASS')
-          else:
-              print(f'RESULT: BASE ORN CENSUS = {int(mask_A.sum())} / EXPECTED 2639')
+          print('')
+          print('============================================================')
+          print('ORN CENSUS VALIDATION')
+          print('============================================================')
+          print(f'Official anatomical ORN census (cb_sensory + olfactory): {official_orn_count}')
+          print(f'Typed ORN_* census: {typed_orn_count}')
+          print(f'Official untyped ORN count: {len(untyped_orn_ids)}')
+          print(f'Official untyped ORN bodyIds: {untyped_orn_ids}')
+
+          assert official_orn_count == 2639, (
+              f'Official anatomical ORN census drift: {official_orn_count} / expected 2639'
+          )
+          assert typed_orn_count == 2635, (
+              f'Typed ORN_* census drift: {typed_orn_count} / expected 2635'
+          )
+          assert untyped_orn_ids == expected_untyped_orn_ids, (
+              f'Unexpected untyped ORN set: {untyped_orn_ids}'
+          )
+          assert all(a.loc[a['bodyId'].eq(body_id), 'class'].map(norm).eq('olfactory').all()
+                     for body_id in expected_untyped_orn_ids), (
+              'One or more protected untyped ORNs is not annotated as olfactory'
+          )
+          print('RESULT: ORN CENSUS = PASS')
           PY
 
       - name: Download exact official MaleCNS neurotransmitters
@@ -406,18 +436,58 @@ jobs:
                   print(rows.to_string(index=False))
 
           print_section('DIAGNOSTIC SUMMARY')
-          print('Expected official ORN census used by FBR-10 selector: 2639')
-          print(f'Typed ORN_* census: {int(mask_A.sum())}')
-          print(f'Official untyped ORN exception count: {sum(a["bodyId"].isin([242812, 242908, 488209, 956041]))}')
-          print('The reducer explicitly retains these four source ORNs without assigning a synthetic type label.')
-          print('')
-          print('The four candidates are:')
+
+          # Recompute the official anatomical ORN census locally. This step
+          # is intentionally self-contained and must not depend on variables
+          # created by the previous census diagnostic step.
+          sc = annotations['superclass'].map(norm).str.lower()
+          cl = annotations['class'].map(norm).str.lower()
+          typ = annotations['type'].map(norm).str.upper()
+
+          official_orn_mask = sc.eq('cb_sensory') & cl.eq('olfactory')
+          typed_orn_mask = official_orn_mask & typ.str.startswith('ORN_')
+          untyped_orn_mask = official_orn_mask & ~typed_orn_mask
+
+          official_orn_count = int(official_orn_mask.sum())
+          typed_orn_count = int(typed_orn_mask.sum())
+          untyped_orn_ids = sorted(
+              annotations.loc[untyped_orn_mask, 'bodyId'].astype(int).tolist()
+          )
+
+          print(f'Expected official ORN census: 2639')
+          print(f'Official anatomical ORN census: {official_orn_count}')
+          print(f'Typed ORN_* census: {typed_orn_count}')
+          print(f'Official untyped ORN exception count: {len(untyped_orn_ids)}')
+          print(f'Official untyped ORN bodyIds: {untyped_orn_ids}')
+
+          assert official_orn_count == 2639, (
+              f'Official anatomical ORN census drift: {official_orn_count} / expected 2639'
+          )
+          assert typed_orn_count == 2635, (
+              f'Typed ORN_* census drift: {typed_orn_count} / expected 2635'
+          )
+          assert untyped_orn_ids == sorted(TARGET_IDS), (
+              f'Unexpected untyped ORN set: {untyped_orn_ids}'
+          )
+
           for body_id in TARGET_IDS:
-              print(f'  {body_id}')
-          print('')
+              rows = annotations.loc[annotations['bodyId'].eq(body_id)]
+              assert len(rows) == 1, f'Expected exactly one annotation row for {body_id}'
+              row = rows.iloc[0]
+              assert norm(row['class']).lower() == 'olfactory', (
+                  f'Protected ORN {body_id} is not class=olfactory'
+              )
+              assert norm(row['superclass']).lower() == 'cb_sensory', (
+                  f'Protected ORN {body_id} is not superclass=cb_sensory'
+              )
+              assert norm(row['entryNerve']).upper() in {'AN', 'MXLBN'}, (
+                  f'Protected ORN {body_id} has unexpected entryNerve={norm(row["entryNerve"])}'
+              )
+
+          print('The reducer explicitly retains these four source ORNs without assigning a synthetic type label.')
           print('No source data has been modified.')
           print('This step is READ-ONLY.')
-          print('')
+          print('RESULT: FOUR UNTYPE ORNs = PASS')
           print('END FOUR MISSING ORN DIAGNOSTIC')
           PY
 
