@@ -32,7 +32,7 @@ body = MAIN[body_start:body_end]
 assert 'foodDirectionalBias' not in body
 
 # The builder is source-backed and must cross both annotation and NT provenance.
-for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 264', 'EXPECTED_ORN_TYPES = 54', 'neurotransmitters']:
+for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 264', 'EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54', 'neurotransmitters']:
     assert token in BUILDER, token
 
 assert 'APP_VERSION = "1.17.0"' in META

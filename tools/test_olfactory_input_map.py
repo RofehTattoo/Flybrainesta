@@ -17,14 +17,20 @@ assert 'encodeOdor' not in MAIN
 assert 'foodDirectionalBias' not in MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeuralSimulation')]
 
 assert 'EXPECTED_ORNS = 264' in BUILDER
-assert 'EXPECTED_ORN_TYPES = 54' in BUILDER
+assert 'EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54' in BUILDER
+assert 'EXPECTED_ORN_TYPES' not in BUILDER
+assert 'olfactory_orn_type_entry_nerve_pairs_retained' in BUILDER
+assert 'len(retained_type_entry_nerve_pairs) != EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS' in BUILDER
 assert 'entryNerve' in MAIN and 'MXLBN' in MAIN
 assert 'sc == "cb_sensory"' in BUILDER
 assert 'cl == "olfactory"' in BUILDER
 assert 'typ.startswith("ORN_")' in BUILDER
+assert 'UNTYPED_ORN_BODY_IDS' in BUILDER
+assert all(str(x) in BUILDER for x in (242812, 242908, 488209, 956041))
 assert 'nt.lower() != "acetylcholine"' in BUILDER and 'entryNerve' in BUILDER
 assert 'entryNerve' in BUILDER  # ORN provenance/selection only
-assert 'RETAINED_OLFACTORY_ORN_TYPES = 54' in (ROOT / 'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt').read_text()
+META = (ROOT / 'app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt').read_text()
+assert 'RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = 54' in META
 side_block = BUILDER[BUILDER.index('ss = side'):BUILDER.index('out.append({', BUILDER.index('ss = side'))]
 assert 'entryNerve' not in side_block
 assert 'if ss in (-1, 1):' in side_block

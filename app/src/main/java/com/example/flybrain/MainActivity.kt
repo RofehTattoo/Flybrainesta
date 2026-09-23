@@ -181,7 +181,7 @@ class MainActivity : Activity() {
         private val FOOD_OLF_GAIN = 6.00f
         private val FOOD_OLF_SIGMA = 1.10f
         private val EXPECTED_RETAINED_OLFACTORY_ORNS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORNS
-        private val EXPECTED_RETAINED_OLFACTORY_ORN_TYPES = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORN_TYPES
+        private val EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS
         private val SENSORY_GUST_GAIN = 0.85f
         private val SENSORY_MECH_GAIN = 0.70f
 
@@ -828,7 +828,10 @@ class MainActivity : Activity() {
                 )
             }
             val seen = HashSet<Long>(parsed.size * 2)
-            val types = HashSet<String>(EXPECTED_RETAINED_OLFACTORY_ORN_TYPES * 2)
+            val typeEntryNervePairs = HashSet<String>(
+                EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS * 2
+            )
+            val officialUntypedOrnIds = setOf(242812L, 242908L, 488209L, 956041L)
             val indices = IntArray(parsed.size)
             for ((rowNo, line) in parsed.withIndex()) {
                 val c = line.split('\t')
@@ -837,7 +840,6 @@ class MainActivity : Activity() {
                 val bid = c[1].toLong()
                 val side = c[2].toInt()
                 val type = c[4]
-                types.add(type)
                 val clazz = c[5]
                 val superclass = c[6]
                 val nt = c[7]
@@ -845,7 +847,15 @@ class MainActivity : Activity() {
                 if (bodyId[idx] != bid) throw IllegalStateException("OLFMAP bodyId mismatch idx=$idx expected=${bodyId[idx]} got=$bid")
                 if (side !in -1..1) throw IllegalStateException("OLFMAP sideCode invalido bodyId=$bid")
                 if (!seen.add(bid)) throw IllegalStateException("OLFMAP bodyId duplicado=$bid")
-                if (!type.startsWith("ORN_")) throw IllegalStateException("OLFMAP no-ORN bodyId=$bid type=$type")
+                if (type.isBlank()) {
+                    if (bid !in officialUntypedOrnIds) {
+                        throw IllegalStateException(
+                            "OLFMAP untyped ORN is not an official MaleCNS exception bodyId=$bid"
+                        )
+                    }
+                } else if (!type.startsWith("ORN_")) {
+                    throw IllegalStateException("OLFMAP no-ORN bodyId=$bid type=$type")
+                }
                 if (clazz != "olfactory") throw IllegalStateException("OLFMAP class no olfactory bodyId=$bid class=$clazz")
                 if (superclass != "cb_sensory") throw IllegalStateException("OLFMAP superclass inesperada bodyId=$bid superclass=$superclass")
                 val entryNerve = c[13].uppercase()
@@ -853,6 +863,9 @@ class MainActivity : Activity() {
                     throw IllegalStateException(
                         "OLFMAP entryNerve inesperado bodyId=$bid entryNerve=${c[13]}"
                     )
+                }
+                if (type.isNotBlank()) {
+                    typeEntryNervePairs.add("$type|$entryNerve")
                 }
                 if (nt.lowercase() != "acetylcholine") {
                     throw IllegalStateException("OLFMAP NT inesperado bodyId=$bid nt=$nt")
@@ -876,9 +889,10 @@ class MainActivity : Activity() {
             if (left == 0 || right == 0) {
                 throw IllegalStateException("OLFMAP debe conservar evidencia bilateral: L=$left R=$right U=$unknown")
             }
-            if (types.size != EXPECTED_RETAINED_OLFACTORY_ORN_TYPES) {
+            if (typeEntryNervePairs.size != EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS) {
                 throw IllegalStateException(
-                    "OLFMAP tipos ORN=${types.size} esperado=$EXPECTED_RETAINED_OLFACTORY_ORN_TYPES"
+                    "OLFMAP combinaciones type+entryNerve=${typeEntryNervePairs.size} " +
+                        "esperado=$EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS"
                 )
             }
         }

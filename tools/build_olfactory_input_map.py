@@ -3,7 +3,7 @@
 
 The frozen FBC103 index ranges are not used to decide what is olfactory.  The
 olfactory population is derived from the actual retained neurons whose official
-MaleCNS annotations say superclass=cb_sensory, class=olfactory and type=ORN_*.
+MaleCNS annotations say superclass=cb_sensory, class=olfactory and either type=ORN_* or one of the four official untyped ORN bodyIds.
 The neurotransmitter table is cross-checked as an additional provenance guard.
 No neuron or edge is created or modified by this tool.
 """
@@ -16,7 +16,8 @@ from fbc103_reader import read_fbc103, sha256
 ANN_SHA = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
 NT_SHA = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
 EXPECTED_ORNS = 264
-EXPECTED_ORN_TYPES = 54
+EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54
+UNTYPED_ORN_BODY_IDS = frozenset({242812, 242908, 488209, 956041})
 
 
 def clean(v):
@@ -33,6 +34,27 @@ def side(v):
     if x in {"R", "RIGHT"}: return 1
     if x in {"B", "BILATERAL", "LR", "L/R", "R/L"}: return 0
     return None
+
+
+def is_olfactory_orn(r):
+    """Authoritative FBR-10-OLF1 ORN selector.
+
+    Four official MaleCNS v1.0 ORNs have a NULL `type` but are explicitly
+    annotated as cb_sensory/olfactory with AN entry nerve. Their bodyIds are
+    preserved without assigning a synthetic type.
+    """
+    bid = int(r["bodyId"])
+    sc = clean(r.get("superclass")).lower()
+    cl = clean(r.get("class")).lower()
+    typ = clean(r.get("type")).upper()
+    nerve = clean(r.get("entryNerve")).upper()
+    return (
+        sc == "cb_sensory"
+        and cl == "olfactory"
+        and nerve in {"AN", "MXLBN"}
+        and (typ.startswith("ORN_") or bid in UNTYPED_ORN_BODY_IDS)
+    )
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -55,7 +77,15 @@ def main():
     crep = json.loads(Path(args.connectome_report).read_text(encoding="utf-8"))
     if crep.get("reduction") != "FBR-10-OLF1": raise SystemExit("connectome release id mismatch")
     if crep.get("olfactory_orns_retained") != EXPECTED_ORNS: raise SystemExit("connectome ORN count mismatch")
-    if crep.get("olfactory_orn_types_retained") != EXPECTED_ORN_TYPES: raise SystemExit("connectome ORN type coverage mismatch")
+    retained_type_entry_nerve_pairs = crep.get("olfactory_orn_type_entry_nerve_pairs_retained")
+    if not isinstance(retained_type_entry_nerve_pairs, list):
+        raise SystemExit("connectome ORN type+entryNerve coverage field is missing or malformed")
+    if len(retained_type_entry_nerve_pairs) != EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS:
+        raise SystemExit(
+            "connectome ORN type+entryNerve coverage mismatch: "
+            f"{len(retained_type_entry_nerve_pairs)} != "
+            f"{EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS}"
+        )
     if crep.get("sha256") and crep.get("sha256") != actual_fbc_sha: raise SystemExit("connectome report SHA mismatch")
 
     cols = ["bodyId", "superclass", "type", "class", "subclass", "instance",
@@ -89,7 +119,7 @@ def main():
         sc = clean(r.get("superclass"))
         cl = clean(r.get("class"))
         typ = clean(r.get("type"))
-        if sc == "cb_sensory" and cl == "olfactory" and typ.startswith("ORN_") and clean(r.get("entryNerve")).upper() in {"AN", "MXLBN"}:
+        if is_olfactory_orn(r):
             nt = nt_by.get(bid, "")
             if nt.lower() != "acetylcholine":
                 raise SystemExit(f"retained ORN has unexpected consensus_nt bodyId={bid}: {nt!r}")
@@ -119,14 +149,41 @@ def main():
     if len(out) != EXPECTED_ORNS:
         raise SystemExit(f"retained real ORNs={len(out)} expected={EXPECTED_ORNS}")
 
-    type_counts = {t: sum(r["type"] == t for r in out) for t in sorted({r["type"] for r in out})}
-    if len(type_counts) != EXPECTED_ORN_TYPES:
-        raise SystemExit(f"retained ORN types={len(type_counts)} expected={EXPECTED_ORN_TYPES}")
+    type_counts = {
+        t: sum(r["type"] == t for r in out)
+        for t in sorted({r["type"] for r in out if r["type"]})
+    }
+    type_entry_nerve_pairs = {
+        (r["type"], r["entryNerve"].strip().upper())
+        for r in out
+        if r["type"]
+    }
+    untyped_ids = {r["bodyId"] for r in out if not r["type"]}
+    if not untyped_ids.issubset(UNTYPED_ORN_BODY_IDS):
+        raise SystemExit(
+            f"unexpected untyped ORN bodyIds: "
+            f"{sorted(untyped_ids - UNTYPED_ORN_BODY_IDS)}"
+        )
+    if len(type_entry_nerve_pairs) != EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS:
+        raise SystemExit(
+            "retained ORN type+entryNerve combinations="
+            f"{len(type_entry_nerve_pairs)} expected="
+            f"{EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS}"
+        )
 
     side_counts = {"L": sum(r["sideCode"] == -1 for r in out),
                    "R": sum(r["sideCode"] == 1 for r in out),
                    "U": sum(r["sideCode"] == 0 for r in out)}
-    if any(not r["type"].startswith("ORN_") or r["class"] != "olfactory" or r["superclass"] != "cb_sensory" or r["consensus_nt"].lower() != "acetylcholine" for r in out):
+    if any(
+        (
+            (r["type"] and not r["type"].startswith("ORN_"))
+            or (not r["type"] and r["bodyId"] not in UNTYPED_ORN_BODY_IDS)
+            or r["class"] != "olfactory"
+            or r["superclass"] != "cb_sensory"
+            or r["consensus_nt"].lower() != "acetylcholine"
+        )
+        for r in out
+    ):
         raise SystemExit("ORN provenance validation failed")
 
     # Guard against the historical visual block being accidentally selected.
@@ -152,6 +209,9 @@ def main():
         "historical_olf_block": {"start": 618, "end": 739, "used_for_olfactory_input": False},
         "side_counts": side_counts,
         "type_counts": type_counts,
+        "type_label_count": len(type_counts),
+        "type_entry_nerve_pair_count": len(type_entry_nerve_pairs),
+        "untyped_orn_body_ids": sorted(untyped_ids),
         "all_class_olfactory": True,
         "all_superclass_cb_sensory": True,
         "all_consensus_nt_acetylcholine": True,
