@@ -21,10 +21,16 @@ assert '~annotated["is_olfactory_orn"]' in B
 
 assert 'entryNerve' in B
 assert 'annotations[annotations["status"]' not in B
-assert 'official release contains 166,700' in B
+assert 'official release contains 166,691' in B
 assert 'len(annotated)' in B
 assert 'side_from_nerve' not in B
 assert 'sc == "ol_sensory"' not in B
+assert 'edge_weight_definition' in B
+assert 'raw positive MaleCNS contact counts' in B
+assert 'NT_SIGN' not in B
+assert 'consensus_nt' not in B
+assert 'normalized_edges' not in B
+assert 'unresolved_edges_omitted' not in B
 
 module = ast.parse(B)
 
