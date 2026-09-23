@@ -75,6 +75,11 @@ def normalized_orn_type_entry_nerve_pairs(df: pd.DataFrame) -> pd.DataFrame:
     pairs = df.loc[df["type"].notna(), ["type", "entryNerve"]].copy()
     pairs["type"] = pairs["type"].astype(str).str.strip()
     pairs["entryNerve"] = pairs["entryNerve"].astype(str).str.strip().str.upper()
+    # The four official untyped ORNs are retained with their source `type`
+    # represented as an empty string during selection. They are real ORNs, but
+    # an empty type is not a published type+entryNerve combination and must not
+    # inflate the 54-combination source/retained census.
+    pairs = pairs[pairs["type"].ne("")]
     return pairs.drop_duplicates().sort_values(["type", "entryNerve"]).reset_index(drop=True)
 
 

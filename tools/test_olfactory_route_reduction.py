@@ -101,6 +101,11 @@ assert 'orn_selection_source["type"].astype(str).str.strip().ne("")' in B
 assert 'selected_orns.loc[' in B
 assert 'selected_orns["bodyId"].isin(UNTYPED_ORN_BODY_IDS)' in B
 
+# Empty-string type values are an internal selection representation for the
+# four official untyped ORNs and must not count as published type+entryNerve
+# combinations.
+assert 'pairs = pairs[pairs["type"].ne("")]' in B
+
 # Historical visual cells must remain visual, not olfactory.
 assert ns["classify_channel"]({
     "bodyId": 3,
