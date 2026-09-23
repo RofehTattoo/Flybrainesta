@@ -442,6 +442,14 @@ jobs:
           test -s app/src/main/res/raw/malecns_reduced.bin
           test -s app/src/main/res/raw/malecns_reduced_report.json
 
+      - name: Validate new FBR-10-OLF1 structural artifact
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/validate_fbr10_olf1.py
+          python tools/validate_fbr10_olf1.py \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --report app/src/main/res/raw/malecns_reduced_report.json
+
       - name: Build and validate anatomical olfactory input map
         run: |
           set -euo pipefail
@@ -492,14 +500,6 @@ jobs:
           python tools/build_fbr10_dynamics.py --nt "$NT" --output app/src/main/res/raw/malecns_fbr10_dynamics.bin
           python tools/validate_fbr10_dynamics.py
           cp build/FBR10_DYNAMICS_REPORT.json app/src/main/res/raw/malecns_fbr10_dynamics_report.json
-
-      - name: Validate new FBR-10-OLF1 connectome
-        run: |
-          set -euo pipefail
-          python -m py_compile tools/validate_fbr10_olf1.py
-          python tools/validate_fbr10_olf1.py \
-            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
-            --report app/src/main/res/raw/malecns_reduced_report.json
 
       - name: Validate V1.17.0 membrane integration
         run: |

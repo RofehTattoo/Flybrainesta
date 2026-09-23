@@ -50,7 +50,7 @@ def main():
     fbc_nodes = read_fbc103(Path(a.fbc103), expected_sha=None)
     actual_fbc_sha = sha(Path(a.fbc103))
     ids = [r["bodyId"] for r in fbc_nodes]
-    old = [r["role"] for r in fbc_nodes]
+    old = [r["motorRole"] for r in fbc_nodes]
     retained=set(ids)
     assert len(fbc_nodes) == N
     assert len(retained) == N, "FBC103 retained bodyId set is not unique"

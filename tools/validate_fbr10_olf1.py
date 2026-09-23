@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the generated FBR-10-OLF1 release graph and its ORN-preservation invariants."""
 from __future__ import annotations
-import argparse, hashlib, json, struct
+import argparse, hashlib, json, math, struct
 from pathlib import Path
 
 TARGET = 16669
@@ -32,9 +32,26 @@ def main():
     n,e=struct.unpack_from('<II',b,8)
     assert n == TARGET, (n,TARGET)
     assert len(b) == 16 + n*NODE_SIZE + e*EDGE_SIZE, (len(b), n, e)
+    edge_start = 16 + n * NODE_SIZE
+    seen_edges = set()
+    contact_total = 0
+    for i in range(e):
+        src, dst, weight = struct.unpack_from('<iif', b, edge_start + i * EDGE_SIZE)
+        assert 0 <= src < n and 0 <= dst < n, (i, src, dst)
+        assert math.isfinite(weight) and weight > 0 and float(weight).is_integer(), (
+            i, src, dst, weight
+        )
+        assert (src, dst) not in seen_edges, (i, src, dst)
+        seen_edges.add((src, dst))
+        contact_total += int(weight)
+    assert len(seen_edges) == e
+
     d=json.loads(rep.read_text(encoding='utf-8'))
     assert d.get('reduction') == 'FBR-10-OLF1', d.get('reduction')
     assert d.get('neurons_retained') == TARGET
+    assert d.get('edge_weight_definition') == 'raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer'
+    assert d.get('candidate_edges_between_retained_neurons') == e
+    assert d.get('contacts_retained') == contact_total
     assert d.get('olfactory_orns_source') == 2639
     assert d.get('olfactory_orns_retained') == TARGET_ORNS
     assert d.get('olfactory_orn_types_source') == EXPECTED_ORN_TYPE_LABELS

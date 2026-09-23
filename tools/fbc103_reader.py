@@ -3,15 +3,18 @@
 
 FBC103 node record layout (26 bytes):
 uint64 bodyId
-uint8  channel
+uint8  superclassCode
 int8   somaSideCode
-uint8  reserved
-int8   roleCode
+uint8  channelCode
+int8   motorRoleCode
 int8   descendingRoleCode
-int8   haltereRoleCode
-float32 route0
-float32 route1
-float32 route2
+int8   haltRoleCode
+float32 routeForward
+float32 routeTurn
+float32 routeEscape
+
+This is the layout emitted by the FBR-10 builder and consumed by MainActivity.
+There is no reserved byte and the first byte after bodyId is the superclass code.
 """
 from __future__ import annotations
 import hashlib
@@ -47,22 +50,22 @@ def read_fbc103(path: Path, expected_sha: str | None = FBC_SHA) -> list[dict]:
     off = HEADER_SIZE
     for idx in range(n):
         bid = struct.unpack_from("<Q", data, off)[0]; off += 8
-        channel = struct.unpack_from("<B", data, off)[0]; off += 1
+        superclass_code = struct.unpack_from("<B", data, off)[0]; off += 1
         side = struct.unpack_from("<b", data, off)[0]; off += 1
-        reserved = struct.unpack_from("<B", data, off)[0]; off += 1
-        role = struct.unpack_from("<b", data, off)[0]; off += 1
+        channel = struct.unpack_from("<B", data, off)[0]; off += 1
+        motor_role = struct.unpack_from("<b", data, off)[0]; off += 1
         dn_role = struct.unpack_from("<b", data, off)[0]; off += 1
         halt_role = struct.unpack_from("<b", data, off)[0]; off += 1
         routes = struct.unpack_from("<fff", data, off); off += 12
         nodes.append({
             "index": idx,
             "bodyId": bid,
-            "channel": channel,
+            "superclassCode": superclass_code,
             "side": side,
-            "reserved": reserved,
-            "role": role,
+            "channel": channel,
+            "motorRole": motor_role,
             "descendingRole": dn_role,
-            "haltereRole": halt_role,
+            "haltRole": halt_role,
             "routes": routes,
         })
 

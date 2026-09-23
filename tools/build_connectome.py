@@ -2,10 +2,12 @@
 """Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.17.0 FBR-10-OLF1.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
-connectivity tables. It keeps exactly 10% of the 166,691-neuron census by
-stratifying on the published superclass and selecting the highest-connectivity
-cells within each superclass. Only published edges between retained neurons
-are embedded; no graph edge is invented here.
+connectivity tables. It keeps exactly 16,669 neurons from the audited
+166,700-neuron census by stratifying on the published superclass and selecting
+cells using measured connectivity and route-support criteria. Only published
+edges between retained neurons are embedded; no graph edge is invented here.
+FBC103 stores raw positive MaleCNS contact counts; neurotransmitter signs and
+FBD104 normalization are applied only by the separate dynamics-layer builder.
 """
 from __future__ import annotations
 
@@ -42,19 +44,7 @@ NODE_SIZE = 26
 EDGE_SIZE = 12
 FILES = {
     "annotations": "body-annotations-male-cns-v1.0-minconf-0.5.feather",
-    "neurotransmitters": "body-neurotransmitters-male-cns-v1.0.feather",
     "weights": "connectome-weights-male-cns-v1.0-minconf-0.5.feather",
-}
-
-NT_SIGN = {
-    "acetylcholine": 1.0,
-    "ach": 1.0,
-    "gaba": -1.0,
-    "gamma-aminobutyric acid": -1.0,
-    # Modeling convention used by recent Drosophila VNC connectome simulations.
-    # Receptor-specific glutamatergic effects are not represented in this reduced model.
-    "glutamate": -1.0,
-    "glutamatergic": -1.0,
 }
 
 SUPERCLASS_CODE = {}
@@ -289,9 +279,16 @@ def main(root: Path) -> None:
     # The official release contains 166,700 such annotated neurons; the ORN
     # census of 2,639 is defined on this same universe. Status is provenance
     # metadata and is not a node-selection filter.
-    annotated = annotations[annotations["superclass"].notna()].copy()
+    annotated = annotations[
+        annotations["superclass"].notna()
+        & annotations["superclass"].astype(str).str.strip().ne("")
+    ].copy()
     annotated["bodyId"] = annotated["bodyId"].astype(np.int64)
     annotated = annotated.drop_duplicates("bodyId").sort_values("bodyId").reset_index(drop=True)
+    if len(annotated) != 166700:
+        raise RuntimeError(
+            f"MaleCNS v1.0 annotated neuron census changed: expected 166700, found {len(annotated)}"
+        )
     if len(annotated) < TARGET:
         raise RuntimeError(f"Only {len(annotated)} annotated neurons available; expected >= {TARGET}")
 
@@ -601,7 +598,7 @@ def main(root: Path) -> None:
     )
 
     # Protect 10% of the published ORN population (264/2639) and ensure that
-    # all 54 published ORN types remain represented. Selection is deterministic
+    # all 54 published ORN type+entryNerve combinations remain represented. Selection is deterministic
     # and still ranked only by measured connectivity/route support.
     orn_protected_parts = []
     remaining_orn = TARGET_ORNS
@@ -888,23 +885,10 @@ def main(root: Path) -> None:
     route_olfactory_motor_selected = selected["route_olfactory_motor"].to_numpy(np.float64)
     halt_role_selected = selected["halt_role"].to_numpy(np.int8)
 
-    # Neurotransmitter predictions provide the sign model used by the simulator.
-    nt = pd.read_feather(raw / FILES["neurotransmitters"])
-    nt_cols = [c for c in ["body", "bodyId"] if c in nt.columns]
-    nt_id_col = nt_cols[0] if nt_cols else None
-    nt["_id"] = nt[nt_id_col].astype(np.int64) if nt_id_col else -1
-    nt_name = None
-    for c in ["consensus_nt", "predicted_nt", "celltype_predicted_nt"]:
-        if c in nt.columns:
-            nt_name = c
-            break
-    nt_map = dict(zip(nt["_id"].tolist(), nt[nt_name].astype(str).str.strip().str.lower().tolist())) if nt_name else {}
-
     # Second streaming pass: retain only published edges between selected neurons.
     edges = []
     contacts = 0
     candidate_edges = 0
-    unresolved_edges = 0
     retained_sensor_desc = np.zeros((4, 5), dtype=np.int64)
     retained_desc_motor = np.zeros((5, 8), dtype=np.int64)
     retained_sensor_desc_edges = 0
@@ -929,13 +913,13 @@ def main(root: Path) -> None:
         if mask.any():
             for a, c, d in zip(pre[mask], post[mask], w[mask]):
                 candidate_edges += 1
-                sign = NT_SIGN.get(nt_map.get(int(a), ""), 0.0)
-                if sign == 0.0:
-                    unresolved_edges += 1
-                    continue
                 src_i = index[int(a)]
                 dst_i = index[int(c)]
-                edges.append((src_i, dst_i, float(d) * sign))
+                # FBC103 is purely structural: preserve every published
+                # retained edge with its raw positive MaleCNS contact count.
+                # Neurotransmitter sign and dynamics normalization belong only
+                # to the separate FBD104 layer.
+                edges.append((src_i, dst_i, float(d)))
                 contacts += int(d)
                 src_ch = int(channel_selected[src_i])
                 dst_desc = int(descending_role_selected[dst_i])
@@ -992,14 +976,8 @@ def main(root: Path) -> None:
                 if mr > 0:
                     retained_two_hop_by_role[dn_role, mr] += 1
 
-    target_totals = np.zeros(TARGET, dtype=np.float64)
-    for src, dst, raw_weight in edges:
-        target_totals[dst] += abs(raw_weight)
-    normalized_edges = []
-    for src, dst, raw_weight in edges:
-        denom = max(1.0, target_totals[dst])
-        normalized_edges.append((src, dst, float(raw_weight) / denom * 0.42))
-    edges = normalized_edges
+    # FBC103 preserves raw positive MaleCNS contact weights. Do not apply
+    # neurotransmitter signs or FBD104 normalization here.
     edges.sort(key=lambda e: (e[1], e[0]))
 
     ranges = {}
@@ -1093,6 +1071,7 @@ def main(root: Path) -> None:
         "sha256": fbc_sha,
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,
+        "edge_weight_definition": "raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer",
         "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
         "source": BASE,
         "neurons_source": int(total),
@@ -1113,15 +1092,11 @@ def main(root: Path) -> None:
         "olfactory_route_motor_source_nonzero": int((route_olfactory_motor > 0).sum()),
         "olfactory_route_motor_selected_nonzero": int((route_olfactory_motor_selected > 0).sum()),
         "candidate_edges_between_retained_neurons": candidate_edges,
-        "unresolved_edges_omitted": unresolved_edges,
-        "contacts_retained_signed": contacts,
+        "contacts_retained": contacts,
         "superclass_counts_source": {str(k): int(v) for k,v in counts.items()},
         "superclass_extra_quota": {str(k): int(v) for k,v in extra_quota.items()},
         "channel_ranges": ranges,
         "population_ranges": {k: [int(v[0]), int(v[1])] for k, v in population_ranges.items()},
-        "edge_signs": NT_SIGN,
-        "glutamate_modeling_convention": "glutamatergic edges are treated as inhibitory in the reduced dynamical model; receptor-specific exceptions are not represented",
-        "unresolved_edges_policy": "edges with no recognized transmitter sign are omitted from direct current",
         "motor_role_counts": motor_role_counts,
         "descending_role_counts": {int(k): int(v) for k,v in selected.groupby("descending_role").size().to_dict().items()},
         "halt_role_counts": {int(k): int(v) for k,v in selected.groupby("halt_role").size().to_dict().items()},

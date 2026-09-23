@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import struct
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -69,10 +70,20 @@ def load_structural(path: Path):
         body_ids.append(body)
         pos += NODE_BYTES
     edges = []
-    for _ in range(e):
+    for edge_index in range(e):
         src, dst, weight = struct.unpack_from("<iif", b, pos)
-        if not (0 <= src < n and 0 <= dst < n and weight > 0):
-            raise RuntimeError("invalid structural edge")
+        if not (
+            0 <= src < n
+            and 0 <= dst < n
+            and math.isfinite(weight)
+            and weight > 0
+            and float(weight).is_integer()
+        ):
+            raise RuntimeError(
+                "invalid FBC103 structural edge "
+                f"index={edge_index} src={src} dst={dst} weight={weight!r}; "
+                "expected in-range endpoints and a finite positive raw contact count"
+            )
         edges.append((src, dst, float(weight)))
         pos += EDGE_BYTES
     return n, e, body_ids, edges
@@ -83,12 +94,14 @@ def load_nt(path: Path):
     bodies = table.column("body").to_pylist()
     nts = table.column("consensus_nt").to_pylist()
     grouped: dict[int, Counter[str]] = defaultdict(Counter)
+    nonempty_rows = 0
     for body, nt in zip(bodies, nts):
         if body is None or nt is None:
             continue
         name = str(nt).strip().lower()
         if name:
             grouped[int(body)][name] += 1
+            nonempty_rows += 1
 
     mapping: dict[int, str] = {}
     conflicts = 0
@@ -100,7 +113,7 @@ def load_nt(path: Path):
             conflicts += 1
             continue
         mapping[body] = best[0][0]
-    return mapping, conflicts, sum(len(v) for v in grouped.values())
+    return mapping, conflicts, nonempty_rows
 
 
 def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected_structural_sha: str | None):

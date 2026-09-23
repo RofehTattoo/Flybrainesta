@@ -2,7 +2,7 @@
 """Build the V1.17.0 VNC motor semantics layer from official MaleCNS annotations.
 
 This script never rewrites FBC103. It reads the current release FBR-10-OLF1 binary
-only to recover the retained bodyIds and previous role bytes for audit comparison.
+only to recover the retained bodyIds and previous FBC103 motor-role bytes for audit comparison.
 The official annotation Feather is the sole source of anatomical class/side/
 type/subclass/neuromere/exit-nerve data.
 """
@@ -80,7 +80,7 @@ def main():
     fbc_nodes = read_fbc103(fbc, expected_sha=None)
     actual_fbc_sha = sha256(fbc)
     body = [r["bodyId"] for r in fbc_nodes]
-    old_role = [r["role"] for r in fbc_nodes]
+    old_role = [r["motorRole"] for r in fbc_nodes]
     old_side = [r["side"] for r in fbc_nodes]
     retained=set(body)
     # Do NOT use the pandas-converting Feather convenience reader here: that convenience API converts

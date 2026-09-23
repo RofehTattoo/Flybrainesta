@@ -10,7 +10,7 @@ object GeneratedConnectomeMeta {
     const val APP_VERSION_CODE = 131
     const val REDUCTION_ID = "FBR-10-OLF1"
     const val RETAINED_OLFACTORY_ORNS = 264
-    const val RETAINED_OLFACTORY_ORN_TYPES = 54
+    const val RETAINED_OLFACTORY_ORN_TYPES = 53
     const val RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = 54
     const val DYNAMICS_FORMAT = "FBD104"
     const val DYNAMICS_NORMALIZATION_SCALE = 0.42f
