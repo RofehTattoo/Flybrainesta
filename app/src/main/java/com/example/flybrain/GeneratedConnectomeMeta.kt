@@ -14,7 +14,7 @@ object GeneratedConnectomeMeta {
     const val RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = 54
     const val DYNAMICS_FORMAT = "FBD104"
     const val DYNAMICS_NORMALIZATION_SCALE = 0.42f
-    const val SOURCE_NEURONS = 166691
+    const val SOURCE_NEURONS = 166700
     const val SOURCE_EDGES = 25582938
     const val SOURCE_CONTACTS = 124177617L
     // Bootstrap binary is still the previously frozen FBC103. CI replaces this

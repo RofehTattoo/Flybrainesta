@@ -1,5 +1,14 @@
 **Current development release:** V1.17.0-FOOD-OLFACTORY-ROUTED / versionCode 131. Regenerates the exact 16,669-neuron FBR-10 reduction from official MaleCNS v1.0 with explicit preservation of 264 real ORNs (10% of the 2,639 ORN census, rounded) and measured olfactory-to-locomotion route intermediates; FBC103 remains format-compatible and FBD104 is regenerated from the release graph in CI.
 
+## Current validated runtime state — 2026-09-23
+- **PHASE 1 integrated:** external sensory drive is restricted to anatomically identified receptor populations; the historical population-wide synthetic sensory pattern is removed.
+- **PHASE 2B integrated:** the public neural frame remains 20 ms, with 4 internal 5 ms integration substeps; sensory input is applied once per 20 ms frame; motor/DN spike diagnostics aggregate all substeps.
+- **Presentation-memory correction:** visual activity remains a 20 ms presentation process, using the legacy 0.88 retention + 0.22 frame-spike increment, with spikes latched across all four internal substeps.
+- **Runtime provenance:** FBC103 is SHA-256 checked against `GeneratedConnectomeMeta.BINARY_SHA256` before parsing.
+- **ORN reducer correction:** the four official MaleCNS ORNs with NULL `type` are explicitly retained by bodyId in the source reducer; CI must regenerate the FBR-10 binary after this selector correction.
+- The authoritative build path is `.github/workflows/build-apk.yml`; CI regenerates the FBR-10 binary, sensory maps, VNC semantics and FBD104 from the official MaleCNS v1.0 inputs.
+
+
 V1.17.0 was introduced after controlled V1.16.2 testing showed that olfactory input could recruit motor output only at close-range contact. The reducer now preserves a larger, type-complete ORN sample and explicitly retains measured ORN-driven forward sensorimotor bridge cells; no synthetic neurons or edges are added.
 
 # FlyBrain V1.15.2 — VNC Motor Semantics
@@ -58,7 +67,7 @@ Son puntuaciones topológicas normalizadas calculadas a partir de rutas de dos s
 
 ### Dinámica neuronal
 - LIF con paso neural fijo de 20 ms (50 Hz).
-- Traza sináptica de corta duración (~45 ms).
+- Traza sináptica con `tau_syn = 5 ms`; el estado se integra ahora en 4 subpasos internos de 5 ms por frame público de 20 ms.
 - Sin plasticidad experimental por defecto.
 - El límite de corriente sináptica se aplica después de la ganancia poblacional para evitar la saturación prematura que se observó en V1.01.
 - El estado locomotor interno sigue siendo modulador y no escribe directamente posición, velocidad ni rumbo.

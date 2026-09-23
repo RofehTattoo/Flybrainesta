@@ -12,6 +12,9 @@ assert 'def is_olfactory_orn' in B
 assert 'route_olfactory_forward' in B
 assert 'route_olfactory_motor' in B
 assert 'protected_orns' in B
+assert 'official_untyped' in B
+assert 'typed_orn_selection_source' in B
+assert 'retained_untyped_orn_ids' in B
 
 # Check the exclusion of olfactory ORNs from the generic extra pool
 # without depending on exact whitespace/indentation in the builder.
@@ -21,7 +24,7 @@ assert '~annotated["is_olfactory_orn"]' in B
 
 assert 'entryNerve' in B
 assert 'annotations[annotations["status"]' not in B
-assert 'official release contains 166,691' in B
+assert 'pinned MaleCNS v1.0 release contains 166,700' in B
 assert 'len(annotated)' in B
 assert 'side_from_nerve' not in B
 assert 'sc == "ol_sensory"' not in B
@@ -89,6 +92,14 @@ for body_id in (242812, 242908, 488209, 956041):
         "type": None,
         "entryNerve": "AN",
     })
+
+# Selection must explicitly reserve the four official untyped ORNs before the
+# typed group-by; relying on pandas' default group-by null handling would drop them.
+assert 'orn_selection_source["bodyId"].isin(UNTYPED_ORN_BODY_IDS)' in B
+assert 'remaining_orn -= len(official_untyped)' in B
+assert 'orn_selection_source["type"].astype(str).str.strip().ne("")' in B
+assert 'selected_orns.loc[' in B
+assert 'selected_orns["bodyId"].isin(UNTYPED_ORN_BODY_IDS)' in B
 
 # Historical visual cells must remain visual, not olfactory.
 assert ns["classify_channel"]({

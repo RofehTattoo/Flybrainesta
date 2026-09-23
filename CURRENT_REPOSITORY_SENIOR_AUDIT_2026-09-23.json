@@ -1,0 +1,42 @@
+{
+  "project": "FlyBrain",
+  "audit_date": "2026-09-23",
+  "input_zip": "Flybrainesta.zip",
+  "result": "corrected_source_baseline",
+  "checks": {
+    "phase1_sensory_purity": "PASS",
+    "phase2b_temporal_substepping": "PASS",
+    "fbc103_reader": "PASS",
+    "membrane_integration": "PASS",
+    "olfactory_input_map_static": "PASS",
+    "olfactory_route_reduction_static": "PASS",
+    "food_function_static": "PASS",
+    "vnc_motor_semantics_logic": "PASS",
+    "python_syntax_modified_tools": "PASS",
+    "runtime_fbc103_sha_guard": "PASS",
+    "official_untyped_orn_selector_fix": "PASS_SOURCE_CODE_PENDING_REGENERATION",
+    "source_census_166700_consistency": "PASS",
+    "embedded_fbc103_post_untyped_orn_regeneration": "PENDING_OFFICIAL_MALECNS_INPUTS",
+    "embedded_fbd104": "PENDING_CI_REGENERATION",
+    "embedded_sensory_input_map": "PENDING_CI_GENERATION",
+    "embedded_olfactory_input_map": "PENDING_CI_GENERATION",
+    "embedded_vnc_motor_semantics": "PENDING_CI_GENERATION",
+    "android_gradle_compile": "PENDING_CI"
+  },
+  "frozen_binary": {
+    "FBC103": "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60",
+    "FBC103_nodes": 16669,
+    "FBC103_edges": 2064951,
+    "FBC103_bytes": 25212822
+  },
+  "generated_assets_pending": [
+    "app/src/main/assets/sensory_input_map.tsv",
+    "app/src/main/assets/olfactory_input_map.tsv",
+    "app/src/main/assets/vnc_motor_semantics.tsv",
+    "app/src/main/res/raw/malecns_fbr10_dynamics.bin",
+    "app/src/main/res/raw/malecns_fbr10_dynamics_report.json",
+    "app/src/main/res/raw/olfactory_input_map_report.json",
+    "app/src/main/res/raw/sensory_input_map_report.json",
+    "app/src/main/res/raw/vnc_motor_semantics_report.json"
+  ]
+}

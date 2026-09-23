@@ -98,7 +98,7 @@ jobs:
           print(f'C cb_sensory + ORN_*:              {int(mask_C.sum())}')
           print(f'D olfactory + ORN_*:               {int(mask_D.sum())}')
           print(f'E type contains "ORN":              {int(mask_E.sum())}')
-          print(f'A cb_sensory + olfactory + ORN_*:   {int(mask_A.sum())}')
+          print(f'A typed cb_sensory + olfactory + ORN_*: {int(mask_A.sum())}')
           print('')
 
           # ------------------------------------------------------------
@@ -406,9 +406,10 @@ jobs:
                   print(rows.to_string(index=False))
 
           print_section('DIAGNOSTIC SUMMARY')
-          print('Expected ORN census: 2639')
-          print('Current ORN_* census: 2635')
-          print('Difference: 4')
+          print('Expected official ORN census used by FBR-10 selector: 2639')
+          print(f'Typed ORN_* census: {int(mask_A.sum())}')
+          print(f'Official untyped ORN exception count: {sum(a["bodyId"].isin([242812, 242908, 488209, 956041]))}')
+          print('The reducer explicitly retains these four source ORNs without assigning a synthetic type label.')
           print('')
           print('The four candidates are:')
           for body_id in TARGET_IDS:
@@ -449,6 +450,19 @@ jobs:
           python tools/validate_fbr10_olf1.py \
             --fbc103 app/src/main/res/raw/malecns_reduced.bin \
             --report app/src/main/res/raw/malecns_reduced_report.json
+
+      - name: Build and validate Phase-1 anatomical sensory receptor map
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/build_sensory_input_map.py tools/test_sensory_input_purity.py
+          python tools/build_sensory_input_map.py \
+            --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --output app/src/main/assets/sensory_input_map.tsv \
+            --report build/SENSORY_INPUT_MAP_REPORT.json
+          python tools/test_sensory_input_purity.py
+          test -s app/src/main/assets/sensory_input_map.tsv
+          cp build/SENSORY_INPUT_MAP_REPORT.json app/src/main/res/raw/sensory_input_map_report.json
 
       - name: Build and validate anatomical olfactory input map
         run: |
@@ -507,6 +521,12 @@ jobs:
           python -m py_compile tools/test_neural_time_integration.py
           python tools/test_neural_time_integration.py
 
+      - name: Validate PHASE 2B temporal substepping
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/test_phase2b_temporal_substepping.py
+          python tools/test_phase2b_temporal_substepping.py
+
       - name: Validate Kotlin source structure
         run: |
           set -euo pipefail
@@ -528,7 +548,17 @@ jobs:
           assert 'INDEX-CYCLIC' not in s
           assert 'FOOD_OLF_PATTERN_CAP' not in s
           assert 'for (i in olfactoryNeuronIndices)' in s
-          assert 'excludeOlfactory = true' in s
+          assert 'loadSensoryInputMap()' in s
+          assert 'import java.security.MessageDigest' in s
+          assert 'private fun sha256Hex(bytes: ByteArray): String' in s
+          assert 'actualBinarySha != GeneratedConnectomeMeta.BINARY_SHA256' in s
+          print('RUNTIME FBC103 SHA CHECK: OK')
+          assert 'private val frameFired = BooleanArray(N)' in s
+          assert 'if (frameFired[i]) .22f else 0f' in s
+          assert 'injectMappedSensoryPopulation' in s
+          assert 'injectSensoryPopulation(' not in s
+          assert 'channel = ((i * 17) % pattern.size)' not in s
+          assert 'sin((i * 0.043f)' not in s
           assert 'olfactoryPopulationRate()' in s
           assert 'mechanosensoryPopulationRate()' in s
           print('KOTLIN STRUCTURE: OK')
@@ -567,6 +597,7 @@ jobs:
           echo "$BADGING" | grep -Fq "versionName='1.17.0'"
           unzip -l "$APK" | grep -Fq 'malecns_reduced.bin'
           unzip -l "$APK" | grep -Fq 'malecns_fbr10_dynamics.bin'
+          unzip -l "$APK" | grep -Fq 'sensory_input_map.tsv'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics.tsv'
           unzip -l "$APK" | grep -Fq 'vnc_motor_semantics_report.json'
           sha256sum "$APK"
@@ -582,7 +613,9 @@ jobs:
             app/src/main/res/raw/malecns_fbr10_dynamics_report.json
             app/src/main/res/raw/vnc_motor_semantics_report.json
             app/src/main/res/raw/olfactory_input_map_report.json
+            app/src/main/res/raw/sensory_input_map_report.json
             app/src/main/assets/olfactory_input_map.tsv
+            app/src/main/assets/sensory_input_map.tsv
           if-no-files-found: error
           retention-days: 14
 

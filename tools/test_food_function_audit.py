@@ -9,8 +9,7 @@ FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
 
 assert 'olfactoryNeuronIndices' in MAIN
 assert 'for (i in olfactoryNeuronIndices)' in MAIN
-assert 'injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN, excludeOlfactory = true)' in MAIN
-assert 'if (!isOlfactoryNeuron(i)) sensoryCurrent[i] += wallSignal' in MAIN
+assert MAIN.count('injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)') == 1
 assert 'olfactoryPopulationRate()' in MAIN
 assert 'mechanosensoryPopulationRate()' in MAIN
 assert 'olfProjectionMode' not in MAIN

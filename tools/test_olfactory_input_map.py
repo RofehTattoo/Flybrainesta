@@ -7,7 +7,7 @@ BUILDER = (ROOT / 'tools/build_olfactory_input_map.py').read_text()
 FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
 
 assert 'olfactoryNeuronIndices' in MAIN
-assert 'injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN, excludeOlfactory = true)' in MAIN
+assert 'injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)' in MAIN
 assert 'olfactoryPopulationRate()' in MAIN
 assert 'mechanosensoryPopulationRate()' in MAIN
 assert 'for (i in OLF_START until OLF_END)' not in MAIN

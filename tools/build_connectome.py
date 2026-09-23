@@ -2,7 +2,7 @@
 """Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.17.0 FBR-10-OLF1.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
-connectivity tables. It keeps exactly 16,669 neurons from the audited 166,691-neuron census
+connectivity tables. It keeps exactly 16,669 neurons from the audited 166,700-neuron census
 by stratifying on the published superclass and preserving measured route support,
 connectivity, and the audited ORN/VNC populations. Only published edges between retained neurons
 are embedded; no graph edge is invented here.
@@ -275,14 +275,16 @@ def main(root: Path) -> None:
     annotations = pd.read_feather(raw / FILES["annotations"])
     # MaleCNS v1.0 reduction universe: every annotated neuronal entry with an
     # assigned superclass. Do NOT restrict the source graph to status=="Traced".
-    # The official release contains 166,691 such annotated neurons; the ORN
-    # census of 2,639 is defined on this same universe. Status is provenance
+    # The pinned MaleCNS v1.0 release contains 166,700 such annotated neurons;
+    # the ORN census of 2,639 is defined on this same universe. Status is provenance
     # metadata and is not a node-selection filter.
     annotated = annotations[annotations["superclass"].notna()].copy()
     annotated["bodyId"] = annotated["bodyId"].astype(np.int64)
     annotated = annotated.drop_duplicates("bodyId").sort_values("bodyId").reset_index(drop=True)
-    if len(annotated) < TARGET:
-        raise RuntimeError(f"Only {len(annotated)} annotated neurons available; expected >= {TARGET}")
+    if len(annotated) != 166700:
+        raise RuntimeError(
+            f"MaleCNS v1.0 annotated neuron census changed: expected 166700, found {len(annotated)}"
+        )
 
     ids = annotated["bodyId"].to_numpy(np.int64)
     degree = np.zeros(len(ids), dtype=np.float64)
@@ -559,8 +561,6 @@ def main(root: Path) -> None:
     # Source ORN census is validated above independently of selection scores.
     # Selection ranking happens after route metadata exists, so use a refreshed
     # ORN view for the ranking stage.
-    orn_selection_source = annotated[annotated["is_olfactory_orn"]].copy()
-
     annotated["route_score"] = (
         0.30 * route_forward_n
         + 0.22 * route_turn_n
@@ -583,6 +583,11 @@ def main(root: Path) -> None:
         annotated["type"] = annotated["bodyId"].astype(str)
         type_col = "type"
     annotated[type_col] = annotated[type_col].fillna("").astype(str)
+    # Rebuild the ORN selection view after type normalization. The source contains
+    # four official ORNs whose published type is NULL; normalizing here lets us
+    # explicitly exclude them from the typed group-by rather than silently dropping
+    # them from protection. No synthetic type label is assigned.
+    orn_selection_source = annotated[annotated["is_olfactory_orn"]].copy()
 
     type_rep = (
         annotated.sort_values(["degree", "bodyId"], ascending=[False, True])
@@ -594,7 +599,29 @@ def main(root: Path) -> None:
     # and still ranked only by measured connectivity/route support.
     orn_protected_parts = []
     remaining_orn = TARGET_ORNS
-    for orn_type, group in orn_selection_source.groupby("type", sort=True):
+
+    # Explicitly retain the four official MaleCNS ORNs whose published type is
+    # NULL. A pandas group-by on `type` drops NULL groups by default, which would
+    # otherwise exclude these real ORNs from FBR-10 even though `is_olfactory_orn`
+    # correctly recognizes them. The source annotation is preserved verbatim.
+    official_untyped = orn_selection_source[
+        orn_selection_source["bodyId"].isin(UNTYPED_ORN_BODY_IDS)
+    ].sort_values("bodyId")
+    if len(official_untyped) != len(UNTYPED_ORN_BODY_IDS):
+        found_untyped = sorted(official_untyped["bodyId"].astype(int).tolist())
+        raise AssertionError(
+            "MaleCNS official untyped ORNs not all present in selection source: "
+            f"expected={sorted(UNTYPED_ORN_BODY_IDS)} found={found_untyped}"
+        )
+    orn_protected_parts.append(official_untyped)
+    remaining_orn -= len(official_untyped)
+
+    selected_orn_ids = set(official_untyped["bodyId"].astype(int).tolist())
+    typed_orn_selection_source = orn_selection_source[
+        ~orn_selection_source.bodyId.isin(selected_orn_ids)
+        & orn_selection_source["type"].astype(str).str.strip().ne("")
+    ].copy()
+    for orn_type, group in typed_orn_selection_source.groupby("type", sort=True):
         if remaining_orn <= 0:
             break
         take = min(4, len(group), remaining_orn)
@@ -826,6 +853,17 @@ def main(root: Path) -> None:
     selected_orns = selected[selected["is_olfactory_orn"]].copy()
     if len(selected_orns) != TARGET_ORNS:
         raise AssertionError(f"selected ORNs={len(selected_orns)} expected={TARGET_ORNS}")
+    retained_untyped_orn_ids = set(
+        selected_orns.loc[
+            selected_orns["bodyId"].isin(UNTYPED_ORN_BODY_IDS), "bodyId"
+        ].astype(int).tolist()
+    )
+    if retained_untyped_orn_ids != set(UNTYPED_ORN_BODY_IDS):
+        raise AssertionError(
+            "official untyped ORNs were not all retained: "
+            f"expected={sorted(UNTYPED_ORN_BODY_IDS)} "
+            f"found={sorted(retained_untyped_orn_ids)}"
+        )
     # The four official untyped ORNs have no published `type` value.
     # Keep the source `type` field untouched and validate the published
     # type+entryNerve combinations instead: MaleCNS v1.0 has 54 such
@@ -1068,13 +1106,15 @@ def main(root: Path) -> None:
         "sha256": fbc_sha,
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,
-        "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
+        "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), including explicit retention of the four official ORNs with NULL type (bodyIds 242812, 242908, 488209, 956041) without assigning synthetic labels; all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
         "source": BASE,
         "neurons_source": int(total),
         "neurons_retained": TARGET,
         "edges_retained": len(edges),
         "olfactory_orns_source": int(len(orn_source)),
         "olfactory_orns_retained": int(len(selected_orns)),
+        "untyped_orn_body_ids_source": sorted(int(x) for x in UNTYPED_ORN_BODY_IDS),
+        "untyped_orn_body_ids_retained": sorted(int(x) for x in retained_untyped_orn_ids),
         # `*_types_*` preserve the literal unique `type`-label count (53);
         # the 54-value census is the distinct published (type, entryNerve)
         # combination count and is exposed separately to avoid conflating the two.

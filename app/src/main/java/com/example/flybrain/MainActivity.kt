@@ -31,6 +31,7 @@ import kotlin.math.sin
 import java.util.Random
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 
 class MainActivity : Activity() {
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).roundToInt()
@@ -174,7 +175,6 @@ class MainActivity : Activity() {
         // V1.15: fixed synaptic gains for the signed/normalized FBD104 dynamics
         // layer. They are model parameters, not an adaptive controller.
         private val SENSORY_VIS_GAIN = 0.70f
-        private val SENSORY_OLF_GAIN = 1.00f
         // V1.17.0: food/olfaction uses an official-annotation-derived per-ORN map.
         // The gain is an environmental sensor calibration parameter only; it never
         // writes motor state or a turn command.
@@ -183,7 +183,14 @@ class MainActivity : Activity() {
         private val EXPECTED_RETAINED_OLFACTORY_ORNS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORNS
         private val EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS
         private val SENSORY_GUST_GAIN = 0.85f
-        private val SENSORY_MECH_GAIN = 0.70f
+
+        // PHASE 2B: preserve the public neural frame at 20 ms while resolving
+        // the 5 ms synaptic timescale internally. This changes temporal resolution
+        // only; FBC103, FBD104, gains and thresholds remain untouched.
+        private val NEURAL_FRAME_DT_SECONDS = 0.020f
+        private val NEURAL_SUBSTEP_DT_SECONDS = 0.005f
+        private val NEURAL_SUBSTEPS_PER_FRAME = 4
+        private val REFRACTORY_SECONDS = 0.0022f
 
         // These values are deliberately frozen during an experiment. Adaptive
         // gain was removed because it altered the neural substrate in response
@@ -231,10 +238,13 @@ class MainActivity : Activity() {
         private val descendingRole = ByteArray(N)
         // Real MaleCNS body IDs for the selected neurons. Presentation/diagnostic only.
         private val bodyId = LongArray(N)
-        // Official-MaleCNS-derived olfactory population. These indices are loaded
-        // from the build-generated map and are the only neurons that receive COMIDA.
-        // They are real retained FBR-10 ORNs; no synthetic neurons or edges are added.
+        // Official-MaleCNS-derived sensory receptor populations. These indices are
+        // loaded from build-generated maps and are the only neurons allowed to receive
+        // external sensory current in Phase 1. No synthetic neurons or edges are added.
+        private var visualReceptorIndices = IntArray(0)
         private var olfactoryNeuronIndices = IntArray(0)
+        private var gustatoryReceptorIndices = IntArray(0)
+        private var mechanosensoryReceptorIndices = IntArray(0)
         // Official side evidence: -1=L, +1=R, 0=bilateral/unknown.
         // This is sensory-input metadata only, never a behavioral command.
         private val olfactorySide = ByteArray(N)
@@ -302,10 +312,20 @@ class MainActivity : Activity() {
         // This is telemetry only and never feeds back into the dynamics.
         private val lastSynDrive = FloatArray(N)
 
+        // PHASE 2B: body/diagnostic output must consume the complete 20 ms frame,
+        // including motor spikes that occurred before the final internal substep.
+        private val motorSubstepSpikeCounts = IntArray(N - MOTOR_START)
+        private val motorSynDriveSum = FloatArray(N - MOTOR_START)
+        private val motorSynDrivePeak = FloatArray(N - MOTOR_START)
+
         // V1.07: presentation-only activity persistence. It smooths individual
         // spikes into a short visual intensity trail so activation/deactivation
         // can be read without changing the neural state or connectivity.
         private val visualActivity = FloatArray(N)
+        // PHASE 2B correction: presentation memory remains frame-level (20 ms),
+        // while a latch preserves any spike that occurred during the four internal
+        // 5 ms substeps. This keeps the legacy display semantics unchanged.
+        private val frameFired = BooleanArray(N)
         // External sensory drive is stored as a per-step voltage/current kick and
         // applied inside the LIF update AFTER the membrane leak. In the previous
         // V1.13 implementation sense() wrote directly into v[], but stepBrain()
@@ -423,8 +443,6 @@ class MainActivity : Activity() {
         private var olfInputRightCache = 0f
         private var olfInputFrontCache = 0f
         private var olfInputRearCache = 0f
-        private var lightDirectionalBias = 0f
-        private var dangerDirectionalBias = 0f
         private var dangerLoom = 0f
 
         // V1.13: behaviour is separated into homeostatic pressure, arousal,
@@ -499,8 +517,24 @@ class MainActivity : Activity() {
         init {
             setBackgroundColor(Color.rgb(250, 250, 250))
             explorationState = .45f
+            checkTemporalConfiguration()
             buildBrain()
             setupBuzzSound()
+        }
+
+        private fun checkTemporalConfiguration() {
+            if (NEURAL_FRAME_DT_SECONDS <= 0f || NEURAL_SUBSTEP_DT_SECONDS <= 0f) {
+                throw IllegalStateException("configuracion temporal no positiva")
+            }
+            val ratio = NEURAL_FRAME_DT_SECONDS / NEURAL_SUBSTEP_DT_SECONDS
+            if (abs(ratio - NEURAL_SUBSTEPS_PER_FRAME.toFloat()) > 0.0001f) {
+                throw IllegalStateException(
+                    "substepping inconsistente frame=$NEURAL_FRAME_DT_SECONDS sub=$NEURAL_SUBSTEP_DT_SECONDS n=$NEURAL_SUBSTEPS_PER_FRAME"
+                )
+            }
+            if (NEURAL_SUBSTEP_DT_SECONDS > 0.0050001f) {
+                throw IllegalStateException("substep supera tau_syn=5ms: $NEURAL_SUBSTEP_DT_SECONDS")
+            }
         }
 
         private fun behaviorLabel(): String {
@@ -573,11 +607,18 @@ class MainActivity : Activity() {
                 adapt[i] = 0f
                 fired[i] = false
                 prevFired[i] = false
+                frameFired[i] = false
                 refractory[i] = 0f
                 synTrace[i] = 0f
                 lastSynDrive[i] = 0f
                 visualActivity[i] = 0f
                 sensoryCurrent[i] = 0f
+                if (i in MOTOR_START until MOTOR_END) {
+                    val mi = i - MOTOR_START
+                    motorSubstepSpikeCounts[mi] = 0
+                    motorSynDriveSum[mi] = 0f
+                    motorSynDrivePeak[mi] = 0f
+                }
                 for (k in incomingW[i].indices) {
                     incomingW[i][k] = baseW[i][k]
                     eligibility[i][k] = 0f
@@ -650,8 +691,6 @@ class MainActivity : Activity() {
             olfInputRightCache = 0f
             olfInputFrontCache = 0f
             olfInputRearCache = 0f
-            lightDirectionalBias = 0f
-            dangerDirectionalBias = 0f
             dangerLoom = 0f
             explorationState = .45f
             explorationPhase = 0f
@@ -813,6 +852,90 @@ class MainActivity : Activity() {
             for ((name, size) in required) {
                 if (size <= 0) throw IllegalStateException("poblacion $name vacia")
             }
+        }
+
+        private fun loadSensoryInputMap() {
+            val parsed = assets.open("sensory_input_map.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
+                val header = reader.readLine() ?: throw IllegalStateException("SENSMAP cabecera ausente")
+                val expectedHeader = "index\tbodyId\tmodality\tsideCode\tsideSource\ttype\tclass\tsuperclass\tsubclass\treceptorType\tflywireType"
+                if (header != expectedHeader) throw IllegalStateException("SENSMAP cabecera inesperada")
+                reader.readLines()
+            }
+
+            val visual = ArrayList<Int>()
+            val gustatory = ArrayList<Int>()
+            val mechanosensory = ArrayList<Int>()
+            val seen = HashSet<Int>(parsed.size * 2)
+            val sideSource = setOf("somaSide", "rootSide", "unknown")
+
+            for (line in parsed) {
+                val c = line.split('\t')
+                if (c.size != 11) throw IllegalStateException("SENSMAP esquema inesperado: ${c.size} columnas")
+                val idx = c[0].toInt()
+                val bid = c[1].toLong()
+                val modality = c[2]
+                val side = c[3].toInt()
+                val source = c[4]
+                val type = c[5]
+                val clazz = c[6]
+                val superclass = c[7]
+                val subtype = c[8]
+                val receptorType = c[9]
+                val flywireType = c[10]
+
+                if (idx !in 0 until N) throw IllegalStateException("SENSMAP index fuera de FBC103: $idx")
+                if (bodyId[idx] != bid) {
+                    throw IllegalStateException("SENSMAP bodyId mismatch idx=$idx expected=${bodyId[idx]} got=$bid")
+                }
+                if (side !in -1..1) throw IllegalStateException("SENSMAP sideCode invalido bodyId=$bid")
+                if (source !in sideSource) throw IllegalStateException("SENSMAP sideSource invalido bodyId=$bid source=$source")
+                if (!seen.add(idx)) throw IllegalStateException("SENSMAP indice duplicado=$idx")
+
+                when (modality) {
+                    "VIS" -> {
+                        if (idx !in VIS_START until VIS_END) {
+                            throw IllegalStateException("SENSMAP VIS fuera de bloque bodyId=$bid idx=$idx")
+                        }
+                        if (superclass != "ol_sensory" || clazz != "visual") {
+                            throw IllegalStateException("SENSMAP VIS provenance invalida bodyId=$bid class=$clazz superclass=$superclass")
+                        }
+                        val photoreceptor = flywireType in setOf("R1-6", "R7", "R8") ||
+                            type == "R1-R6" || type.startsWith("R7") || type.startsWith("R8")
+                        if (!photoreceptor) throw IllegalStateException("SENSMAP VIS no photoreceptor bodyId=$bid type=$type flywireType=$flywireType")
+                        visual.add(idx)
+                    }
+                    "GUST" -> {
+                        if (idx !in GUST_START until GUST_END) {
+                            throw IllegalStateException("SENSMAP GUST fuera de bloque bodyId=$bid idx=$idx")
+                        }
+                        if (clazz != "gustatory" || superclass !in setOf("cb_sensory", "vnc_sensory")) {
+                            throw IllegalStateException("SENSMAP GUST provenance invalida bodyId=$bid class=$clazz superclass=$superclass")
+                        }
+                        gustatory.add(idx)
+                    }
+                    "MECH" -> {
+                        if (idx !in MECH_START until MECH_END) {
+                            throw IllegalStateException("SENSMAP MECH fuera de bloque bodyId=$bid idx=$idx")
+                        }
+                        if (clazz != "mechanosensory_proprioceptive") {
+                            throw IllegalStateException("SENSMAP MECH provenance invalida bodyId=$bid class=$clazz")
+                        }
+                        if (subtype.isBlank()) {
+                            throw IllegalStateException("SENSMAP MECH sin organo receptor bodyId=$bid type=$type")
+                        }
+                        mechanosensory.add(idx)
+                    }
+                    else -> throw IllegalStateException("SENSMAP modalidad desconocida=$modality bodyId=$bid")
+                }
+            }
+
+            if (visual.isEmpty()) throw IllegalStateException("SENSMAP sin fotorreceptores retenidos")
+            if (gustatory.isEmpty()) throw IllegalStateException("SENSMAP sin receptores gustativos retenidos")
+            if (mechanosensory.isEmpty()) throw IllegalStateException("SENSMAP sin receptores mecanosensoriales retenidos")
+
+            visualReceptorIndices = visual.toIntArray().also { it.sort() }
+            gustatoryReceptorIndices = gustatory.toIntArray().also { it.sort() }
+            mechanosensoryReceptorIndices = mechanosensory.toIntArray().also { it.sort() }
         }
 
         private fun loadOlfactoryInputMap() {
@@ -991,6 +1114,17 @@ class MainActivity : Activity() {
             }
         }
 
+        private fun sha256Hex(bytes: ByteArray): String {
+            val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+            val out = StringBuilder(digest.size * 2)
+            for (value in digest) {
+                val v = value.toInt() and 0xff
+                if (v < 16) out.append('0')
+                out.append(v.toString(16))
+            }
+            return out.toString()
+        }
+
         private fun loadMeasuredConnectome(): Boolean {
             return try {
                 validateGeneratedMeta()
@@ -1000,6 +1134,12 @@ class MainActivity : Activity() {
                     return false
                 }
                 val bytes = resources.openRawResource(resourceId).use { it.readBytes() }
+                val actualBinarySha = sha256Hex(bytes)
+                if (actualBinarySha != GeneratedConnectomeMeta.BINARY_SHA256) {
+                    throw IllegalStateException(
+                        "FBC103 SHA-256=$actualBinarySha esperado=${GeneratedConnectomeMeta.BINARY_SHA256}"
+                    )
+                }
                 val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
                 if (b.remaining() < 16) throw IllegalStateException("cabecera incompleta")
                 val magic = ByteArray(8)
@@ -1040,6 +1180,7 @@ class MainActivity : Activity() {
                     }
                 }
 
+                loadSensoryInputMap()
                 loadOlfactoryInputMap()
                 loadVncMotorSemantics()
 
@@ -1367,87 +1508,50 @@ class MainActivity : Activity() {
             return exp((-(d * d) / (2f * radius * radius)).toDouble()).toFloat().coerceIn(0f, 1f)
         }
 
-        private fun encodeStimulus(enabled: Boolean, sx: Float, sy: Float, gain: Float): FloatArray {
-            if (!enabled) return FloatArray(12)
-            val dx = sx - flyX
-            val dy = sy - flyY
-            val d = hypot(dx, dy)
-            val prox = gaussian(d, .48f)
-            val a = atan2(dy, dx)
-            val rel = atan2(sin(a - heading), cos(a - heading))
-            val front = exp((-abs(rel) / .72f).toDouble()).toFloat().coerceIn(0f, 1f)
-            val left = exp((-abs(rel + .82f) / .55f).toDouble()).toFloat().coerceIn(0f, 1f)
-            val right = exp((-abs(rel - .82f) / .55f).toDouble()).toFloat().coerceIn(0f, 1f)
-            val rear = exp((-abs(abs(rel) - Math.PI.toFloat()) / .70f).toDouble()).toFloat().coerceIn(0f, 1f)
-            val center = exp(-(rel * rel / (.34f * .34f))).toFloat().coerceIn(0f, 1f)
-            return floatArrayOf(
-                left * gain, center * gain, right * gain, front * gain, rear * gain * .75f,
-                left * prox * gain, center * prox * gain, right * prox * gain,
-                front * prox * gain, rear * prox * gain * .75f, prox * gain,
-                (1f - prox) * gain * .12f
-            )
-        }
-
-        // Olfactory concentration is primarily scalar; a small bilateral asymmetry
-        // provides a plausible route for odor-guided steering without encoding a
-        // hard-coded turn command.
-        private fun encodeTaste(enabled: Boolean, sx: Float, sy: Float, gain: Float): FloatArray {
-            if (!enabled) return FloatArray(12)
+        private fun stimulusIntensity(enabled: Boolean, sx: Float, sy: Float, sigma: Float): Float {
+            if (!enabled) return 0f
             val d = hypot(sx - flyX, sy - flyY)
-            val contact = gaussian(d, .065f)
-            return FloatArray(12) { idx -> contact * gain * when (idx % 4) { 0 -> .8f; 1 -> 1f; 2 -> .8f; else -> .55f } }
+            return gaussian(d, sigma)
         }
 
-        private fun injectSensoryPopulation(start: Int, end: Int, pattern: FloatArray, gain: Float, excludeOlfactory: Boolean = false) {
-            if (start < 0 || end < start || end > N) {
-                throw IllegalStateException("poblacion sensorial fuera de rango: $start..$end / N=$N")
-            }
-            val size = end - start
-            if (size <= 0 || pattern.isEmpty()) return
-            for (i in 0 until size) {
-                val index = start + i
-                if (excludeOlfactory && isOlfactoryNeuron(index)) continue
-                val channel = ((i * 17) % pattern.size)
-                val micro = .72f + .28f * sin((i * 0.043f) + channel * .61f).let { (it + 1f) * .5f }
-                sensoryCurrent[index] += pattern[channel] * gain * micro
+        private fun injectMappedSensoryPopulation(indices: IntArray, input: Float, gain: Float = 1f) {
+            if (input == 0f || indices.isEmpty()) return
+            val current = input * gain
+            for (index in indices) {
+                sensoryCurrent[index] += current
             }
         }
-
 
         private fun sense(dt: Float) {
             // External sensory drive is a per-step current, not an accumulating state.
             // Clear it before encoding the current environmental state.
             java.util.Arrays.fill(sensoryCurrent, 0f)
-            val tastePattern = encodeTaste(foodOn, foodX, foodY, 2.35f * (1f - satiety * .35f))
-            val lightPattern = encodeStimulus(lightOn, lightX, lightY, 1.55f)
-            val dangerPattern = encodeStimulus(dangerOn, dangerX, dangerY, 2.15f)
+            val foodGustatoryIntensity = stimulusIntensity(
+                foodOn, foodX, foodY, .065f
+            ) * 2.35f * (1f - satiety * .35f)
+            val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .48f) * 1.55f
+            val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .48f) * 2.15f
 
-            // PELIGRO is now a multimodal threat stimulus. Its visual component
-            // is a slowly expanding/contracting looming pattern; mechanosensory
-            // input remains a secondary component. Neither branch writes motor state.
+            // PELIGRO retains a deterministic environmental looming component, but it
+            // is delivered only to retained visual photoreceptors. The old direct
+            // mechanosensory injection is intentionally removed: a remote threat is
+            // not physical contact. Mechanosensory receptors receive only the physical
+            // boundary/proprioceptive feedback below.
             dangerLoom = if (dangerOn) {
                 (.5f + .5f * sin(simTime * 2.2f)).coerceIn(0f, 1f)
             } else 0f
-            val visualThreatGain = .45f + .80f * dangerLoom
-            val visualThreatPattern = dangerPattern.copyOf().also {
-                for (i in it.indices) it[i] *= visualThreatGain
-            }
-            val combinedVisual = FloatArray(12) { i ->
-                (lightPattern[i] + visualThreatPattern[i]).coerceIn(0f, 3.5f)
-            }
+            val visualThreatIntensity = dangerBaseIntensity * (.45f + .80f * dangerLoom)
+            val combinedVisualIntensity = (lightIntensity + visualThreatIntensity).coerceIn(0f, 3.5f)
 
-            // Environmental signals enter only measured sensory populations.
-            // Olfaction is mapped neuron-by-neuron from official MaleCNS annotations;
-            // there is no index-cyclic projection or synthetic micro-pattern.
-            injectSensoryPopulation(VIS_START, VIS_END, combinedVisual, SENSORY_VIS_GAIN)
+            // PHASE 1: external stimuli enter only anatomically identified receptor
+            // populations derived from official MaleCNS annotations. No population-wide
+            // index projection, cyclic channeling or per-index sinusoidal micro-pattern remains.
+            injectMappedSensoryPopulation(visualReceptorIndices, combinedVisualIntensity, SENSORY_VIS_GAIN)
             injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_GAIN * (1f - satiety * .45f))
-            injectSensoryPopulation(GUST_START, GUST_END, tastePattern, SENSORY_GUST_GAIN)
-            injectSensoryPopulation(MECH_START, MECH_END, dangerPattern, SENSORY_MECH_GAIN, excludeOlfactory = true)
+            injectMappedSensoryPopulation(gustatoryReceptorIndices, foodGustatoryIntensity, SENSORY_GUST_GAIN)
 
-            lightDirectionalBias = ((lightPattern[0] - lightPattern[2]) /
-                (lightPattern[0] + lightPattern[2] + .001f)).coerceIn(-1f, 1f)
-            dangerDirectionalBias = ((dangerPattern[0] - dangerPattern[2]) /
-                (dangerPattern[0] + dangerPattern[2] + .001f)).coerceIn(-1f, 1f)
+            // Boundary contact/proprioceptive feedback is the only mechanosensory
+            // world-interface in this phase and is delivered only to mapped receptors.
 
             // Contact/proprioceptive feedback from boundaries. This is sensory
             // feedback, not a command to turn.
@@ -1455,12 +1559,10 @@ class MainActivity : Activity() {
             val wallSignal = (1f - wall / .4f).coerceIn(0f, 1f)
             wallDistanceCache = wall
             wallSignalCache = wallSignal
-            for (i in MECH_START until SENSOR_END) {
-                if (!isOlfactoryNeuron(i)) sensoryCurrent[i] += wallSignal * .055f
-            }
+            injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)
 
-            lightDrive = combinedVisual[10].coerceIn(0f, 1f)
-            dangerDrive = (dangerPattern[10] * .35f + visualThreatPattern[10] * .65f).coerceIn(0f, 1f)
+            lightDrive = lightIntensity.coerceIn(0f, 1f)
+            dangerDrive = visualThreatIntensity.coerceIn(0f, 1f)
 
             foodSignalDisplay = .90f * foodSignalDisplay + .10f * foodDrive
             lightSignalDisplay = .90f * lightSignalDisplay + .10f * lightDrive
@@ -1470,15 +1572,15 @@ class MainActivity : Activity() {
 
             // Adaptation is part of the sensory membrane equation. It is folded
             // into the same external drive rather than modifying v[] before the
-            // leak, so the input cannot be accidentally erased by the 20 ms Euler
-            // leak used by the neural clock.
+            // leak, so the injected sensory term is applied in the same update
+            // ordering used by the neural integrator.
             for (i in 0 until SENSOR_END) {
                 sensoryCurrent[i] -= adapt[i]
                 adapt[i] *= exp((-dt * 2.0f).toDouble()).toFloat()
             }
         }
 
-        private fun stepBrain(dt: Float) {
+        private fun stepBrainSubstep(dt: Float, applySensoryKick: Boolean): Int {
             for (i in 0 until N) prevFired[i] = fired[i]
 
             // V1.04: a spike creates a short-lived synaptic trace. The temporal
@@ -1489,10 +1591,122 @@ class MainActivity : Activity() {
                 synTrace[i] = (synTrace[i] * synDecay + if (prevFired[i]) 1f else 0f).coerceAtMost(3f)
             }
 
-            // V1.13: no always-on locomotor oscillator and no external random
-            // pause generator. The connectome receives sensory input, its measured
-            // LIF activity propagates through the retained MaleCNS edges, and VNC
-            // motor output is the only source of body locomotion.
+            for (i in 0 until N) {
+                if (refractory[i] > 0f) {
+                    refractory[i] -= dt
+                    fired[i] = false
+                    // A refractory neuron contributes no current for this substep.
+                    // Clear the read-only motor-drive cache to prevent a previous
+                    // substep's value from leaking into the 20 ms output aggregate.
+                    lastSynDrive[i] = 0f
+                    continue
+                }
+
+                val targetIsMotor = i in MOTOR_START until MOTOR_END
+                var syn = 0f
+                val src = incoming[i]
+                val w = incomingW[i]
+                for (k in src.indices) {
+                    val source = src[k]
+                    // V1.13: every runtime synaptic contribution is the signed
+                    // published edge itself. No artificial "halt gain" is applied.
+                    syn += w[k] * synTrace[source]
+                }
+                // The normalized signed drive is bounded only after population
+                // gain. This keeps inhibition/excitation balanced without
+                // changing the frozen edge topology.
+                syn = syn.coerceIn(-.75f, .75f)
+
+                val isMotor = targetIsMotor
+                val isDesc = i in DESC_START until DESC_END
+                // V1.13: remove synthetic locomotor/tonic currents that previously
+                // kept the fly moving even when the retained network had no motor
+                // reason to do so. A very small background fluctuation remains to
+                // represent unresolved intrinsic activity without commanding a behavior.
+                // V1.13: no stochastic background current. A silent baseline is
+                // preferable to synthetic spikes that could be mistaken for emergent
+                // activity. Any spontaneous firing must come from the retained graph
+                // dynamics or from an explicit sensory input.
+                val centralNoise = 0f
+
+                // V1.15: gains are fixed model parameters. The previous adaptive
+                // controller was coupled to stimulus presentation and therefore
+                // changed the system while it was being measured. FBD104 already
+                // contains signed, normalized synaptic weights; these gains are
+                // now held constant so stimulus comparisons are reproducible.
+                val synGain = when {
+                    isMotor -> gainMotor
+                    isDesc -> gainDesc
+                    i in ASC_START until ASC_END -> gainAsc
+                    else -> gainOther
+                }
+
+                val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
+                lastSynDrive[i] = synCurrent
+                // V1.16.2: analytic membrane leak. With tau_m=20 ms and a 20 ms
+                // neural step, the exact retention factor is exp(-1)=0.367879, so
+                // the membrane retains physical temporal state instead of being
+                // reset to V_REST by the Euler factor 1 - dt/tau = 0.
+                // Sensory/synaptic terms remain per-step voltage kicks exactly as
+                // before; only the leak integration is corrected.
+                // PHASE 2B: sensoryCurrent retains its legacy meaning as one
+                // discrete 20 ms environmental kick. Apply it once at the first
+                // internal substep instead of multiplying it by the substep count.
+                val externalCurrent = if (applySensoryKick && i < SENSOR_END) sensoryCurrent[i] else 0f
+                val membraneLeak = (V_REST - v[i]) * (1f - membraneDecay)
+                v[i] += membraneLeak - adapt[i] * dt +
+                    synCurrent + externalCurrent + centralNoise
+                fired[i] = v[i] >= V_THRESHOLD
+
+                if (fired[i]) {
+                    v[i] = V_RESET
+                    adapt[i] = min(.18f, adapt[i] + .026f)
+                    refractory[i] = REFRACTORY_SECONDS
+                    frameFired[i] = true
+                }
+            }
+
+            var stepSpikes = 0
+            for (i in 0 until N) {
+                if (fired[i]) stepSpikes++
+            }
+            return stepSpikes
+        }
+
+        private fun resetMotorSubstepAccumulators() {
+            java.util.Arrays.fill(motorSubstepSpikeCounts, 0)
+            java.util.Arrays.fill(motorSynDriveSum, 0f)
+            java.util.Arrays.fill(motorSynDrivePeak, 0f)
+        }
+
+        private fun accumulateNeuralSubstepDiagnostics() {
+            for (i in DESC_START until DESC_END) {
+                if (fired[i]) dnWindowSpikes[i - DESC_START]++
+            }
+            for (i in MOTOR_START until MOTOR_END) {
+                val mi = i - MOTOR_START
+                if (fired[i]) {
+                    motorWindowSpikes[mi]++
+                    motorSubstepSpikeCounts[mi]++
+                }
+                motorSynDriveSum[mi] += lastSynDrive[i]
+                motorSynDrivePeak[mi] = max(motorSynDrivePeak[mi], abs(lastSynDrive[i]))
+            }
+            if (!foodOn && !lightOn && !dangerOn && !baselineReady) {
+                for (i in DESC_START until DESC_END) {
+                    if (fired[i]) dnBaselineSpikes[i - DESC_START]++
+                }
+                for (i in MOTOR_START until MOTOR_END) {
+                    if (fired[i]) motorBaselineSpikes[i - MOTOR_START]++
+                }
+            }
+        }
+
+        private fun updateOuterNeuralState(dt: Float, totalSpikes: Int) {
+            // These state variables are updated once per public 20 ms neural
+            // frame, not once per internal 5 ms integration substep. They remain
+            // diagnostics/internal state; the connectome and measured VNC output
+            // remain the causal source of locomotion.
             explorationPhase += dt * (1.0f + explorationState * .25f)
 
             val sensoryNovelty = (abs(foodDrive - previousFoodDrive) +
@@ -1581,97 +1795,36 @@ class MainActivity : Activity() {
             previousLightDrive = lightDrive
             previousDangerDrive = dangerDrive
 
-            for (i in 0 until N) {
-                if (refractory[i] > 0f) {
-                    refractory[i] -= dt
-                    fired[i] = false
-                    continue
-                }
-
-                val targetIsMotor = i in MOTOR_START until MOTOR_END
-                var syn = 0f
-                val src = incoming[i]
-                val w = incomingW[i]
-                for (k in src.indices) {
-                    val source = src[k]
-                    // V1.13: every runtime synaptic contribution is the signed
-                    // published edge itself. No artificial "halt gain" is applied.
-                    syn += w[k] * synTrace[source]
-                }
-                // The normalized signed drive is bounded only after population
-                // gain. This keeps inhibition/excitation balanced without
-                // changing the frozen edge topology.
-                syn = syn.coerceIn(-.75f, .75f)
-
-                val isSensor = i < SENSOR_END
-                val isMotor = targetIsMotor
-                val isDesc = i in DESC_START until DESC_END
-                // V1.13: remove synthetic locomotor/tonic currents that previously
-                // kept the fly moving even when the retained network had no motor
-                // reason to do so. A very small background fluctuation remains to
-                // represent unresolved intrinsic activity without commanding a behavior.
-                // V1.13: no stochastic background current. A silent baseline is
-                // preferable to synthetic spikes that could be mistaken for emergent
-                // activity. Any spontaneous firing must come from the retained graph
-                // dynamics or from an explicit sensory input.
-                val centralNoise = 0f
-
-                // V1.15: gains are fixed model parameters. The previous adaptive
-                // controller was coupled to stimulus presentation and therefore
-                // changed the system while it was being measured. FBD104 already
-                // contains signed, normalized synaptic weights; these gains are
-                // now held constant so stimulus comparisons are reproducible.
-                val synGain = when {
-                    isMotor -> gainMotor
-                    isDesc -> gainDesc
-                    i in ASC_START until ASC_END -> gainAsc
-                    else -> gainOther
-                }
-
-                val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
-                lastSynDrive[i] = synCurrent
-                // V1.16.2: analytic membrane leak. With tau_m=20 ms and a 20 ms
-                // neural step, the exact retention factor is exp(-1)=0.367879, so
-                // the membrane retains physical temporal state instead of being
-                // reset to V_REST by the Euler factor 1 - dt/tau = 0.
-                // Sensory/synaptic terms remain per-step voltage kicks exactly as
-                // before; only the leak integration is corrected.
-                val externalCurrent = if (i < SENSOR_END) sensoryCurrent[i] else 0f
-                val membraneLeak = (V_REST - v[i]) * (1f - membraneDecay)
-                v[i] += membraneLeak - adapt[i] * dt +
-                    synCurrent + externalCurrent + centralNoise
-                fired[i] = v[i] >= V_THRESHOLD
-
-                if (fired[i]) {
-                    v[i] = V_RESET
-                    adapt[i] = min(.18f, adapt[i] + .026f)
-                    refractory[i] = .0022f
-                }
-
-                // Visual-only short memory of activity. It is deliberately
-                // outside the LIF equations: it cannot feed back into v/adapt.
-                visualActivity[i] = (visualActivity[i] * .88f + if (fired[i]) .22f else 0f).coerceIn(0f, 1f)
+            if (!foodOn && !lightOn && !dangerOn && !baselineReady) {
+                baselineCaptureSeconds += dt
+                if (baselineCaptureSeconds >= 5f) baselineReady = true
             }
 
-            var stepSpikes = 0
-            var activeVisual = 0f
-            for (i in 0 until N) {
-                if (fired[i]) stepSpikes++
-                if (visualActivity[i] > activeVisual) activeVisual = visualActivity[i]
-            }
-            spikesLastStep = stepSpikes
-            spikeWindowCount += stepSpikes
+            // PHASE 2B: all spike-rate windows are expressed in the public
+            // 20 ms frame, while their spike counts include every 5 ms substep.
+            spikesLastStep = totalSpikes
+            spikeWindowCount += totalSpikes
             spikeWindowTime += dt
             if (spikeWindowTime >= 1f) {
                 spikesPerSecond = spikeWindowCount.toFloat() / spikeWindowTime
                 spikeWindowCount = 0
                 spikeWindowTime = 0f
             }
+            // PHASE 2B visual correction: keep presentation memory at the original
+            // 20 ms cadence. `frameFired` latches spikes from all four 5 ms substeps,
+            // then this legacy 0.88/0.22 update is applied exactly once per frame.
+            for (i in 0 until N) {
+                visualActivity[i] = (visualActivity[i] * .88f +
+                    if (frameFired[i]) .22f else 0f).coerceIn(0f, 1f)
+                frameFired[i] = false
+            }
+            var activeVisual = 0f
+            for (i in 0 until N) {
+                if (visualActivity[i] > activeVisual) activeVisual = visualActivity[i]
+            }
             maxDisplayedActivity = activeVisual
 
-            // Pipeline diagnostics are read-only. They make it possible to tell
-            // whether a failure is at sensory activation, central propagation,
-            // descending output, or VNC motor output without changing behaviour.
+            // Pipeline diagnostics remain read-only and refresh once per public frame.
             val sensoryRate = populationRate(VIS_START, MECH_END)
             val centralRateNow = populationRate(OTHER_START, OTHER_END)
             val descRateNow = populationRate(DESC_START, DESC_END)
@@ -1695,24 +1848,6 @@ class MainActivity : Activity() {
                 historyDn[historyCursor] = descendingSpikesDisplay
                 historyMotor[historyCursor] = motorSpikesDisplay
                 historyCursor = (historyCursor + 1) % historyNeural.size
-            }
-            // Quantitative node diagnostics: exact spike counts over a fixed 500 ms window.
-            // This is read-only and never feeds back into LIF dynamics.
-            for (i in DESC_START until DESC_END) {
-                if (fired[i]) dnWindowSpikes[i - DESC_START]++
-            }
-            for (i in MOTOR_START until MOTOR_END) {
-                if (fired[i]) motorWindowSpikes[i - MOTOR_START]++
-            }
-            if (!foodOn && !lightOn && !dangerOn && !baselineReady) {
-                baselineCaptureSeconds += dt
-                for (i in DESC_START until DESC_END) {
-                    if (fired[i]) dnBaselineSpikes[i - DESC_START]++
-                }
-                for (i in MOTOR_START until MOTOR_END) {
-                    if (fired[i]) motorBaselineSpikes[i - MOTOR_START]++
-                }
-                if (baselineCaptureSeconds >= 5f) baselineReady = true
             }
             diagWindowElapsed += dt
             if (diagWindowElapsed >= diagWindowSeconds) {
@@ -1903,7 +2038,7 @@ class MainActivity : Activity() {
             // Turning/orientation uses turning DN evidence and visual route activity.
             val orientNeural = (dnTurn * .50f + turnRouteActivity * .35f +
                 ((turnLeftAction + turnRightAction) * .15f)).coerceIn(0f, 1f)
-            val orientContext = (visualContext * .75f + abs(lightDirectionalBias) * .25f).coerceIn(0f, 1f)
+            val orientContext = visualContext
             val orient = (orientNeural * (0.20f + .80f * orientContext) *
                 (1f - escape * .75f)).coerceIn(0f, 1f)
 
@@ -2000,10 +2135,11 @@ class MainActivity : Activity() {
             var rightLegDrive = 0f
 
             for (i in MOTOR_START until MOTOR_END) {
-                val drive = lastSynDrive[i]
+                val mi = i - MOTOR_START
+                val drive = motorSynDriveSum[mi] / NEURAL_SUBSTEPS_PER_FRAME.toFloat()
                 motorDriveSigned += drive
                 motorDriveAbs += abs(drive)
-                motorDriveAbsPeak = max(motorDriveAbsPeak, abs(drive))
+                motorDriveAbsPeak = max(motorDriveAbsPeak, motorSynDrivePeak[mi])
                 when (motorRole[i].toInt()) {
                     GeneratedConnectomeMeta.MOTOR_LEG -> {
                         legDriveSigned += drive
@@ -2018,8 +2154,11 @@ class MainActivity : Activity() {
                     GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereDriveSigned += drive
                     GeneratedConnectomeMeta.MOTOR_OTHER -> otherDriveSigned += drive
                 }
-                if (!fired[i]) continue
-                if (!fired[i]) continue
+                val motorFiredAny = motorSubstepSpikeCounts[i - MOTOR_START] > 0
+                if (!motorFiredAny) continue
+                // A motor neuron contributes once to the outer-frame activity if
+                // it fired in any internal substep. This preserves transient motor
+                // events that would otherwise disappear before the 20 ms readout.
                 allMotor += 1f
                 when (motorRole[i].toInt()) {
                     GeneratedConnectomeMeta.MOTOR_LEG -> {
@@ -2243,9 +2382,24 @@ class MainActivity : Activity() {
 
         private fun runNeuralSimulation(dt: Float) {
             if (!connectomeLoaded) return
+            require(abs(dt - NEURAL_FRAME_DT_SECONDS) < 0.000001f) {
+                "neural outer dt inesperado=$dt; esperado=$NEURAL_FRAME_DT_SECONDS"
+            }
+
             simTime += dt
             sense(dt)
-            stepBrain(dt)
+            resetMotorSubstepAccumulators()
+
+            var totalSpikes = 0
+            for (substep in 0 until NEURAL_SUBSTEPS_PER_FRAME) {
+                totalSpikes += stepBrainSubstep(
+                    NEURAL_SUBSTEP_DT_SECONDS,
+                    applySensoryKick = substep == 0
+                )
+                accumulateNeuralSubstepDiagnostics()
+            }
+
+            updateOuterNeuralState(dt, totalSpikes)
             driveBody(dt)
         }
 
@@ -2256,12 +2410,12 @@ class MainActivity : Activity() {
             val frameDt = min(.030, max(.004, raw)).toFloat()
             lastNs = now
             fps = fps * .94f + (1f / frameDt) * .06f
-            // Neural clock at 50 Hz, independent of display refresh rate.
+            // Public neural clock at 50 Hz, independent of display refresh rate; each public frame resolves 4 internal 5 ms substeps.
             neuralAccumulator += frameDt
             var steps = 0
-            while (neuralAccumulator >= .020f && steps < 5) {
-                runNeuralSimulation(.020f)
-                neuralAccumulator -= .020f
+            while (neuralAccumulator >= NEURAL_FRAME_DT_SECONDS && steps < 5) {
+                runNeuralSimulation(NEURAL_FRAME_DT_SECONDS)
+                neuralAccumulator -= NEURAL_FRAME_DT_SECONDS
                 steps++
             }
             neuralStepsLastFrame = steps

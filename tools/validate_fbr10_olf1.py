@@ -8,6 +8,7 @@ TARGET = 16669
 TARGET_ORNS = 264
 EXPECTED_ORN_TYPE_LABELS = 53
 EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54
+EXPECTED_UNTYPED_ORN_BODY_IDS = {242812, 242908, 488209, 956041}
 NODE_SIZE = 26
 EDGE_SIZE = 12
 MAGIC = b"FBC103\x00\x00"
@@ -53,6 +54,8 @@ def main():
     assert d.get('contacts_retained') == contact_total
     assert d.get('olfactory_orns_source') == 2639
     assert d.get('olfactory_orns_retained') == TARGET_ORNS
+    assert set(d.get('untyped_orn_body_ids_source', [])) == EXPECTED_UNTYPED_ORN_BODY_IDS
+    assert set(d.get('untyped_orn_body_ids_retained', [])) == EXPECTED_UNTYPED_ORN_BODY_IDS
     assert d.get('olfactory_orn_types_source') == EXPECTED_ORN_TYPE_LABELS
     assert d.get('olfactory_orn_types_retained') == EXPECTED_ORN_TYPE_LABELS
     source_pairs = d.get('olfactory_orn_type_entry_nerve_pairs_source')
