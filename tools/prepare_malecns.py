@@ -91,7 +91,9 @@ def feather_info(path: Path) -> dict:
 
 
 def verify_file(path: Path, spec: dict) -> dict:
-    result = {"path": str(path), "expected": spec.copy()}
+    expected = spec.copy()
+    expected["required_columns"] = sorted(spec["required_columns"])
+    result = {"path": str(path), "expected": expected}
     if not path.exists():
         raise FileNotFoundError(path)
     size = path.stat().st_size
