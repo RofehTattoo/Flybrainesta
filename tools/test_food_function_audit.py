@@ -29,6 +29,8 @@ body_start = MAIN.index('private fun driveBody')
 body_end = MAIN.index('private fun runNeuralSimulation', body_start)
 body = MAIN[body_start:body_end]
 assert 'foodDirectionalBias' not in body
+assert 'SENSORY_KICK_LIMIT' in MAIN
+assert 'coerceIn(-SENSORY_KICK_LIMIT, SENSORY_KICK_LIMIT)' in MAIN
 
 # The builder is source-backed and must cross both annotation and NT provenance.
 for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 264', 'EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54', 'neurotransmitters']:

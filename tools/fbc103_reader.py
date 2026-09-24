@@ -13,7 +13,7 @@ float32 routeForward
 float32 routeTurn
 float32 routeEscape
 
-This is the layout emitted by the FBR-10 builder and consumed by MainActivity.
+This is the layout emitted by the canonical FBR-10-OLF1 builder and consumed by MainActivity. The reader is format-generic; release-specific SHA pinning belongs in the validator, not in the parser.
 There is no reserved byte and the first byte after bodyId is the superclass code.
 """
 from __future__ import annotations
@@ -21,7 +21,6 @@ import hashlib
 import struct
 from pathlib import Path
 
-FBC_SHA = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
 N = 16669
 HEADER_SIZE = 16
 NODE_RECORD_SIZE = 26
@@ -33,7 +32,7 @@ def sha256(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def read_fbc103(path: Path, expected_sha: str | None = FBC_SHA) -> list[dict]:
+def read_fbc103(path: Path, expected_sha: str | None = None) -> list[dict]:
     data = path.read_bytes()
     if expected_sha is not None and sha256(path) != expected_sha:
         raise ValueError("FBC103 SHA mismatch")

@@ -7,20 +7,19 @@ android {
     namespace = "com.example.flybrain"
     compileSdk = 35
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     defaultConfig {
         applicationId = "com.example.flybrain"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 35
         versionCode = 131
         versionName = "1.17.0"
     }
+
+    buildFeatures {
+        buildConfig = false
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
 }

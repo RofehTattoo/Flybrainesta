@@ -8,7 +8,7 @@ BUILDER = (ROOT / 'tools/build_sensory_input_map.py').read_text()
 # Phase 1: mapped receptor populations are the only external sensory injection targets.
 for token in [
     'visualReceptorIndices', 'gustatoryReceptorIndices', 'mechanosensoryReceptorIndices',
-    'loadSensoryInputMap()', 'injectMappedSensoryPopulation',
+    'loadSensoryInputMap()', 'injectMappedSensoryPopulation', 'SENSORY_KICK_LIMIT',
     'sensory_input_map.tsv',
 ]:
     assert token in MAIN, token
@@ -37,6 +37,7 @@ assert 'injectMappedSensoryPopulation(visualReceptorIndices' in sense
 assert 'injectMappedSensoryPopulation(gustatoryReceptorIndices' in sense
 assert 'injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)' in sense
 assert 'dangerPattern' not in sense
+assert 'SENSORY_KICK_LIMIT' in MAIN
 assert 'SENSORY_MECH_GAIN' not in MAIN
 assert 'SENSORY_OLF_GAIN' not in MAIN
 

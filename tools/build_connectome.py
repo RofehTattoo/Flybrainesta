@@ -45,6 +45,11 @@ FILES = {
     "weights": "connectome-weights-male-cns-v1.0-minconf-0.5.feather",
 }
 
+EXPECTED_SOURCE_SHA256 = {
+    "annotations": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
+    "weights": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1",
+}
+
 
 SUPERCLASS_CODE = {}
 
@@ -271,11 +276,29 @@ def classify_halt_role(row) -> int:
         return 3
     return 0
 
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(8 * 1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def verify_pinned_source(path: Path, key: str) -> None:
+    expected = EXPECTED_SOURCE_SHA256[key]
+    actual = sha256_file(path)
+    if actual != expected:
+        raise RuntimeError(
+            f"MaleCNS v1.0 {key} SHA-256 mismatch: {actual} != {expected}"
+        )
+
+
 def main(root: Path) -> None:
     raw = root / "build" / "malecns_raw"
     raw.mkdir(parents=True, exist_ok=True)
     for key, name in FILES.items():
         download(raw / name, name)
+        verify_pinned_source(raw / name, key)
 
     annotations = pd.read_feather(raw / FILES["annotations"])
     # MaleCNS v1.0 reduction universe: every annotated neuronal entry with an
@@ -874,7 +897,14 @@ def main(root: Path) -> None:
     # type+entryNerve combinations instead: MaleCNS v1.0 has 54 such
     # combinations but only 53 unique type strings because ORN_VA7l occurs
     # under both AN and MxLbN.
-    retained_orn_types = selected_orns["type"].dropna().astype(str).nunique()
+    retained_orn_types = (
+        selected_orns["type"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .loc[lambda s: s.ne("")]
+        .nunique()
+    )
     retained_orn_type_entry_nerve_pairs = normalized_orn_type_entry_nerve_pairs(selected_orns)
     if len(retained_orn_type_entry_nerve_pairs) != EXPECTED_ORN_TYPES:
         raise AssertionError(

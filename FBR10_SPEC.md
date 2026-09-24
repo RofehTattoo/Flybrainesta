@@ -1,81 +1,91 @@
-# FBR-10 — Functional Balanced Reduction
+# FBR-10-OLF1 — Functional Balanced Reduction with Olfactory Preservation
+
+## Status
+
+Current structural release candidate for FlyBrain V1.17.0.
+
+- Source: MaleCNS v1.0
+- Source neuron census: 166,700
+- Retained neurons: exactly 16,669
+- Retained real ORNs: 264
+- ORN type labels retained: 53
+- Published ORN `(type, entryNerve)` combinations retained: 54
+- Structural format: FBC103
+- Current FBC103 SHA-256: `0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf`
+
+Historical FBR-10 v1.14 artifacts are preserved under `docs/history/fbr10-v1.14/` and are not current release inputs.
 
 ## Purpose
 
-FBR-10 is the definitive MaleCNS reduction strategy for the next FlyBrain phase.
-It reduces the 166,700-neuron MaleCNS v1.0 neuron census to **exactly 16,669 neurons**.
+FBR-10-OLF1 reduces the audited MaleCNS v1.0 neuron census to exactly 16,669 neurons while explicitly preserving a representative population of real olfactory receptor neurons and measured olfactory sensorimotor route support.
 
-The project uses **philosophy A**:
+The reducer is structural. It does not program behaviour and does not create synthetic neurons or edges.
 
-> Maximize neuron-type diversity within the fixed neuron budget, but never force a 10%-of-types rule when that conflicts with functional architecture or connectivity.
-
-The reducer is structural. It does not program behaviour and does not create synthetic connections.
-
-## Priority hierarchy
+## Selection hierarchy
 
 1. Hard neuron budget: `|S| = 16,669`.
-2. Preserve the complete descending-neuron and VNC-motor populations as command/output anchors.
-3. Preserve measured sensorimotor bridge structure.
-4. Preserve real graph connectivity and high-value boundaries between selected/unselected populations.
-5. Preserve lateralization.
-6. Maximize type diversity as a soft objective.
-7. Use degree/connectivity as a secondary structural criterion.
+2. Retain the complete curated descending-neuron and VNC-motor anchor populations.
+3. Retain all four official MaleCNS ORNs whose published `type` is NULL:
+   `242812`, `242908`, `488209`, `956041`.
+4. Retain exactly 264 real ORNs from the official `cb_sensory + olfactory` census.
+5. Preserve all 54 published typed ORN `(type, entryNerve)` combinations.
+6. Preserve measured sensor→DN, DN→intermediate→motor, and explicit ORN-driven forward/motor route support.
+7. Fill the remaining budget by published superclass strata using measured route support and degree.
+8. The final graph is the strict induced subgraph of the published MaleCNS graph.
 
-## Objective proxy
+## Route score used by the current OLF1 builder
 
-For a candidate neuron `i`, the selector uses a normalized marginal score:
+The current canonical builder computes normalized, measured topology scores:
 
-`J_i = 0.30 E_i + 0.28 R_i + 0.17 A_i + 0.10 T_i + 0.08 L_i + 0.07 D_i`
+- `route_forward`
+- `route_turn`
+- `route_escape`
+- `route_sensorimotor`
+- `route_olfactory_forward`
+- `route_olfactory_motor`
+- `route_halt`
 
-where:
+The current composite selection score is:
 
-- `E`: connectivity boundary gain toward already selected neurons.
-- `R`: measured sensor→DN and DN→motor bridge score.
-- `A`: DN/motor architecture score.
-- `T`: concave type novelty bonus.
-- `L`: lateralization availability.
-- `D`: degree/connectivity score.
+`0.30 forward + 0.22 turn + 0.34 escape + 0.14 sensorimotor + 0.24 olfactory_forward + 0.12 olfactory_motor`
 
-These weights are explicit engineering hyperparameters. They are not presented as biological constants.
+These coefficients are engineering selection parameters, not biological constants. They are documented here to keep the specification identical to the executable builder.
 
-## Type policy
+## ORN policy
 
-There are 11,751 published neuron types in the audited 166,700-neuron census.
-FBR-10 does **not** require approximately 1,175 types.
+An ORN is recognized from MaleCNS annotation as:
 
-The first representative of a type receives a diversity bonus, but additional neurons from a highly populated and functionally important type remain eligible. Conversely, a rare type can be omitted if retaining it has lower structural/functional value and the 16,669-node budget is exhausted.
+- `superclass = cb_sensory`
+- `class = olfactory`
+- `type` beginning with `ORN_`, or one of the four official NULL-type body IDs
+- `entryNerve` in `AN` or `MxLbN`
+
+The four NULL-type ORNs remain real ORNs. No synthetic type label is assigned.
+
+`entryNerve` is never used as a substitute for anatomical left/right side. Side precedence is `somaSide -> rootSide -> UNKNOWN`.
 
 ## Edge policy
 
-The final structural graph is the strict induced subgraph:
+The final structural graph is exactly:
 
-`E_FBR = { (u,v,w) in E_MaleCNS : u in S and v in S }`
+`E_FBR = {(u,v,w) in E_MaleCNS : u in S and v in S}`
 
-No synthetic edge, bridge, current, or behavioural shortcut is added.
+No synthetic edge, bridge, current, motor command, or behavioural shortcut is added.
 
-## Important implementation detail
+FBC103 stores the original positive MaleCNS contact count as the structural edge weight. Neurotransmitter sign and normalization belong exclusively to the separate FBD104 dynamics layer.
 
-`build_connectome_fbr10.py` is intentionally separate from the historical `build_connectome.py`. The old reducer is preserved for reproducibility; FBR-10 is the new experimental/final selector.
+## Provenance
 
-The script accepts either the official Feather files or Parquet conversions placed in:
+Pinned MaleCNS v1.0 SHA-256 values:
 
-`build/malecns_raw/`
+- annotations: `2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2`
+- neurotransmitters: `95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621`
+- connectome weights: `e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1`
 
-Required files:
+The builder refuses to generate a release graph from a source file whose SHA-256 does not match the pinned v1.0 object.
 
-- `body-annotations-male-cns-v1.0-minconf-0.5.feather` or `.parquet`
-- `body-neurotransmitters-male-cns-v1.0.feather` or `.parquet`
-- `connectome-weights-male-cns-v1.0-minconf-0.5.feather` or `.parquet`
+## Runtime boundary
 
-Run:
+The FBC103 structural artifact is authoritative for topology. FBD104 must be regenerated from that exact FBC103 and the pinned neurotransmitter table before an APK is declared release-ready.
 
-```text
-python tools/build_connectome_fbr10.py
-```
-
-The script writes:
-
-- `app/src/main/res/raw/malecns_fbr10.bin`
-- `build/FBR10_REPORT.json`
-
-The generated binary is a **structural FBR-10 artifact**. It is not yet a claim that the current Android runtime is ready to consume it. Runtime integration comes only after structural validation.
+The runtime must fail closed if structural or dynamics artifacts are missing or structurally incompatible.

@@ -42,7 +42,7 @@ NT_SIGN = {
 }
 NODE_BYTES = 26
 EDGE_BYTES = 12
-BASELINE_STRUCTURAL_SHA256 = "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
+CURRENT_FBC103_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"
 EXPECTED_NT_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
 
 
@@ -58,7 +58,7 @@ def load_structural(path: Path):
     raw = path.read_bytes()
     b = memoryview(raw)
     if len(b) < 16 or bytes(b[:8]) != FBC_MAGIC:
-        raise RuntimeError("FBR-10 structural artifact is not FBC103")
+        raise RuntimeError("FBR-10-OLF1 structural artifact is not FBC103")
     n, e = struct.unpack_from("<II", b, 8)
     expected = 16 + n * NODE_BYTES + e * EDGE_BYTES
     if len(raw) != expected:
@@ -179,6 +179,7 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected
     report = {
         "format": "FBD104",
         "structural_format": "FBC103",
+        "structural_release_id": "FBR-10-OLF1",
         "neurons": n,
         "structural_edges": structural_edges,
         "signed_edges": len(normalized),
@@ -209,7 +210,7 @@ if __name__ == "__main__":
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     ap.add_argument("--nt", type=Path, required=True)
     ap.add_argument("--allow-unpinned", action="store_true", help="allow non-pinned source hashes for local development only")
-    ap.add_argument("--expected-structural-sha", default=None, help="pin a specific FBC103 SHA when required by a release")
+    ap.add_argument("--expected-structural-sha", default=CURRENT_FBC103_SHA256, help="pin the current FBR-10-OLF1 FBC103 SHA; override only for historical reproduction")
     ap.add_argument(
         "--output",
         type=Path,

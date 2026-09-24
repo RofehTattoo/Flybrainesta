@@ -1,0 +1,29 @@
+{
+  "format": "FBC103",
+  "neurons": 16669,
+  "edges": 2064951,
+  "contacts": 16783932,
+  "sha256": "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60",
+  "source_neurons": 166700,
+  "source_edges": 25582938,
+  "source_contacts": 124177617,
+  "selected_type_count": 9255,
+  "ranges": {
+    "VIS_START": 0,
+    "VIS_END": 618,
+    "OLF_START": 618,
+    "OLF_END": 739,
+    "GUST_START": 739,
+    "GUST_END": 1050,
+    "MECH_START": 1050,
+    "MECH_END": 2412,
+    "DESC_START": 2412,
+    "DESC_END": 3726,
+    "ASC_START": 3726,
+    "ASC_END": 4278,
+    "VMOTOR_START": 4278,
+    "VMOTOR_END": 4986,
+    "OTHER_START": 4986,
+    "OTHER_END": 16669
+  }
+}

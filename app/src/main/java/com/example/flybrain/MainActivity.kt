@@ -180,6 +180,11 @@ class MainActivity : Activity() {
         // writes motor state or a turn command.
         private val FOOD_OLF_GAIN = 6.00f
         private val FOOD_OLF_SIGMA = 1.10f
+        // All environmental sensory inputs are discrete voltage kicks. Keep the
+        // largest single receptor kick on the same order as the post-gain synaptic
+        // current cap, preventing an external sensor from numerically overwhelming
+        // the retained network.
+        private val SENSORY_KICK_LIMIT = 0.55f
         private val EXPECTED_RETAINED_OLFACTORY_ORNS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORNS
         private val EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS
         private val SENSORY_GUST_GAIN = 0.85f
@@ -444,6 +449,7 @@ class MainActivity : Activity() {
         private var olfInputFrontCache = 0f
         private var olfInputRearCache = 0f
         private var dangerLoom = 0f
+        private var previousDangerDistance = Float.NaN
 
         // V1.13: behaviour is separated into homeostatic pressure, arousal,
         // rest-state modulation, and *measured* locomotor pauses. A pause is no
@@ -692,6 +698,7 @@ class MainActivity : Activity() {
             olfInputFrontCache = 0f
             olfInputRearCache = 0f
             dangerLoom = 0f
+            previousDangerDistance = Float.NaN
             explorationState = .45f
             explorationPhase = 0f
             motorActivityMemory = 0f
@@ -1050,7 +1057,7 @@ class MainActivity : Activity() {
                     1 -> right
                     else -> bilateral
                 }
-                sensoryCurrent[i] += c * gain
+                sensoryCurrent[i] += (c * gain).coerceIn(-SENSORY_KICK_LIMIT, SENSORY_KICK_LIMIT)
             }
             olfInputLeftCache = left * gain
             olfInputCenterCache = bilateral * gain
@@ -1270,6 +1277,11 @@ class MainActivity : Activity() {
                 loadedEdgeCount = e
                 if (!loadDynamicsLayer()) {
                     throw IllegalStateException(connectomeError.ifEmpty { "FBD104 dynamics layer unavailable" })
+                }
+                if (loadedDynamicsEdgeCount <= 0 || loadedDynamicsEdgeCount > loadedEdgeCount) {
+                    throw IllegalStateException(
+                        "FBD104 edges=$loadedDynamicsEdgeCount incompatible con FBC103 edges=$loadedEdgeCount"
+                    )
                 }
                 if (loadedEdgeCount != GeneratedConnectomeMeta.EDGES) {
                     throw IllegalStateException(
@@ -1537,9 +1549,17 @@ class MainActivity : Activity() {
             // mechanosensory injection is intentionally removed: a remote threat is
             // not physical contact. Mechanosensory receptors receive only the physical
             // boundary/proprioceptive feedback below.
-            dangerLoom = if (dangerOn) {
-                (.5f + .5f * sin(simTime * 2.2f)).coerceIn(0f, 1f)
+            // Looming is derived from measured relative approach, not from wall-clock
+            // phase. A static danger object therefore produces no artificial looming
+            // oscillation; moving the stimulus toward the fly increases the signal.
+            val dangerDistance = hypot(dangerX - flyX, dangerY - flyY)
+            val approachRate = if (dangerOn && previousDangerDistance.isFinite()) {
+                ((previousDangerDistance - dangerDistance) / dt.coerceAtLeast(0.001f)).coerceAtLeast(0f)
             } else 0f
+            dangerLoom = if (dangerOn) {
+                (approachRate / 0.35f).coerceIn(0f, 1f)
+            } else 0f
+            previousDangerDistance = if (dangerOn) dangerDistance else Float.NaN
             val visualThreatIntensity = dangerBaseIntensity * (.45f + .80f * dangerLoom)
             val combinedVisualIntensity = (lightIntensity + visualThreatIntensity).coerceIn(0f, 3.5f)
 
@@ -1570,12 +1590,10 @@ class MainActivity : Activity() {
 
             sensoryDisplay = .90f * sensoryDisplay + .10f * ((foodDrive + lightDrive + dangerDrive) / 3f)
 
-            // Adaptation is part of the sensory membrane equation. It is folded
-            // into the same external drive rather than modifying v[] before the
-            // leak, so the injected sensory term is applied in the same update
-            // ordering used by the neural integrator.
+            // Adaptation is integrated once, in stepBrainSubstep(), for every neuron.
+            // Do not subtract it here as well: that would double-count adaptation for
+            // sensory neurons while still decaying the state only once.
             for (i in 0 until SENSOR_END) {
-                sensoryCurrent[i] -= adapt[i]
                 adapt[i] *= exp((-dt * 2.0f).toDouble()).toFloat()
             }
         }
@@ -2531,7 +2549,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(8.4f)
             paint.color = Color.rgb(171, 181, 187)
-            c.drawText("MaleCNS v1.0 · FBR-10 · FBC103 + FBD104 + VNCSEM102", innerL, top + dp(36f), paint)
+            c.drawText("MaleCNS v1.0 · FBR-10-OLF1 · FBC103 + FBD104 + VNCSEM102", innerL, top + dp(36f), paint)
 
             // Live status + model census, kept in one compact row.
             val statusX = innerR - dp(124f)

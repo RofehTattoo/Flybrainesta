@@ -1,0 +1,85 @@
+{
+  "basis": "uploaded Flybrainesta-main (2).zip",
+  "embedded_fbc103_current_sha256": "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60",
+  "embedded_fbc103_is_historical_pre_untyped_orn_fix": true,
+  "files": [
+    {
+      "bytes": 27130,
+      "path": ".github/workflows/build-apk.yml",
+      "sha256": "a17822898c3213eb4623cb872502e8afc044169b9e772ccaf3997072e59b721e"
+    },
+    {
+      "bytes": 23311,
+      "path": "README.md",
+      "sha256": "f7156e5be9d7dbfa0c55296da84f9c2bd45aeec4299efe97d5e5497ef5073a95"
+    },
+    {
+      "bytes": 4083,
+      "path": "SENIOR_UPDATE_2026-09-23.md",
+      "sha256": "15a8ab0e7b6ae9955867fd266a2eedac390d724008b4e0ed6ce8c329f3bb5182"
+    },
+    {
+      "bytes": 2247,
+      "path": "PHASE1_SENSORY_INPUT_PURIFICATION.md",
+      "sha256": "2d8ab7772e92b19652484e18547aa4fdf5cbab0f04d784910563891da708c5ec"
+    },
+    {
+      "bytes": 1687,
+      "path": "PHASE2B_CHANGELOG.md",
+      "sha256": "69e52c1b7d171634a1483d9ef941345436b3856de8d2cb6a1196c46a34c88a36"
+    },
+    {
+      "bytes": 9382,
+      "path": "PHASE2B_NEURAL_TEMPORAL_CORRECTION_2026-09-23.md",
+      "sha256": "1c085249e10517550492347357d28d2e41c81c7d90a38540d26de6ec168da2df"
+    },
+    {
+      "bytes": 151870,
+      "path": "app/src/main/java/com/example/flybrain/MainActivity.kt",
+      "sha256": "5add931bf6549b05ab05d8a948e324a9af1d8ef619fb9cdb1e6f70a5cd89f5fe"
+    },
+    {
+      "bytes": 57619,
+      "path": "tools/build_connectome.py",
+      "sha256": "e8a811c86324a7b9ffa8f99cd47c2c53451da51985b0a5e2ccda8f57845b1472"
+    },
+    {
+      "bytes": 8336,
+      "path": "tools/build_sensory_input_map.py",
+      "sha256": "06d3660a1db78c95a315799796e065dde5fd3c5cf8fe50d8fed05af56ffe3a57"
+    },
+    {
+      "bytes": 3582,
+      "path": "tools/test_olfactory_route_reduction.py",
+      "sha256": "237c2f5e01519a2e53879d90bcbc5ff607c7537ac32408810a596724d432e392"
+    },
+    {
+      "bytes": 5274,
+      "path": "tools/test_phase2b_temporal_substepping.py",
+      "sha256": "9bed88929a027bec35955e7b1b8f82af2fb175bc98e7267c810f7d28b592a3e1"
+    },
+    {
+      "bytes": 2226,
+      "path": "tools/test_sensory_input_purity.py",
+      "sha256": "ccffcf9a37a701b3e50b8a13576cd81a0f0e916516cd156ba872b9625fd6a8ca"
+    },
+    {
+      "bytes": 4174,
+      "path": "tools/validate_fbr10_olf1.py",
+      "sha256": "f55f41180db63038ac85d3f99dc04a576b165ad8cc661baf98b1c62984e56ba0"
+    },
+    {
+      "bytes": 25212822,
+      "path": "app/src/main/res/raw/malecns_reduced.bin",
+      "sha256": "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
+    },
+    {
+      "bytes": 2355,
+      "path": "app/src/main/res/raw/malecns_reduced_report.json",
+      "sha256": "5f0e8b0796ccdd4bfb5bc9902c07018c58e765e2be0ea1f3a9e880fe34dd7119"
+    }
+  ],
+  "note": "CI must regenerate FBR-10/FBD104/sensory maps after the explicit four-untyped-ORN selector fix before the new APK is treated as the corrected graph release.",
+  "project": "FlyBrain",
+  "updated": "2026-09-23"
+}

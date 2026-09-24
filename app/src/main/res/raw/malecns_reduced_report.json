@@ -1,74 +1,1464 @@
 {
   "dataset": "MaleCNS v1.0",
-  "flybrain_version": "1.14",
-  "reduction": "FBR-10",
-  "status": "FROZEN",
+  "flybrain_version": "1.17.0",
+  "reduction": "FBR-10-OLF1",
   "binary_format": "FBC103",
+  "sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf",
+  "node_record_bytes": 26,
+  "edge_record_bytes": 12,
+  "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), including explicit retention of the four official ORNs with NULL type (bodyIds 242812, 242908, 488209, 956041) without assigning synthetic labels; all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
+  "source": "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/",
+  "neurons_source": 166700,
   "neurons_retained": 16669,
-  "source_neurons": 166700,
-  "source_edges": 25582938,
-  "source_contacts": 124177617,
-  "edges_retained": 2064951,
-  "contacts_retained": 16783932,
-  "edge_fraction": 0.0807159443532248,
-  "contact_fraction": 0.13516068680879906,
-  "types_full": 11751,
-  "types_retained": 9255,
-  "type_coverage_fraction": 0.7875925453152923,
-  "sha256": "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60",
+  "edges_retained": 2483165,
+  "olfactory_orns_source": 2639,
+  "olfactory_orns_retained": 264,
+  "untyped_orn_body_ids_source": [
+    242812,
+    242908,
+    488209,
+    956041
+  ],
+  "untyped_orn_body_ids_retained": [
+    242812,
+    242908,
+    488209,
+    956041
+  ],
+  "olfactory_orn_types_source": 53,
+  "olfactory_orn_types_retained": 53,
+  "olfactory_orn_type_entry_nerve_pairs_source": [
+    {
+      "type": "ORN_D",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA4l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA4m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL2d",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL2v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM6",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DP1l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DP1m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_V",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA1d",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA1v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA4",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VA5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA6",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA7l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA7l",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VA7m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VC1",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VC2",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VC3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VC4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VC5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VL1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VL2a",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VL2p",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM5d",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM5v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM6l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM6m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM6v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM7d",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VM7v",
+      "entryNerve": "MXLBN"
+    }
+  ],
+  "olfactory_orn_type_entry_nerve_pairs_retained": [
+    {
+      "type": "ORN_D",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA4l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DA4m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DC4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL2d",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL2v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DL5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DM6",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DP1l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_DP1m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_V",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA1d",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA1v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA4",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VA5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA6",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA7l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VA7l",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VA7m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VC1",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VC2",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VC3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VC4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VC5",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VL1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VL2a",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VL2p",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM1",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM2",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM3",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM4",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM5d",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM5v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM6l",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM6m",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM6v",
+      "entryNerve": "AN"
+    },
+    {
+      "type": "ORN_VM7d",
+      "entryNerve": "MXLBN"
+    },
+    {
+      "type": "ORN_VM7v",
+      "entryNerve": "MXLBN"
+    }
+  ],
+  "olfactory_orn_target": 264,
+  "olfactory_route_forward_source_nonzero": 15,
+  "olfactory_route_forward_selected_nonzero": 15,
+  "olfactory_route_motor_source_nonzero": 9,
+  "olfactory_route_motor_selected_nonzero": 9,
+  "candidate_edges_between_retained_neurons": 2483165,
+  "contacts_retained": 20992679,
+  "edge_weight_definition": "raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer",
+  "superclass_counts_source": {
+    "ENS": 50,
+    "ascending_neuron": 1846,
+    "cb_efferent": 4,
+    "cb_endocrine": 72,
+    "cb_intrinsic": 32164,
+    "cb_motor": 107,
+    "cb_sensory": 4868,
+    "cb_sensory_tbc": 14,
+    "descending_neuron": 1314,
+    "descending_neuron_tbc": 2,
+    "efferent_ascending": 8,
+    "efferent_descending": 4,
+    "ol_intrinsic": 89403,
+    "ol_sensory": 6098,
+    "sensory_ascending": 537,
+    "sensory_ascending_tbc": 2,
+    "sensory_descending": 12,
+    "visual_centrifugal": 563,
+    "visual_projection": 9201,
+    "visual_projection_tbc": 2,
+    "vnc_efferent": 94,
+    "vnc_endocrine": 22,
+    "vnc_intrinsic": 13161,
+    "vnc_motor": 708,
+    "vnc_sensory": 6370,
+    "vnc_sensory_tbc": 36,
+    "vnc_tbc": 38
+  },
+  "superclass_extra_quota": {
+    "ENS": 0,
+    "ascending_neuron": 0,
+    "cb_efferent": 0,
+    "cb_endocrine": 0,
+    "cb_intrinsic": 6,
+    "cb_motor": 0,
+    "cb_sensory": 1,
+    "cb_sensory_tbc": 0,
+    "descending_neuron_tbc": 0,
+    "efferent_ascending": 0,
+    "efferent_descending": 0,
+    "ol_intrinsic": 21,
+    "ol_sensory": 1,
+    "sensory_ascending": 0,
+    "sensory_descending": 0,
+    "visual_centrifugal": 0,
+    "visual_projection": 2,
+    "vnc_efferent": 0,
+    "vnc_endocrine": 0,
+    "vnc_intrinsic": 2,
+    "vnc_sensory": 1,
+    "vnc_sensory_tbc": 0,
+    "vnc_tbc": 0
+  },
+  "channel_ranges": {
+    "visual": [
+      0,
+      977
+    ],
+    "olfactory": [
+      977,
+      1241
+    ],
+    "gustatory": [
+      1241,
+      1303
+    ],
+    "mechanosensory": [
+      1303,
+      1579
+    ],
+    "other": [
+      1579,
+      16669
+    ]
+  },
+  "population_ranges": {
+    "visual": [
+      0,
+      977
+    ],
+    "olfactory": [
+      977,
+      1241
+    ],
+    "gustatory": [
+      1241,
+      1303
+    ],
+    "mechanosensory": [
+      1303,
+      1579
+    ],
+    "descending": [
+      1579,
+      2893
+    ],
+    "ascending": [
+      2893,
+      3767
+    ],
+    "motor": [
+      3767,
+      4475
+    ],
+    "other": [
+      4475,
+      16669
+    ]
+  },
+  "motor_role_counts": {
+    "0": 15961,
+    "1": 213,
+    "2": 26,
+    "6": 2,
+    "7": 467
+  },
+  "descending_role_counts": {
+    "0": 16629,
+    "1": 8,
+    "2": 20,
+    "3": 10,
+    "4": 2
+  },
+  "halt_role_counts": {
+    "0": 16653,
+    "1": 2,
+    "2": 2,
+    "3": 12
+  },
+  "descending_role_source_counts": {
+    "0": 1274,
+    "1": 8,
+    "2": 20,
+    "3": 10,
+    "4": 2
+  },
+  "descending_type_role_counts": {
+    "CB0429|role0": 2,
+    "DNa01|role2": 2,
+    "DNa02|role2": 2,
+    "DNa03|role2": 2,
+    "DNa04|role2": 2,
+    "DNa05|role0": 2,
+    "DNa06|role0": 2,
+    "DNa07|role0": 2,
+    "DNa08|role0": 2,
+    "DNa09|role0": 2,
+    "DNa10|role0": 2,
+    "DNa11|role2": 2,
+    "DNa13|role0": 4,
+    "DNa14|role0": 2,
+    "DNa15|role0": 2,
+    "DNa16|role0": 2,
+    "DNae001|role2": 2,
+    "DNae002|role2": 2,
+    "DNae003|role0": 2,
+    "DNae004|role0": 2,
+    "DNae005|role0": 2,
+    "DNae006|role0": 2,
+    "DNae007|role0": 2,
+    "DNae008|role0": 2,
+    "DNae009|role0": 2,
+    "DNae010|role0": 2,
+    "DNb01|role2": 2,
+    "DNb02|role0": 4,
+    "DNb03|role0": 4,
+    "DNb04|role0": 2,
+    "DNb05|role0": 2,
+    "DNb06|role0": 2,
+    "DNb07|role0": 2,
+    "DNb08|role1": 4,
+    "DNb09|role2": 2,
+    "DNbe001|role0": 2,
+    "DNbe002|role0": 4,
+    "DNbe003|role0": 2,
+    "DNbe004|role0": 2,
+    "DNbe005|role0": 2,
+    "DNbe006|role0": 2,
+    "DNbe007|role0": 2,
+    "DNc01|role0": 2,
+    "DNc02|role0": 2,
+    "DNd02|role0": 2,
+    "DNd03|role0": 2,
+    "DNd04|role0": 2,
+    "DNd05|role0": 2,
+    "DNde001|role0": 2,
+    "DNde002|role0": 2,
+    "DNde003|role0": 4,
+    "DNde005|role0": 2,
+    "DNde006|role0": 2,
+    "DNde007|role0": 2,
+    "DNg01_a|role0": 2,
+    "DNg01_b|role0": 2,
+    "DNg01_c|role0": 2,
+    "DNg01_d|role0": 2,
+    "DNg01_unclear|role0": 1,
+    "DNg02_a|role0": 10,
+    "DNg02_b|role0": 5,
+    "DNg02_c|role0": 4,
+    "DNg02_d|role0": 2,
+    "DNg02_e|role0": 2,
+    "DNg02_f|role0": 2,
+    "DNg02_g|role0": 4,
+    "DNg03|role0": 12,
+    "DNg04|role0": 4,
+    "DNg05_a|role0": 2,
+    "DNg05_b|role0": 4,
+    "DNg05_c|role0": 2,
+    "DNg06|role0": 12,
+    "DNg07|role0": 16,
+    "DNg08|role0": 23,
+    "DNg09_a|role0": 6,
+    "DNg09_b|role0": 2,
+    "DNg10|role0": 12,
+    "DNg100|role1": 2,
+    "DNg101|role0": 2,
+    "DNg102|role0": 4,
+    "DNg103|role0": 2,
+    "DNg104|role0": 2,
+    "DNg105|role0": 2,
+    "DNg106|role0": 16,
+    "DNg107|role0": 2,
+    "DNg108|role0": 2,
+    "DNg109|role0": 2,
+    "DNg11|role0": 6,
+    "DNg110|role0": 6,
+    "DNg111|role0": 2,
+    "DNg12_a|role0": 8,
+    "DNg12_b|role0": 10,
+    "DNg12_c|role0": 8,
+    "DNg12_d|role0": 2,
+    "DNg12_e|role0": 6,
+    "DNg12_f|role0": 4,
+    "DNg12_g|role0": 2,
+    "DNg12_h|role0": 2,
+    "DNg13|role2": 2,
+    "DNg14|role0": 2,
+    "DNg15|role0": 2,
+    "DNg16|role0": 2,
+    "DNg17|role0": 2,
+    "DNg18_a|role0": 3,
+    "DNg18_b|role0": 6,
+    "DNg19|role0": 2,
+    "DNg20|role0": 2,
+    "DNg21|role0": 2,
+    "DNg22|role0": 2,
+    "DNg23|role0": 2,
+    "DNg24|role0": 2,
+    "DNg26|role0": 4,
+    "DNg27|role0": 2,
+    "DNg29|role0": 2,
+    "DNg30|role0": 2,
+    "DNg31|role0": 2,
+    "DNg32|role0": 2,
+    "DNg33|role0": 2,
+    "DNg34|role0": 2,
+    "DNg35|role0": 2,
+    "DNg36_a|role0": 4,
+    "DNg36_b|role0": 7,
+    "DNg37|role0": 2,
+    "DNg38|role0": 2,
+    "DNg39|role0": 2,
+    "DNg40|role0": 2,
+    "DNg41|role0": 2,
+    "DNg42|role0": 2,
+    "DNg43|role0": 2,
+    "DNg44|role0": 2,
+    "DNg45|role0": 2,
+    "DNg46|role0": 2,
+    "DNg47|role0": 2,
+    "DNg48|role0": 2,
+    "DNg49|role0": 2,
+    "DNg50|role0": 2,
+    "DNg51|role0": 4,
+    "DNg52|role0": 4,
+    "DNg53|role0": 2,
+    "DNg54|role0": 2,
+    "DNg55|role0": 1,
+    "DNg56|role0": 2,
+    "DNg57|role0": 2,
+    "DNg58|role0": 2,
+    "DNg59|role0": 2,
+    "DNg60|role0": 2,
+    "DNg61|role0": 2,
+    "DNg62|role0": 2,
+    "DNg63|role0": 2,
+    "DNg64|role0": 2,
+    "DNg65|role0": 2,
+    "DNg66|role0": 1,
+    "DNg67|role0": 2,
+    "DNg68|role0": 2,
+    "DNg69|role0": 2,
+    "DNg70|role0": 2,
+    "DNg71|role0": 2,
+    "DNg72|role0": 4,
+    "DNg73|role0": 2,
+    "DNg74_a|role0": 2,
+    "DNg74_b|role0": 2,
+    "DNg75|role0": 2,
+    "DNg76|role0": 2,
+    "DNg77|role0": 2,
+    "DNg78|role0": 2,
+    "DNg79|role0": 4,
+    "DNg80|role0": 2,
+    "DNg81|role0": 2,
+    "DNg82|role0": 4,
+    "DNg83|role0": 2,
+    "DNg84|role0": 2,
+    "DNg85|role0": 2,
+    "DNg86|role0": 2,
+    "DNg87|role0": 2,
+    "DNg88|role0": 2,
+    "DNg89|role0": 2,
+    "DNg90|role0": 2,
+    "DNg91|role0": 2,
+    "DNg92_a|role0": 2,
+    "DNg92_b|role0": 4,
+    "DNg93|role0": 2,
+    "DNg94|role0": 2,
+    "DNg95|role0": 2,
+    "DNg96|role0": 2,
+    "DNg97|role1": 2,
+    "DNg98|role0": 2,
+    "DNg99|role0": 2,
+    "DNge001|role0": 3,
+    "DNge002|role0": 2,
+    "DNge003|role0": 2,
+    "DNge004|role0": 2,
+    "DNge006|role0": 2,
+    "DNge007|role0": 2,
+    "DNge008|role0": 2,
+    "DNge009|role0": 7,
+    "DNge010|role0": 2,
+    "DNge011|role0": 2,
+    "DNge012|role0": 2,
+    "DNge013|role0": 2,
+    "DNge014|role0": 2,
+    "DNge015|role0": 3,
+    "DNge016|role0": 2,
+    "DNge017|role0": 2,
+    "DNge018|role0": 2,
+    "DNge019|role0": 11,
+    "DNge020|role0": 6,
+    "DNge021|role0": 2,
+    "DNge022|role0": 2,
+    "DNge023|role0": 2,
+    "DNge024|role0": 4,
+    "DNge025|role0": 3,
+    "DNge026|role0": 2,
+    "DNge027|role0": 2,
+    "DNge028|role0": 2,
+    "DNge029|role0": 2,
+    "DNge030|role0": 2,
+    "DNge031|role0": 2,
+    "DNge032|role0": 2,
+    "DNge033|role0": 2,
+    "DNge034|role0": 2,
+    "DNge035|role0": 2,
+    "DNge036|role0": 2,
+    "DNge037|role0": 2,
+    "DNge038|role0": 2,
+    "DNge039|role0": 2,
+    "DNge040|role0": 2,
+    "DNge041|role0": 2,
+    "DNge042|role0": 2,
+    "DNge043|role0": 2,
+    "DNge044|role0": 2,
+    "DNge045|role0": 2,
+    "DNge046|role0": 4,
+    "DNge047|role0": 2,
+    "DNge048|role0": 2,
+    "DNge049|role0": 2,
+    "DNge050|role0": 2,
+    "DNge051|role0": 2,
+    "DNge052|role0": 2,
+    "DNge053|role0": 2,
+    "DNge054|role0": 2,
+    "DNge055|role0": 2,
+    "DNge056|role0": 2,
+    "DNge057|role0": 2,
+    "DNge058|role0": 2,
+    "DNge059|role0": 2,
+    "DNge060|role0": 2,
+    "DNge061|role0": 4,
+    "DNge062|role0": 2,
+    "DNge063|role0": 2,
+    "DNge064|role0": 2,
+    "DNge065|role0": 2,
+    "DNge067|role0": 2,
+    "DNge068|role0": 2,
+    "DNge069|role0": 2,
+    "DNge070|role0": 2,
+    "DNge071|role0": 10,
+    "DNge072|role0": 2,
+    "DNge073|role0": 2,
+    "DNge074|role0": 2,
+    "DNge075|role0": 2,
+    "DNge076|role0": 2,
+    "DNge077|role0": 2,
+    "DNge078|role0": 2,
+    "DNge079|role0": 2,
+    "DNge080|role0": 2,
+    "DNge081|role0": 2,
+    "DNge082|role0": 2,
+    "DNge083|role0": 2,
+    "DNge084|role0": 2,
+    "DNge085|role0": 8,
+    "DNge086|role0": 2,
+    "DNge087|role0": 4,
+    "DNge088|role0": 2,
+    "DNge089|role0": 6,
+    "DNge090|role0": 2,
+    "DNge091|role0": 14,
+    "DNge092|role0": 4,
+    "DNge093|role0": 4,
+    "DNge094|role0": 13,
+    "DNge095|role0": 3,
+    "DNge096|role0": 2,
+    "DNge097|role0": 2,
+    "DNge098|role0": 2,
+    "DNge099|role0": 2,
+    "DNge100|role0": 2,
+    "DNge101|role0": 2,
+    "DNge102|role0": 2,
+    "DNge103|role0": 2,
+    "DNge104|role0": 2,
+    "DNge105|role0": 2,
+    "DNge106|role0": 2,
+    "DNge107|role0": 2,
+    "DNge108|role0": 5,
+    "DNge110|role0": 2,
+    "DNge111|role0": 6,
+    "DNge113|role0": 4,
+    "DNge114|role0": 6,
+    "DNge115|role0": 8,
+    "DNge116|role0": 4,
+    "DNge117|role0": 4,
+    "DNge119|role0": 2,
+    "DNge120|role0": 2,
+    "DNge121|role0": 2,
+    "DNge122|role0": 2,
+    "DNge123|role0": 2,
+    "DNge124|role0": 2,
+    "DNge125|role0": 2,
+    "DNge126|role0": 2,
+    "DNge127|role0": 2,
+    "DNge128|role0": 2,
+    "DNge129|role0": 2,
+    "DNge130|role0": 2,
+    "DNge131|role0": 2,
+    "DNge132|role0": 2,
+    "DNge133|role0": 2,
+    "DNge134|role0": 2,
+    "DNge135|role0": 2,
+    "DNge136|role0": 4,
+    "DNge137|role0": 3,
+    "DNge138|role0": 2,
+    "DNge139|role0": 2,
+    "DNge140|role0": 2,
+    "DNge141|role0": 2,
+    "DNge142|role0": 2,
+    "DNge143|role0": 2,
+    "DNge144|role0": 2,
+    "DNge145|role0": 4,
+    "DNge146|role0": 2,
+    "DNge147|role0": 2,
+    "DNge148|role0": 2,
+    "DNge149|role0": 1,
+    "DNge150|role0": 1,
+    "DNge151|role0": 1,
+    "DNge152|role0": 1,
+    "DNge153|role0": 2,
+    "DNge154|role0": 2,
+    "DNge172|role0": 4,
+    "DNge173|role0": 2,
+    "DNge174|role0": 2,
+    "DNge175|role0": 2,
+    "DNge176|role0": 2,
+    "DNge178|role0": 2,
+    "DNge179|role0": 6,
+    "DNge180|role0": 2,
+    "DNge181|role0": 4,
+    "DNge182|role0": 2,
+    "DNge183|role0": 2,
+    "DNge184|role0": 2,
+    "DNp01|role4": 2,
+    "DNp02|role0": 2,
+    "DNp03|role0": 2,
+    "DNp04|role0": 2,
+    "DNp05|role0": 2,
+    "DNp06|role0": 2,
+    "DNp07|role3": 2,
+    "DNp08|role0": 2,
+    "DNp09|role3": 2,
+    "DNp10|role0": 2,
+    "DNp101|role0": 2,
+    "DNp102|role0": 2,
+    "DNp103|role0": 2,
+    "DNp104|role0": 2,
+    "DNp11|role0": 2,
+    "DNp12|role0": 2,
+    "DNp13|role0": 2,
+    "DNp14|role0": 2,
+    "DNp15|role0": 2,
+    "DNp16_a|role0": 2,
+    "DNp16_b|role0": 2,
+    "DNp17|role0": 12,
+    "DNp18|role0": 2,
+    "DNp19|role0": 2,
+    "DNp20|role0": 2,
+    "DNp21|role0": 2,
+    "DNp22|role0": 2,
+    "DNp23|role0": 2,
+    "DNp24|role0": 2,
+    "DNp25|role0": 2,
+    "DNp26|role0": 2,
+    "DNp27|role0": 2,
+    "DNp28|role0": 2,
+    "DNp29|role0": 2,
+    "DNp30|role0": 2,
+    "DNp31|role0": 2,
+    "DNp32|role0": 2,
+    "DNp33|role0": 2,
+    "DNp34|role0": 2,
+    "DNp35|role0": 2,
+    "DNp36|role0": 2,
+    "DNp38|role0": 2,
+    "DNp39|role0": 2,
+    "DNp41|role0": 4,
+    "DNp42|role0": 2,
+    "DNp43|role0": 2,
+    "DNp44|role0": 2,
+    "DNp45|role0": 2,
+    "DNp46|role0": 2,
+    "DNp47|role0": 2,
+    "DNp48|role0": 2,
+    "DNp49|role0": 2,
+    "DNp51,DNpe019|role0": 4,
+    "DNp52|role0": 2,
+    "DNp53|role0": 2,
+    "DNp54|role0": 2,
+    "DNp55|role0": 2,
+    "DNp56|role0": 2,
+    "DNp57|role0": 2,
+    "DNp58|role0": 2,
+    "DNp59|role0": 2,
+    "DNp60|role0": 2,
+    "DNp62|role0": 2,
+    "DNp63|role0": 2,
+    "DNp64|role0": 2,
+    "DNp65|role0": 2,
+    "DNp66|role0": 2,
+    "DNp67|role0": 2,
+    "DNp68|role0": 2,
+    "DNp69|role0": 2,
+    "DNp70|role0": 2,
+    "DNp71|role3": 2,
+    "DNp72|role0": 2,
+    "DNp73|role0": 2,
+    "DNpe001|role0": 2,
+    "DNpe002|role0": 2,
+    "DNpe003|role0": 4,
+    "DNpe004|role0": 4,
+    "DNpe005|role0": 2,
+    "DNpe006|role0": 2,
+    "DNpe007|role0": 2,
+    "DNpe008|role0": 19,
+    "DNpe009|role0": 6,
+    "DNpe010|role0": 2,
+    "DNpe011|role0": 4,
+    "DNpe012_a|role0": 4,
+    "DNpe012_b|role0": 4,
+    "DNpe013|role0": 2,
+    "DNpe014|role0": 4,
+    "DNpe015|role0": 11,
+    "DNpe016|role0": 2,
+    "DNpe017|role0": 2,
+    "DNpe018|role0": 3,
+    "DNpe020|role0": 2,
+    "DNpe021|role0": 2,
+    "DNpe022|role0": 2,
+    "DNpe023|role0": 2,
+    "DNpe024|role0": 2,
+    "DNpe025|role0": 2,
+    "DNpe026|role0": 2,
+    "DNpe027|role0": 2,
+    "DNpe028|role0": 2,
+    "DNpe029|role0": 4,
+    "DNpe030|role0": 2,
+    "DNpe031|role0": 4,
+    "DNpe032|role0": 2,
+    "DNpe033|role0": 2,
+    "DNpe034|role0": 2,
+    "DNpe035|role0": 2,
+    "DNpe036|role0": 2,
+    "DNpe037|role0": 2,
+    "DNpe039|role0": 2,
+    "DNpe040|role0": 2,
+    "DNpe041|role0": 2,
+    "DNpe042|role0": 2,
+    "DNpe043|role0": 2,
+    "DNpe045|role0": 2,
+    "DNpe048|role0": 2,
+    "DNpe049|role0": 2,
+    "DNpe050|role0": 2,
+    "DNpe052|role0": 2,
+    "DNpe053|role0": 2,
+    "DNpe054|role0": 7,
+    "DNpe055|role0": 2,
+    "DNpe056|role0": 2,
+    "DNpe057|role0": 4,
+    "DNxl114|role0": 2,
+    "MDN|role3": 4,
+    "aSP22|role0": 2,
+    "pIP1|role0": 2,
+    "pIP10|role0": 2,
+    "pMP2|role0": 2
+  },
+  "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
+  "halt_role_definition": "FG and BB are walk-OFF halt populations; BRK is the VNC brake population; roles are annotation metadata only and do not create edges",
+  "descending_role_definition": "published behavioural cell-type names plus conservative annotation keywords; descriptive metadata only and never a synthetic current source",
+  "route_score_definition": "route-family topology scores combine measured published edges; generic forward uses all sensory modalities, while explicit olfactory preservation uses real ORN->candidate->forward-DN and ORN->candidate->motor support; scores are selection/readout metadata only and never create edges",
+  "route_score_source_counts": {
+    "forward_nonzero": 4677,
+    "turn_nonzero": 8277,
+    "escape_nonzero": 1291,
+    "halt_nonzero": 2538
+  },
+  "route_score_selected_counts": {
+    "forward_nonzero": 2688,
+    "turn_nonzero": 4092,
+    "escape_nonzero": 1291,
+    "halt_nonzero": 16,
+    "escape_high": 53
+  },
+  "halt_selected_nonzero": 16,
+  "route_quota_requested": {
+    "route_halt": 700,
+    "route_escape": 900,
+    "route_forward": 650,
+    "route_turn": 600,
+    "route_sensorimotor": 450,
+    "route_olfactory_forward": 700,
+    "route_olfactory_motor": 350
+  },
+  "olfactory_orn_type_counts_source": {
+    "ORN_D": 28,
+    "ORN_DA1": 204,
+    "ORN_DA2": 48,
+    "ORN_DA3": 34,
+    "ORN_DA4l": 33,
+    "ORN_DA4m": 35,
+    "ORN_DC1": 32,
+    "ORN_DC2": 22,
+    "ORN_DC3": 35,
+    "ORN_DC4": 23,
+    "ORN_DL1": 83,
+    "ORN_DL2d": 15,
+    "ORN_DL2v": 23,
+    "ORN_DL3": 103,
+    "ORN_DL4": 62,
+    "ORN_DL5": 43,
+    "ORN_DM1": 74,
+    "ORN_DM2": 54,
+    "ORN_DM3": 63,
+    "ORN_DM4": 32,
+    "ORN_DM5": 35,
+    "ORN_DM6": 58,
+    "ORN_DP1l": 33,
+    "ORN_DP1m": 31,
+    "ORN_V": 55,
+    "ORN_VA1d": 132,
+    "ORN_VA1v": 130,
+    "ORN_VA2": 83,
+    "ORN_VA3": 30,
+    "ORN_VA4": 34,
+    "ORN_VA5": 16,
+    "ORN_VA6": 63,
+    "ORN_VA7l": 29,
+    "ORN_VA7m": 24,
+    "ORN_VC1": 29,
+    "ORN_VC2": 32,
+    "ORN_VC3": 34,
+    "ORN_VC4": 38,
+    "ORN_VC5": 31,
+    "ORN_VL1": 82,
+    "ORN_VL2a": 98,
+    "ORN_VL2p": 45,
+    "ORN_VM1": 33,
+    "ORN_VM2": 41,
+    "ORN_VM3": 43,
+    "ORN_VM4": 78,
+    "ORN_VM5d": 84,
+    "ORN_VM5v": 34,
+    "ORN_VM6l": 14,
+    "ORN_VM6m": 25,
+    "ORN_VM6v": 34,
+    "ORN_VM7d": 36,
+    "ORN_VM7v": 25
+  },
+  "olfactory_orn_type_counts_retained": {
+    "": 4,
+    "ORN_D": 4,
+    "ORN_DA1": 4,
+    "ORN_DA2": 4,
+    "ORN_DA3": 4,
+    "ORN_DA4l": 4,
+    "ORN_DA4m": 4,
+    "ORN_DC1": 4,
+    "ORN_DC2": 4,
+    "ORN_DC3": 4,
+    "ORN_DC4": 4,
+    "ORN_DL1": 4,
+    "ORN_DL2d": 4,
+    "ORN_DL2v": 13,
+    "ORN_DL3": 4,
+    "ORN_DL4": 4,
+    "ORN_DL5": 4,
+    "ORN_DM1": 4,
+    "ORN_DM2": 4,
+    "ORN_DM3": 4,
+    "ORN_DM4": 4,
+    "ORN_DM5": 4,
+    "ORN_DM6": 4,
+    "ORN_DP1l": 18,
+    "ORN_DP1m": 29,
+    "ORN_V": 4,
+    "ORN_VA1d": 4,
+    "ORN_VA1v": 4,
+    "ORN_VA2": 4,
+    "ORN_VA3": 4,
+    "ORN_VA4": 4,
+    "ORN_VA5": 4,
+    "ORN_VA6": 4,
+    "ORN_VA7l": 4,
+    "ORN_VA7m": 4,
+    "ORN_VC1": 4,
+    "ORN_VC2": 4,
+    "ORN_VC3": 4,
+    "ORN_VC4": 4,
+    "ORN_VC5": 4,
+    "ORN_VL1": 4,
+    "ORN_VL2a": 4,
+    "ORN_VL2p": 4,
+    "ORN_VM1": 4,
+    "ORN_VM2": 4,
+    "ORN_VM3": 4,
+    "ORN_VM4": 4,
+    "ORN_VM5d": 4,
+    "ORN_VM5v": 4,
+    "ORN_VM6l": 4,
+    "ORN_VM6m": 4,
+    "ORN_VM6v": 4,
+    "ORN_VM7d": 4,
+    "ORN_VM7v": 4
+  },
+  "retained_sensor_to_desc_edges": 1330,
+  "retained_desc_to_motor_edges": 796,
+  "retained_sensor_to_desc_contacts": 25286,
+  "retained_desc_to_motor_contacts": 9117,
+  "retained_desc_to_intermediate_edges": 14016,
+  "retained_intermediate_to_motor_edges": 81698,
+  "retained_desc_to_intermediate_to_motor_paths": 187528,
+  "retained_desc_to_intermediate_to_motor_by_role_paths": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      17436,
+      810,
+      0,
+      0,
+      0,
+      57,
+      32734
+    ],
+    [
+      0,
+      17824,
+      5453,
+      0,
+      0,
+      0,
+      138,
+      56808
+    ],
+    [
+      0,
+      12955,
+      1942,
+      0,
+      0,
+      0,
+      75,
+      35986
+    ],
+    [
+      0,
+      1199,
+      909,
+      0,
+      0,
+      0,
+      91,
+      3111
+    ]
+  ],
+  "retained_sensor_to_desc_by_channel_role_contacts": [
+    [
+      0,
+      2513,
+      7908,
+      2815,
+      11329
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      3,
+      2,
+      14,
+      702
+    ]
+  ],
+  "retained_desc_to_motor_by_role_contacts": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      749,
+      22,
+      0,
+      0,
+      0,
+      0,
+      2258
+    ],
+    [
+      0,
+      223,
+      18,
+      0,
+      0,
+      0,
+      0,
+      5112
+    ],
+    [
+      0,
+      227,
+      39,
+      0,
+      0,
+      0,
+      0,
+      375
+    ],
+    [
+      0,
+      0,
+      4,
+      0,
+      0,
+      0,
+      90,
+      0
+    ]
+  ],
+  "direct_sensor_desc_full_graph_weight": [
+    [
+      274412.0,
+      3310.0,
+      11480.0,
+      10800.0,
+      11329.0
+    ],
+    [
+      520.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      30901.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      171977.0,
+      5.0,
+      48.0,
+      14.0,
+      709.0
+    ]
+  ],
+  "direct_desc_motor_full_graph_weight": [
+    [
+      0.0,
+      34949.0,
+      13132.0,
+      0.0,
+      0.0,
+      0.0,
+      94.0,
+      172273.0
+    ],
+    [
+      0.0,
+      749.0,
+      22.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      2258.0
+    ],
+    [
+      0.0,
+      223.0,
+      18.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      5112.0
+    ],
+    [
+      0.0,
+      227.0,
+      39.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      375.0
+    ],
+    [
+      0.0,
+      0.0,
+      4.0,
+      0.0,
+      0.0,
+      0.0,
+      90.0,
+      0.0
+    ]
+  ],
+  "license": "CC-BY-4.0",
+  "download": "https://male-cns.janelia.org/download/",
+  "paper": "Berg et al., Cell 2026, DOI 10.1016/j.cell.2026.08.015",
+  "status": "RELEASE_CANDIDATE",
   "source_hashes": {
     "annotations": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
     "neurotransmitters": "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621",
-    "weights": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1",
-    "fbc103": "bfadc30fd113c25f9711cce6ef8f6b80e9c139fe6d229965a4adabb94d8b4e60"
+    "weights": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
   },
-  "ranges": {
-    "VIS_START": 0,
-    "VIS_END": 618,
-    "OLF_START": 618,
-    "OLF_END": 739,
-    "GUST_START": 739,
-    "GUST_END": 1050,
-    "MECH_START": 1050,
-    "MECH_END": 2412,
-    "DESC_START": 2412,
-    "DESC_END": 3726,
-    "ASC_START": 3726,
-    "ASC_END": 4278,
-    "VMOTOR_START": 4278,
-    "VMOTOR_END": 4986,
-    "OTHER_START": 4986,
-    "OTHER_END": 16669
-  },
-  "validation": {
-    "target_nodes": 16669,
-    "selected_nodes": 16669,
-    "full_neurons": 166700,
-    "full_edges": 25582938,
-    "reduced_edges": 2064951,
-    "edge_fraction": 0.0807159443532248,
-    "full_contacts": 124177617,
-    "reduced_contacts": 16783932,
-    "contact_fraction": 0.13516068680879906,
-    "types_full": 11751,
-    "types_reduced": 9255,
-    "type_coverage_count": 9255,
-    "type_coverage_fraction": 0.7875925453152923,
-    "degree_wasserstein_all": 282.1594121175764,
-    "dn_full": 1314,
-    "dn_selected": 1314,
-    "motor_full": 925,
-    "motor_selected": 925,
-    "sensor_full": 17937,
-    "sensor_selected": 1794,
-    "sensor_selection_fraction": 0.10001672520488376,
-    "dn_with_sensor_input_full": 563,
-    "dn_with_sensor_input_reduced": 437,
-    "dn_with_motor_output_full": 730,
-    "dn_with_motor_output_reduced": 730,
-    "twohop_dn_pairs_full": 20939,
-    "twohop_dn_pairs_reduced": 7190,
-    "twohop_pair_fraction": 0.34337838483213146,
-    "nt_js_divergence": 0.047454112415519535
-  }
+  "fbc103_sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"
 }

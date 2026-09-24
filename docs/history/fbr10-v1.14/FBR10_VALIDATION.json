@@ -1,0 +1,197 @@
+{
+  "summary": {
+    "target_nodes": 16669,
+    "selected_nodes": 16669,
+    "full_neurons": 166700,
+    "full_edges": 25582938,
+    "reduced_edges": 2064951,
+    "edge_fraction": 0.0807159443532248,
+    "full_contacts": 124177617,
+    "reduced_contacts": 16783932,
+    "contact_fraction": 0.13516068680879906,
+    "types_full": 11751,
+    "types_reduced": 9255,
+    "type_coverage_count": 9255,
+    "type_coverage_fraction": 0.7875925453152923,
+    "degree_wasserstein_all": 282.1594121175764,
+    "dn_full": 1314,
+    "dn_selected": 1314,
+    "motor_full": 925,
+    "motor_selected": 925,
+    "sensor_full": 17937,
+    "sensor_selected": 1794,
+    "sensor_selection_fraction": 0.10001672520488376,
+    "dn_with_sensor_input_full": 563,
+    "dn_with_sensor_input_reduced": 437,
+    "dn_with_motor_output_full": 730,
+    "dn_with_motor_output_reduced": 730,
+    "twohop_dn_pairs_full": 20939,
+    "twohop_dn_pairs_reduced": 7190,
+    "twohop_pair_fraction": 0.34337838483213146,
+    "nt_js_divergence": 0.047454112415519535
+  },
+  "superclasses": [
+    {
+      "superclass": "descending_neuron",
+      "full": 1314,
+      "reduced": 1314,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "visual_projection",
+      "full": 9201,
+      "reduced": 513,
+      "fraction": 0.05575480925986306
+    },
+    {
+      "superclass": "visual_centrifugal",
+      "full": 563,
+      "reduced": 105,
+      "fraction": 0.18650088809946713
+    },
+    {
+      "superclass": "cb_intrinsic",
+      "full": 32164,
+      "reduced": 6067,
+      "fraction": 0.18862703643825396
+    },
+    {
+      "superclass": "ol_intrinsic",
+      "full": 89403,
+      "reduced": 2923,
+      "fraction": 0.0326946523047325
+    },
+    {
+      "superclass": "cb_motor",
+      "full": 107,
+      "reduced": 107,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "ascending_neuron",
+      "full": 1846,
+      "reduced": 552,
+      "fraction": 0.2990249187432286
+    },
+    {
+      "superclass": "cb_endocrine",
+      "full": 72,
+      "reduced": 4,
+      "fraction": 0.05555555555555555
+    },
+    {
+      "superclass": "cb_sensory",
+      "full": 4868,
+      "reduced": 772,
+      "fraction": 0.15858668857847166
+    },
+    {
+      "superclass": "vnc_intrinsic",
+      "full": 13161,
+      "reduced": 2466,
+      "fraction": 0.18737178025985868
+    },
+    {
+      "superclass": "sensory_descending",
+      "full": 12,
+      "reduced": 12,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "ol_sensory",
+      "full": 6098,
+      "reduced": 121,
+      "fraction": 0.01984257133486389
+    },
+    {
+      "superclass": "efferent_descending",
+      "full": 4,
+      "reduced": 4,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "sensory_ascending",
+      "full": 537,
+      "reduced": 171,
+      "fraction": 0.31843575418994413
+    },
+    {
+      "superclass": "vnc_efferent",
+      "full": 94,
+      "reduced": 94,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "cb_efferent",
+      "full": 4,
+      "reduced": 4,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "ENS",
+      "full": 50,
+      "reduced": 2,
+      "fraction": 0.04
+    },
+    {
+      "superclass": "efferent_ascending",
+      "full": 8,
+      "reduced": 8,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "cb_sensory_tbc",
+      "full": 14,
+      "reduced": 2,
+      "fraction": 0.14285714285714285
+    },
+    {
+      "superclass": "visual_projection_tbc",
+      "full": 2,
+      "reduced": 0,
+      "fraction": 0.0
+    },
+    {
+      "superclass": "vnc_motor",
+      "full": 708,
+      "reduced": 708,
+      "fraction": 1.0
+    },
+    {
+      "superclass": "sensory_ascending_tbc",
+      "full": 2,
+      "reduced": 0,
+      "fraction": 0.0
+    },
+    {
+      "superclass": "vnc_sensory",
+      "full": 6370,
+      "reduced": 716,
+      "fraction": 0.11240188383045525
+    },
+    {
+      "superclass": "vnc_endocrine",
+      "full": 22,
+      "reduced": 3,
+      "fraction": 0.13636363636363635
+    },
+    {
+      "superclass": "vnc_tbc",
+      "full": 38,
+      "reduced": 1,
+      "fraction": 0.02631578947368421
+    },
+    {
+      "superclass": "vnc_sensory_tbc",
+      "full": 36,
+      "reduced": 0,
+      "fraction": 0.0
+    },
+    {
+      "superclass": "descending_neuron_tbc",
+      "full": 2,
+      "reduced": 0,
+      "fraction": 0.0
+    }
+  ]
+}

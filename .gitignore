@@ -1,11 +1,8 @@
+# Local/build outputs
 .gradle/
-.idea/
-*.iml
-local.properties
 build/
-**/build/
-**/.cxx/
-externalNativeBuild/
-.DS_Store
-Thumbs.db
-tools/__pycache__/
+app/build/
+*.pyc
+__pycache__/
+*.partial
+.idea/
