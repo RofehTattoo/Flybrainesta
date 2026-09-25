@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate FBD105 reference-like signed dynamics against current FBC103."""
 from __future__ import annotations
-import argparse, hashlib, json, struct, math
+import argparse, hashlib, json, struct
 from pathlib import Path
 
 FBC=b"FBC103\x00\x00"; FBD=b"FBD105\x00\x00"
@@ -42,10 +42,7 @@ def main(root:Path):
         if w>0: pos_edges+=1
         else: neg_edges+=1
     assert pos==len(db)
-    # Raw MaleCNS contact counts are multiplied by 0.275 mV. Do not impose
-    # an arbitrary 100 mV ceiling: multi-contact edges can legitimately exceed
-    # it. Validate finiteness and the minimum one-contact magnitude instead.
-    assert math.isfinite(abs_max) and abs_max >= 0.275
+    assert abs_max >= 0.275 and abs_max < 100.0
     if report.exists():
         assert r.get("source_structural_sha256")==expected_sha
         assert r.get("format")=="FBD105"

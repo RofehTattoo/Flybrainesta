@@ -34,6 +34,15 @@ assert 'injectOlfactoryPopulation' in MAIN
 assert 'coerceIn(-SENSORY_KICK_LIMIT, SENSORY_KICK_LIMIT)' not in MAIN
 assert 'driveBody' in MAIN
 
+# Environment invariant: neural simulation must never teleport/reposition food.
+_neural_start = MAIN.index('private fun driveBody')
+_neural_end = MAIN.index('private fun runNeuralSimulation', _neural_start)
+_neural = MAIN[_neural_start:_neural_end]
+assert 'foodX = .08f + rng.nextFloat()' not in _neural
+assert 'foodY = .14f + rng.nextFloat()' not in _neural
+assert 'foodContactLatched' in _neural
+assert 'if (foodContact && !foodContactLatched)' in _neural
+
 # The builder is source-backed and must cross both annotation and NT provenance.
 for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 264', 'EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54', 'neurotransmitters']:
     assert token in BUILDER, token

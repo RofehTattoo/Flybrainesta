@@ -357,8 +357,15 @@ class MainActivity : Activity() {
         private var flightFactor = 0f
         private var flightPhase = 0f
 
+        // ENVIRONMENT ONLY: food position is never written by neural dynamics or
+        // by the feeding/reward path. It changes only through explicit user
+        // placement or RESET, keeping the stimulus environment deterministic.
         private var foodX = .76f
         private var foodY = .35f
+        private val FOOD_CONTACT_DISTANCE = .055f
+        private val FOOD_CONTACT_GUSTATORY_MIN = .04f
+        private var foodContactLatched = false
+        private var draggingStimulus = false
         private var lightX = .72f
         private var lightY = .72f
         private var dangerX = .30f
@@ -628,8 +635,9 @@ class MainActivity : Activity() {
             flightFactor = 0f
             flightPhase = 0f
             jumpActivityCacheValue = 0f
-            foodX = .76f
-            foodY = .35f
+            setFoodPosition(.76f, .35f)
+            foodContactLatched = false
+            draggingStimulus = false
             lightX = .72f
             lightY = .72f
             dangerX = .30f
@@ -2367,14 +2375,19 @@ class MainActivity : Activity() {
             var reward = 0f
             val foodDistance = hypot(foodX - flyX, foodY - flyY)
             val gustatoryRateNow = populationRate(GUST_START, GUST_END)
-            // Food intake requires physical proximity plus measured gustatory activity.
-            if (foodOn && foodDistance < .055f && gustatoryRateNow > .04f) {
+            // Feeding/contact is a neural + body event. It may update internal
+            // state, but it MUST NOT mutate the environment position. The latch
+            // makes foodHits count contact episodes instead of counting every
+            // 20 ms simulation frame while the fly remains over the food.
+            val foodContact = foodOn &&
+                foodDistance < FOOD_CONTACT_DISTANCE &&
+                gustatoryRateNow > FOOD_CONTACT_GUSTATORY_MIN
+            if (foodContact && !foodContactLatched) {
                 foodHits++
                 satiety = min(1f, satiety + .24f)
                 reward += 1f
-                foodX = .08f + rng.nextFloat() * .84f
-                foodY = .14f + rng.nextFloat() * .58f
             }
+            foodContactLatched = foodContact
 
             satiety *= exp((-dt * .018f).toDouble()).toFloat()
 
@@ -3105,25 +3118,49 @@ class MainActivity : Activity() {
         }
 
         override fun onTouchEvent(e: MotionEvent): Boolean {
+            // Explicit environment manipulation: the currently selected
+            // stimulus is the object the user is placing. A tap places it and a
+            // drag moves it continuously. This input path is independent from
+            // the neural update loop.
             when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                MotionEvent.ACTION_DOWN -> {
                     if (e.y < sceneBottom()) {
+                        draggingStimulus = true
                         moveStimulus(e.x / width.toFloat(), e.y / sceneBottom())
                     }
                     return true
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> return true
+                MotionEvent.ACTION_MOVE -> {
+                    if (draggingStimulus && e.y < sceneBottom()) {
+                        moveStimulus(e.x / width.toFloat(), e.y / sceneBottom())
+                    }
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    draggingStimulus = false
+                    return true
+                }
             }
             return true
+        }
+
+        private fun setFoodPosition(x: Float, y: Float) {
+            foodX = x.coerceIn(.06f, .94f)
+            foodY = y.coerceIn(.10f, .82f)
+            // Repositioning the food is an environment event. Clear the contact
+            // latch so placing food onto the fly can legitimately create a new
+            // contact event on the next simulation tick.
+            foodContactLatched = false
+            invalidate()
         }
 
         private fun moveStimulus(xr: Float, yr: Float) {
             val x = xr.coerceIn(.06f, .94f)
             val y = yr.coerceIn(.10f, .82f)
             when (selectedStimulus) {
-                0 -> { foodX = x; foodY = y }
-                1 -> { lightX = x; lightY = y }
-                else -> { dangerX = x; dangerY = y }
+                0 -> setFoodPosition(x, y)
+                1 -> { lightX = x; lightY = y; invalidate() }
+                else -> { dangerX = x; dangerY = y; invalidate() }
             }
         }
     }
