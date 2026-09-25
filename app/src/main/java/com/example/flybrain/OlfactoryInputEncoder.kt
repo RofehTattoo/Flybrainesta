@@ -36,7 +36,10 @@ internal object OlfactoryInputEncoder {
         val common = rawMean.coerceIn(absContrast, limit - absContrast)
         val encodedLeft = (common + contrast).coerceIn(0f, limit)
         val encodedRight = (common - contrast).coerceIn(0f, limit)
-        val center = (((left + right) * 0.5f) * gain).coerceIn(0f, limit)
+        // Unknown-side ORNs receive the same common-mode component used by the
+        // bilateral channels, not an independently hard-clamped value that can
+        // saturate earlier and erase the calibrated presence/contrast relationship.
+        val center = common.coerceIn(0f, limit)
         return Encoded(encodedLeft, center, encodedRight)
     }
 }

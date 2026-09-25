@@ -179,7 +179,9 @@ class MainActivity : Activity() {
         // The gain is an environmental sensor calibration parameter only; it never
         // writes motor state or a turn command.
         private val FOOD_OLF_GAIN = 6.00f
-        private val FOOD_OLF_SIGMA = 1.10f
+        // Calibrated to the normalized scene: odor presence decays over a
+        // local neighborhood instead of saturating almost the entire arena.
+        private val FOOD_OLF_SIGMA = OlfactorySensorModel.ODOR_SIGMA
         // All environmental sensory inputs are discrete voltage kicks. Keep the
         // largest single receptor kick on the same order as the post-gain synaptic
         // current cap, preventing an external sensor from numerically overwhelming
@@ -1036,14 +1038,15 @@ class MainActivity : Activity() {
             // model only. They are not a neural shortcut: the resulting current is
             // injected only into the retained OLF neurons and must propagate through
             // FBR-10 to affect behavior.
-            val forward = .018f
-            val lateral = .018f * side.toFloat()
-            val ca = cos(heading)
-            val sa = sin(heading)
-            val ax = flyX + ca * forward - sa * lateral
-            val ay = flyY + sa * forward + ca * lateral
-            val d = hypot(foodX - ax, foodY - ay)
-            return gaussian(d, FOOD_OLF_SIGMA)
+            return OlfactorySensorModel.sampleAntenna(
+                flyX = flyX,
+                flyY = flyY,
+                heading = heading,
+                foodX = foodX,
+                foodY = foodY,
+                side = side,
+                sigma = FOOD_OLF_SIGMA
+            )
         }
 
         private fun injectOlfactoryPopulation(enabled: Boolean, sx: Float, sy: Float, gain: Float) {
@@ -1072,8 +1075,11 @@ class MainActivity : Activity() {
             olfInputFrontCache = 0f
             olfInputRearCache = 0f
             foodDirectionalBias = ((left - right) / (left + right + .001f)).coerceIn(-1f, 1f)
+            // Presence/strength is kept separate from receptor gain and from
+            // signed bilateral contrast. It remains a smooth concentration signal
+            // instead of saturating merely because the neural kick gain is high.
             val bilateral = (left + right) * 0.5f
-            foodDrive = (bilateral * gain).coerceIn(0f, 1f)
+            foodDrive = bilateral.coerceIn(0f, 1f)
         }
 
         private fun loadVncMotorSemantics() {

@@ -81,6 +81,7 @@ jobs:
       - name: Test olfactory encoder and food-response chain
         run: |
           python tools/test_food_response_chain.py
+          python tools/test_olfactory_sensor_model.py
           gradle --no-daemon :app:testDebugUnitTest
 
       - name: Assemble APK

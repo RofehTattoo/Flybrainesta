@@ -38,6 +38,39 @@ class OlfactoryInputEncoderTest {
         assertEquals(limit, result.center, 0f)
     }
 
+    @Test fun odorFieldHasLocalFalloffInsteadOfArenaWideSaturation() {
+        val near = OlfactorySensorModel.bilateralPresence(
+            OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .55f, .5f, -1),
+            OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .55f, .5f, 1)
+        )
+        val far = OlfactorySensorModel.bilateralPresence(
+            OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .95f, .5f, -1),
+            OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .95f, .5f, 1)
+        )
+        assertTrue("near food must produce stronger odor than distant food", near > far)
+        assertTrue("distant odor must not saturate presence", far < 0.5f)
+    }
+
+    @Test fun symmetricFoodAheadProducesNoFalseBilateralBias() {
+        val left = OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .8f, .5f, -1)
+        val right = OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .8f, .5f, 1)
+        assertEquals(left, right, 0.000001f)
+        assertEquals(0f, OlfactorySensorModel.normalizedContrast(left, right), 0.000001f)
+    }
+
+    @Test fun reversingFoodSideReversesOnlySensoryContrast() {
+        val leftFoodLeft = OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .65f, .42f, -1)
+        val leftFoodRight = OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .65f, .42f, 1)
+        val rightFoodLeft = OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .65f, .58f, -1)
+        val rightFoodRight = OlfactorySensorModel.sampleAntenna(.5f, .5f, 0f, .65f, .58f, 1)
+        assertTrue(OlfactorySensorModel.normalizedContrast(leftFoodLeft, leftFoodRight) != 0f)
+        assertEquals(
+            -OlfactorySensorModel.normalizedContrast(leftFoodLeft, leftFoodRight),
+            OlfactorySensorModel.normalizedContrast(rightFoodLeft, rightFoodRight),
+            0.015f
+        )
+    }
+
     @Test fun zeroInputProducesZeroCurrent() {
         val result = OlfactoryInputEncoder.encode(0f, 0f, gain = 6f, limit = limit)
         assertEquals(0f, result.left, 0f)
