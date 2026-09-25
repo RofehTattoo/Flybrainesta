@@ -37,8 +37,8 @@ assert 'coerceIn(-SENSORY_KICK_LIMIT, SENSORY_KICK_LIMIT)' not in MAIN
 for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 264', 'EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54', 'neurotransmitters']:
     assert token in BUILDER, token
 
-assert 'APP_VERSION = "1.17.0"' in META
-assert 'APP_VERSION_CODE = 131' in META
+assert 'APP_VERSION = "1.17.1"' in META
+assert 'APP_VERSION_CODE = 132' in META
 assert 'REDUCTION_ID = "FBR-10-OLF1"' in META
 assert 'route_olfactory_forward' not in MAIN
 assert 'side_from_nerve' not in BUILDER

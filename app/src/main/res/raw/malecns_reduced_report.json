@@ -1,6 +1,6 @@
 {
   "dataset": "MaleCNS v1.0",
-  "flybrain_version": "1.17.0",
+  "flybrain_version": "1.17.1",
   "reduction": "FBR-10-OLF1",
   "binary_format": "FBC103",
   "sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf",

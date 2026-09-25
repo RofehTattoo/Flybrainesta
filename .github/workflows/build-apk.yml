@@ -34,6 +34,7 @@ jobs:
           python tools/test_olfactory_input_map.py
           python tools/test_olfactory_route_reduction.py
           python tools/test_phase2b_temporal_substepping.py
+          python tools/test_sensory_sample_hold.py
           python tools/test_sensory_input_purity.py
           python tools/test_vnc_motor_semantics_logic.py
           python tools/validate_fbr10_olf1.py --fbc103 app/src/main/res/raw/malecns_reduced.bin --report app/src/main/res/raw/malecns_reduced_report.json

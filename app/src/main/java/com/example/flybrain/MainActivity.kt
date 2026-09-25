@@ -1549,10 +1549,11 @@ class MainActivity : Activity() {
         }
 
         private fun sense(dt: Float) {
-            // External sensory drive is a bounded, normalized voltage-kick (ΔV),
+            // External sensory drive is a bounded, normalized voltage-dose (ΔV),
             // sampled once per 20 ms neural frame; it is NOT a physical current in A.
-            // Clear it before encoding the current environmental state so kicks do
-            // not accumulate across frames. stepBrainSubstep applies it exactly once.
+            // Clear it before encoding the current environmental state so samples do
+            // not accumulate across frames. stepBrainSubstep holds this sample across
+            // the four 5 ms substeps and distributes the calibrated frame dose.
             java.util.Arrays.fill(sensoryCurrent, 0f)
             val foodGustatoryIntensity = stimulusIntensity(
                 foodOn, foodX, foodY, .065f
@@ -1691,13 +1692,14 @@ class MainActivity : Activity() {
                 // the membrane retains physical temporal state instead of being
                 // reset to V_REST by the Euler factor 1 - dt/tau = 0.
                 // Sensory/synaptic terms are normalized ΔV kicks, not SI currents;
-                // do not multiply them by dt. Sensory input is sampled once per
-                // 20 ms frame and applied only at its first 5 ms substep. Synaptic
-                // drive is applied at each substep. This distinction is deliberate:
-                // multiplying the sensory kick by four would change its calibrated
-                // amplitude, while treating it as amperes would require a new model
-                // with explicit membrane resistance and unit calibration.
-                val externalCurrent = if (applySensoryKick && i < SENSOR_END) sensoryCurrent[i] else 0f
+                // do not multiply them by dt. The environmental sample is held for
+                // the whole 20 ms public frame and distributed across the four 5 ms
+                // integration substeps. This preserves the total injected ΔV per
+                // frame while avoiding an artificial 5 ms impulse that disappears
+                // before the downstream olfactory/circuit neurons can integrate it.
+                val externalCurrent = if (applySensoryKick && i < SENSOR_END) {
+                    sensoryCurrent[i] / NEURAL_SUBSTEPS_PER_FRAME.toFloat()
+                } else 0f
                 val membraneLeak = (V_REST - v[i]) * (1f - membraneDecay)
                 v[i] += membraneLeak - adapt[i] * dt +
                     synCurrent + externalCurrent + centralNoise
@@ -2439,7 +2441,10 @@ class MainActivity : Activity() {
             for (substep in 0 until NEURAL_SUBSTEPS_PER_FRAME) {
                 totalSpikes += stepBrainSubstep(
                     NEURAL_SUBSTEP_DT_SECONDS,
-                    applySensoryKick = substep == 0
+                    // The sensory sample is a zero-order-held environmental signal.
+                    // Keep it active for every internal substep; stepBrainSubstep
+                    // divides the calibrated frame dose across the four substeps.
+                    applySensoryKick = true
                 )
                 accumulateNeuralSubstepDiagnostics()
             }
@@ -2571,7 +2576,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.17.0 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.17.1 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(8.4f)

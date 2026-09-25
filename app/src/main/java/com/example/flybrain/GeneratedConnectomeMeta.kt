@@ -2,10 +2,10 @@ package com.example.flybrain
 
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF1 · FBD104 · VNCSEM102"
-    const val FLYBRAIN_VERSION = "1.17.0"
-    const val FLYBRAIN_VERSION_CODE = 131
-    const val APP_VERSION = "1.17.0"
-    const val APP_VERSION_CODE = 131
+    const val FLYBRAIN_VERSION = "1.17.1"
+    const val FLYBRAIN_VERSION_CODE = 132
+    const val APP_VERSION = "1.17.1"
+    const val APP_VERSION_CODE = 132
     const val REDUCTION_ID = "FBR-10-OLF1"
     const val RETAINED_OLFACTORY_ORNS = 264
     // 54 distinct published (type, entryNerve) combinations; 53 unique

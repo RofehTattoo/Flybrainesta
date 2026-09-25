@@ -18,7 +18,7 @@ assert 'visualSubstepDecay' not in s
 assert 'visualSubstepGain' not in s
 assert 'private fun updateOuterNeuralState(dt: Float, totalSpikes: Int)' in s
 assert 'totalSpikes += stepBrainSubstep(' in s
-assert 'applySensoryKick = substep == 0' in s
+assert 'applySensoryKick = substep == 0' not in s
 assert 'sense(dt)' in s
 assert 'resetMotorSubstepAccumulators()' in s
 assert 'driveBody(dt)' in s
@@ -77,11 +77,12 @@ substep_next_available = 2 * sub_dt     # 10 ms from a spike at substep 0
 assert substep_next_available < legacy_next_available
 assert substep_next_available > refractory
 
-# ----- Sensory kick conservation -----
-# Phase 2B deliberately keeps the old per-20 ms sensory kick semantics: one kick,
-# not four. This prevents an unintended 4x increase in stimulus amplitude.
-apply_flags = [sub == 0 for sub in range(nsub)]
-assert apply_flags == [True, False, False, False]
+# ----- Sensory sample-and-hold conservation -----
+# The sampled environmental dose is present in every 5 ms substep, but each
+# substep receives exactly one quarter of the frame dose.
+apply_flags = [True for _ in range(nsub)]
+assert apply_flags == [True, True, True, True]
+assert math.isclose(sum(0.55 / nsub for _ in range(nsub)), 0.55, rel_tol=0, abs_tol=1e-15)
 
 # ----- Presentation-memory conservation -----
 # The old renderer updated visualActivity once per 20 ms frame with 0.88 retention
@@ -107,7 +108,7 @@ print(f'synaptic_retention_5ms={sub_syn_retention:.12f}')
 print(f'synaptic_trace_samples={[[round(x, 12) for x in samples]][0]}')
 print(f'legacy_min_spike_interval_ms={legacy_next_available*1000:.1f}')
 print(f'phase2b_min_discrete_interval_ms={substep_next_available*1000:.1f}')
-print('sensory_kick_application=[true,false,false,false]')
+print('sensory_sample_hold_application=[true,true,true,true]; per-substep-dose=frame-dose/4')
 print('motor_output=20ms aggregate of all 4 substeps')
 print('visual_memory=20ms legacy 0.88 retention + 0.22 frame spike latch')
 print('FBC103_runtime_hash_check=required')
