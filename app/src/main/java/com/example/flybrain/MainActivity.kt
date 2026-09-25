@@ -1621,10 +1621,19 @@ class MainActivity : Activity() {
             // trace is applied to the published retained graph; it does not alter topology.
             val synDecay = exp((-dt / .005f).toDouble()).toFloat()
             val membraneDecay = exp((-dt / TAU_MEMBRANE_SECONDS).toDouble()).toFloat()
+
+            // Synchronous network update: first snapshot every neuron's outgoing
+            // synaptic trace from the PREVIOUS substep, then evaluate any target.
+            // Updating synTrace inside the membrane loop made results depend on
+            // neuron index: targets later in the array could see this substep's
+            // newly updated source trace, while earlier targets saw the old trace.
+            // That accidental Gauss-Seidel-like sweep biases propagation and can
+            // suppress/reorder recruitment of descending and VNC motor neurons.
             for (i in 0 until N) {
                 synTrace[i] = (synTrace[i] * synDecay + if (prevFired[i]) 1f else 0f).coerceAtMost(3f)
             }
 
+            // All neurons now read the same completed synaptic-state snapshot.
             for (i in 0 until N) {
                 if (refractory[i] > 0f) {
                     refractory[i] -= dt

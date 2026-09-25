@@ -82,6 +82,7 @@ jobs:
         run: |
           python tools/test_food_response_chain.py
           python tools/test_olfactory_sensor_model.py
+          python tools/test_synchronous_neural_update.py
           gradle --no-daemon :app:testDebugUnitTest
 
       - name: Assemble APK
