@@ -1543,8 +1543,10 @@ class MainActivity : Activity() {
         }
 
         private fun sense(dt: Float) {
-            // External sensory drive is a per-step current, not an accumulating state.
-            // Clear it before encoding the current environmental state.
+            // External sensory drive is a bounded, normalized voltage-kick (ΔV),
+            // sampled once per 20 ms neural frame; it is NOT a physical current in A.
+            // Clear it before encoding the current environmental state so kicks do
+            // not accumulate across frames. stepBrainSubstep applies it exactly once.
             java.util.Arrays.fill(sensoryCurrent, 0f)
             val foodGustatoryIntensity = stimulusIntensity(
                 foodOn, foodX, foodY, .065f
@@ -1673,11 +1675,13 @@ class MainActivity : Activity() {
                 // neural step, the exact retention factor is exp(-1)=0.367879, so
                 // the membrane retains physical temporal state instead of being
                 // reset to V_REST by the Euler factor 1 - dt/tau = 0.
-                // Sensory/synaptic terms remain per-step voltage kicks exactly as
-                // before; only the leak integration is corrected.
-                // PHASE 2B: sensoryCurrent retains its legacy meaning as one
-                // discrete 20 ms environmental kick. Apply it once at the first
-                // internal substep instead of multiplying it by the substep count.
+                // Sensory/synaptic terms are normalized ΔV kicks, not SI currents;
+                // do not multiply them by dt. Sensory input is sampled once per
+                // 20 ms frame and applied only at its first 5 ms substep. Synaptic
+                // drive is applied at each substep. This distinction is deliberate:
+                // multiplying the sensory kick by four would change its calibrated
+                // amplitude, while treating it as amperes would require a new model
+                // with explicit membrane resistance and unit calibration.
                 val externalCurrent = if (applySensoryKick && i < SENSOR_END) sensoryCurrent[i] else 0f
                 val membraneLeak = (V_REST - v[i]) * (1f - membraneDecay)
                 v[i] += membraneLeak - adapt[i] * dt +

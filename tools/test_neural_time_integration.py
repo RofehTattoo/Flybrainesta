@@ -14,6 +14,8 @@ assert MAIN.count('val membraneDecay = exp((-dt / TAU_MEMBRANE_SECONDS).toDouble
 assert 'v[i] += membraneLeak - adapt[i] * dt +' in MAIN
 assert 'v[i] += ((V_REST - v[i]) * 50.0f - adapt[i]) * dt +' not in MAIN
 assert '50.0f * dt' not in MAIN
+assert 'normalized voltage-kick (ΔV)' in MAIN
+assert 'applySensoryKick = substep == 0' in MAIN
 # The 5 ms synaptic trace is deliberately unchanged in this release.
 assert 'exp((-dt / .005f).toDouble()).toFloat()' in MAIN
 
@@ -23,6 +25,19 @@ tau = 0.020
 retention = math.exp(-dt / tau)
 assert abs(retention - math.exp(-1.0)) < 1e-12
 assert 0.367 < retention < 0.369
+
+# A normalized sensory kick is a voltage increment, applied once per outer frame.
+# From rest, a single kick >= Vth - Vrest reaches threshold immediately.
+v_rest, v_th, kick_limit = -0.72, -0.50, 0.55
+threshold_gap = v_th - v_rest
+assert abs(threshold_gap - 0.22) < 1e-12
+assert kick_limit > threshold_gap
+assert v_rest + threshold_gap >= v_th
+# Subthreshold kicks can accumulate under repeated stimulation in the ideal
+# passive model; this is a diagnostic bound, not a biological calibration.
+steady_state_gain = 1.0 / (1.0 - retention)
+minimum_repeated_kick = threshold_gap / steady_state_gain
+assert 0.139 < minimum_repeated_kick < 0.140
 
 assert 'APP_VERSION = "1.17.0"' in META
 assert 'APP_VERSION_CODE = 131' in META
@@ -38,4 +53,6 @@ current_fbc=hashlib.sha256(raw).hexdigest()
 
 print('V1.17.0 MEMBRANE INTEGRATION AUDIT: PASS')
 print(f'Membrane retention @ 20 ms: {retention:.9f}')
+print(f'Rest-to-threshold ΔV: {threshold_gap:.3f}; sensory kick cap: {kick_limit:.2f}')
+print(f'Ideal repeated-kick threshold: {minimum_repeated_kick:.6f} per 20 ms')
 print(f'Current FBC103 SHA-256: {current_fbc}')
