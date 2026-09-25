@@ -852,7 +852,7 @@ def main(root: Path) -> None:
     # accidental sensory relay. Zero-score cells are never counted against a route
     # quota. This avoids requiring a manually named "forward" DN for the existence
     # of a locomotor chain.
-    food_bridge_pool = intermediate_pool[~intermediate_pool["is_sensory"]].copy()
+    food_bridge_pool = intermediate_pool[intermediate_pool["channel"].astype(np.int8) >= 4].copy()
     for score_col in ("route_olfactory_to_desc", "route_desc_to_leg",
                       "route_olfactory_forward", "route_olfactory_motor"):
         if remaining_slots <= 0:
