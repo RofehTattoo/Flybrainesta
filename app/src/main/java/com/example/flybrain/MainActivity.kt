@@ -1072,6 +1072,7 @@ class MainActivity : Activity() {
             olfInputFrontCache = 0f
             olfInputRearCache = 0f
             foodDirectionalBias = ((left - right) / (left + right + .001f)).coerceIn(-1f, 1f)
+            val bilateral = (left + right) * 0.5f
             foodDrive = (bilateral * gain).coerceIn(0f, 1f)
         }
 
