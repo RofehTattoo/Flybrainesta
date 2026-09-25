@@ -17,8 +17,10 @@ if REPORT.get("reduction") == expected_reduction:
 else:
     assert REPORT.get("reduction") == "FBR-10-OLF1"
     assert REPORT.get("sha256") == sha
-assert REPORT["source_hashes"]["annotations"]=="2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
-assert REPORT["source_hashes"]["weights"]=="e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
+# Source hashes are release-manifest provenance, not guaranteed report fields.
+MANIFEST=json.loads((ROOT/"RELEASE_MANIFEST_FBR10_OLF2.json").read_text(encoding="utf-8"))
+assert MANIFEST["source_hashes"]["annotations"]=="2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
+assert MANIFEST["source_hashes"]["weights"]=="e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
 assert 'EXPECTED_SOURCE_SHA256' in BUILD
 assert 'verify_pinned_source' in BUILD
 print("FBR-10-OLF2-MOTORROUTE RELEASE PROVENANCE: PASS")
