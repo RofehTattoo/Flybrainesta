@@ -67,5 +67,23 @@ jobs:
       - name: Validate FBD104 provenance
         run: python tools/validate_fbr10_dynamics.py
 
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
       - name: Assemble APK
-        run: ./gradlew :app:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlyBrain-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
