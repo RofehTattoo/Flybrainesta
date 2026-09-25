@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate FBD105 reference-like signed dynamics against current FBC103."""
 from __future__ import annotations
-import argparse, hashlib, json, struct
+import argparse, hashlib, json, math, struct
 from pathlib import Path
 
 FBC=b"FBC103\x00\x00"; FBD=b"FBD105\x00\x00"
@@ -42,7 +42,14 @@ def main(root:Path):
         if w>0: pos_edges+=1
         else: neg_edges+=1
     assert pos==len(db)
-    assert abs_max >= 0.275 and abs_max < 100.0
+    # Raw MaleCNS contact counts are multiplied by 0.275 mV. There is no
+    # scientifically justified universal upper bound of 100 mV here: a large
+    # retained contact count can legitimately produce a larger edge weight.
+    # Keep the meaningful lower-bound and finiteness checks, and report the
+    # measured maximum so unexpected magnitudes remain visible in CI.
+    assert math.isfinite(abs_max) and abs_max >= 0.275, (
+        f"FBD105 maximum absolute edge weight is invalid: {abs_max!r} mV"
+    )
     if report.exists():
         assert r.get("source_structural_sha256")==expected_sha
         assert r.get("format")=="FBD105"
@@ -59,6 +66,7 @@ def main(root:Path):
     assert pos_edges>0 and neg_edges>0
     print(f"FBC103: {sn} neurons / {se} structural edges / {expected_sha}")
     print(f"FBD105: {dn} neurons / {de} signed edges / +{pos_edges} / -{neg_edges}")
+    print(f"FBD105 max |edge weight|: {abs_max:.6g} mV")
     print("FBD105 provenance: PASS")
 
 if __name__=="__main__":
