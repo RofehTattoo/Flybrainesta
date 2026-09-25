@@ -78,6 +78,11 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Test olfactory encoder and food-response chain
+        run: |
+          python tools/test_food_response_chain.py
+          gradle --no-daemon :app:testDebugUnitTest
+
       - name: Assemble APK
         run: gradle --no-daemon :app:assembleDebug
 

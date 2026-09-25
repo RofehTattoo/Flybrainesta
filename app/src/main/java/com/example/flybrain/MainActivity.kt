@@ -1050,18 +1050,25 @@ class MainActivity : Activity() {
             if (!enabled) return
             val left = antennaOdorConcentration(sx, sy, -1)
             val right = antennaOdorConcentration(sx, sy, 1)
-            val bilateral = (left + right) * .5f
+            val encoded = OlfactoryInputEncoder.encode(
+                left = left,
+                right = right,
+                gain = gain,
+                limit = SENSORY_KICK_LIMIT
+            )
             for (i in olfactoryNeuronIndices) {
-                val c = when (olfactorySide[i].toInt()) {
-                    -1 -> left
-                    1 -> right
-                    else -> bilateral
+                val current = when (olfactorySide[i].toInt()) {
+                    -1 -> encoded.left
+                    1 -> encoded.right
+                    else -> encoded.center
                 }
-                sensoryCurrent[i] += (c * gain).coerceIn(-SENSORY_KICK_LIMIT, SENSORY_KICK_LIMIT)
+                sensoryCurrent[i] += current
             }
-            olfInputLeftCache = left * gain
-            olfInputCenterCache = bilateral * gain
-            olfInputRightCache = right * gain
+            // These diagnostics report the actual bounded currents injected into
+            // the ORN populations, not the pre-limit concentration*gain values.
+            olfInputLeftCache = encoded.left
+            olfInputCenterCache = encoded.center
+            olfInputRightCache = encoded.right
             olfInputFrontCache = 0f
             olfInputRearCache = 0f
             foodDirectionalBias = ((left - right) / (left + right + .001f)).coerceIn(-1f, 1f)
