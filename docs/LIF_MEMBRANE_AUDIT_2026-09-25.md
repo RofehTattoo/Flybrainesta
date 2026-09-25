@@ -1,7 +1,7 @@
 # LIF membrane audit — 2026-09-25
 
 ## Scope
-This correction clarifies and tests the existing membrane integration without changing the frozen FBR-10-OLF1 connectome, the sensory gain, threshold, or behavioral pathways.
+This correction clarifies and tests the existing membrane integration without changing the frozen FBR-10-OLF2-MOTORROUTE connectome, the sensory gain, threshold, or behavioral pathways.
 
 ## Model actually implemented
 - Resting potential: `V_REST = -0.72` (normalized model units).
@@ -25,3 +25,8 @@ The legacy variable name `sensoryCurrent` is retained to avoid a broad, risky re
 
 ## Biological caveat
 These checks validate numerical consistency, not the biological fidelity of the complete fly. Fidelity still requires runtime measurements of ORN membrane trajectories, spike counts, propagation through the retained graph, and behavior under controlled stimulus protocols.
+
+
+## Reference reset correction
+
+The runtime now follows the reference Shiu et al. network semantics for the alpha-synapse state: a spike resets membrane potential and the neuron's synaptic state, while the refractory gate holds the state until it expires. The implementation is covered by `tools/test_reference_lif_dynamics.py`.

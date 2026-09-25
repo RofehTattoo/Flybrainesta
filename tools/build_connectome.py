@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.17.0 FBR-10-OLF1.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.18.3 FBR-10-OLF2-MOTORROUTE.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 16,669 neurons from the audited 166,700-neuron census
@@ -24,9 +24,9 @@ import pyarrow.ipc as ipc
 
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
-FLYBRAIN_RELEASE = "1.17.1"
-APP_VERSION_CODE = 132
-REDUCTION_ID = "FBR-10-OLF1"
+FLYBRAIN_RELEASE = "1.18.3"
+APP_VERSION_CODE = 136
+REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
 
@@ -147,30 +147,42 @@ def classify_channel(row) -> int:
 
 
 def classify_motor_role(row) -> int:
-    """Map curated VNC motor annotations to a body output category.
+    """Assign the authoritative MaleCNS VNC motor class used by runtime.
+
+    The previous reducer used free-text keyword guesses while runtime used the
+    official class/subclass map. That made route preservation internally
+    inconsistent: a cell could be selected as one motor family and executed as
+    another. We now use the same measured annotation vocabulary in both layers.
+
     0=non-motor, 1=leg, 2=wing, 3=haltere, 4=neck, 5=abdomen, 6=jump, 7=other.
-    This uses published annotation text, never the runtime neuron index.
+    TTMn remains anatomically WING; its jump functional tag belongs to the
+    separate VNC semantics layer.
     """
     sc = clean(row.get("superclass", ""))
     if sc != "vnc_motor":
         return 0
-    fields = []
-    for c in ("type", "instance", "name", "class", "subclass", "primary_neuropil", "nerve", "target", "muscle", "annotation", "group"):
-        if c in row.index:
-            fields.append(clean(row.get(c, "")))
-    text = " ".join(fields).lower()
-    if any(k in text for k in ("tergotrochanteral", "jump", "ttmn")):
-        return 6
-    if any(k in text for k in ("haltere", "halter")):
-        return 3
-    if any(k in text for k in ("wing", "dvm", "dlm", "flight", "steering")):
-        return 2
-    if any(k in text for k in ("neck", "cervical")):
-        return 4
-    if any(k in text for k in ("abdominal", "abdomen", "abdominal")):
-        return 5
-    if any(k in text for k in ("leg", "t1", "t2", "t3", "coxa", "femur", "tibia", "tars", "trochanter", "levator", "depressor", "flexor", "extensor")):
-        return 1
+    raw_cls = clean(row.get("class", "")).strip().lower()
+    subclass = clean(row.get("subclass", "")).strip().lower()
+    subclass_to_role = {
+        "fl": 1, "ml": 1, "hl": 1,
+        "wm": 2, "nm": 4, "hm": 3, "ad": 5, "xm": 6,
+    }
+    raw_to_role = {
+        "leg": 1, "wing": 2, "haltere": 3, "neck": 4,
+        "abdominal": 5, "abdomen": 5, "other": 6,
+    }
+    if subclass in subclass_to_role:
+        role = subclass_to_role[subclass]
+        if raw_cls and raw_cls in raw_to_role and raw_to_role[raw_cls] != role:
+            raise ValueError(
+                f"official VNC class/subclass conflict for bodyId={row.get('bodyId')}: "
+                f"class={raw_cls!r} subclass={subclass!r}"
+            )
+        return role
+    if raw_cls in raw_to_role:
+        return raw_to_role[raw_cls]
+    # Fail closed: unknown official motor semantics must never be promoted into
+    # a locomotor route class by keyword coincidence.
     return 7
 
 
@@ -387,6 +399,10 @@ def main(root: Path) -> None:
     cell_to_desc = np.zeros((5, len(ids)), dtype=np.float64)
     # DN role -> candidate weight.
     desc_to_cell = np.zeros((5, len(ids)), dtype=np.float64)
+    # Candidate <-> ANY descending neuron weight. Role labels are descriptive and
+    # some official DNs remain role 0; routing must not discard those real cells.
+    cell_to_any_desc = np.zeros(len(ids), dtype=np.float64)
+    any_desc_to_cell = np.zeros(len(ids), dtype=np.float64)
     # Candidate -> motor-role weight.
     cell_to_motor = np.zeros((8, len(ids)), dtype=np.float64)
 
@@ -417,17 +433,22 @@ def main(root: Path) -> None:
                 if mm.any():
                     np.add.at(sensor_in[ch], ci[mm], wd[mm])
 
-        # Candidate -> descending neuron.
+        # Candidate -> descending neuron. Keep both the role-specific view used
+        # by diagnostics and an all-DN view used for topology preservation.
         m = is_desc[ci]
         if m.any():
+            np.add.at(cell_to_any_desc, ai[m], wd[m])
             for role in range(1, 5):
                 mm = m & (desc_role[ci] == role)
                 if mm.any():
                     np.add.at(cell_to_desc[role], ai[mm], wd[mm])
 
-        # Descending neuron -> candidate.
+        # Descending neuron -> candidate. Generic DNs (role 0) are included in
+        # the topology-preservation view because the biological role classifier
+        # must never determine whether a real DN is allowed to carry the circuit.
         m = is_desc[ai]
         if m.any():
+            np.add.at(any_desc_to_cell, ci[m], wd[m])
             for role in range(1, 5):
                 mm = m & (desc_role[ai] == role)
                 if mm.any():
@@ -479,6 +500,20 @@ def main(root: Path) -> None:
     forward_motor_path = np.sqrt(
         np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1])
     )
+    # Do not make the reduction depend on a hand-labelled DN role for the
+    # existence of the VNC walking pathway. Every published DN is retained;
+    # therefore premotor bridge cells are scored against the complete DN pool.
+    # IMPORTANT: use the complete retained DN population for structural route
+    # preservation. `descending_role=0` is only an annotation/readout label; it
+    # must not erase a real MaleCNS DN from the sensorimotor graph.
+    all_cell_to_desc = cell_to_any_desc
+    all_desc_to_cell = any_desc_to_cell
+    olfactory_to_desc_path = np.sqrt(
+        np.maximum(0.0, sensor_in[1] * all_cell_to_desc)
+    )
+    descending_to_leg_path = np.sqrt(
+        np.maximum(0.0, all_desc_to_cell * cell_to_motor[1])
+    )
     # Turning/steering can recruit coordinated motor outputs.
     turn_motor_outputs = cell_to_motor[1:].sum(axis=0)
     turn_motor_path = np.sqrt(
@@ -507,12 +542,21 @@ def main(root: Path) -> None:
         np.maximum(0.0, sensor_in[1] * cell_to_motor[1:].sum(axis=0))
     )
 
-    # Halt-route protection. These scores are measured from published edges and
-    # are used only to choose which real neurons survive the 10% reduction.
-    # They never create or rewrite a connection.
+    # Halt-route protection and multi-hop bridge discovery. These scores are
+    # measured from published edges and are used only to choose which real
+    # neurons survive the 10% reduction. They never create or rewrite edges.
     halt_to_walk = np.zeros(len(ids), dtype=np.float64)
     halt_to_motor = np.zeros(len(ids), dtype=np.float64)
     halt_target = np.zeros(len(ids), dtype=np.float64)
+
+    # The previous route analysis only protected `sensor -> candidate -> DN`
+    # and `DN -> candidate -> LEG-MN`. A layered circuit can contain two real
+    # intermediate neurons between the endpoint populations. We therefore also
+    # score every measured three-edge path `ORN -> A -> B -> DN` and
+    # `DN -> A -> B -> LEG-MN`. Both A and B are legitimate reduction candidates.
+    # The score uses only published contact counts and is normalized later.
+    olfactory_three_edge = np.zeros(len(ids), dtype=np.float64)
+    desc_leg_three_edge = np.zeros(len(ids), dtype=np.float64)
     # Re-use the retained classification arrays: halt neurons -> walking DNs,
     # and halt neurons -> motor/premotor outputs are the two biologically relevant
     # preservation routes.
@@ -535,6 +579,30 @@ def main(root: Path) -> None:
             np.add.at(halt_target, ci[m], wd[m])
         if m.any():
             np.add.at(halt_to_walk, ai[m], wd[m])
+        # Measured three-edge olfactory relay:
+        # ORN -> A -> B -> DN. `sensor_in[1][A]` proves a real ORN->A edge,
+        # `all_cell_to_desc[B]` proves a real B->DN edge, and the current
+        # A->B edge is the middle published connection. No bridge is invented.
+        olf_source = sensor_in[1][ai]
+        olf_target = all_cell_to_desc[ci]
+        m3_olf = (olf_source > 0) & (olf_target > 0)
+        if m3_olf.any():
+            path_score = np.sqrt(np.maximum(0.0, olf_source[m3_olf] * wd[m3_olf] * olf_target[m3_olf]))
+            np.add.at(olfactory_three_edge, ai[m3_olf], path_score)
+            np.add.at(olfactory_three_edge, ci[m3_olf], path_score)
+
+        # Measured three-edge DN->leg relay:
+        # DN -> A -> B -> LEG-MN. `all_desc_to_cell[A]` proves DN->A,
+        # `cell_to_motor[LEG][B]` proves B->leg-MN, and A->B is the measured
+        # intermediate connection.
+        desc_source = all_desc_to_cell[ai]
+        leg_target = cell_to_motor[1][ci]
+        m3_leg = (desc_source > 0) & (leg_target > 0)
+        if m3_leg.any():
+            path_score = np.sqrt(np.maximum(0.0, desc_source[m3_leg] * wd[m3_leg] * leg_target[m3_leg]))
+            np.add.at(desc_leg_three_edge, ai[m3_leg], path_score)
+            np.add.at(desc_leg_three_edge, ci[m3_leg], path_score)
+
         # Halt neurons to motor neurons or real premotor intermediates.
         m2 = (halt_role[ai] > 0) & (is_motor[ci] | (
             (~is_sensory[ci]) & (~is_desc[ci]) & (~is_motor[ci])
@@ -544,6 +612,12 @@ def main(root: Path) -> None:
             np.add.at(halt_target, ci[m2], wd[m2])
 
     route_halt = np.maximum(halt_target, 0.5 * halt_to_walk)
+
+    # Keep a node when either a measured two-hop route or a measured three-edge
+    # relay supports it. The graph itself remains the strict induced MaleCNS
+    # subgraph; these arrays only influence which nodes make the 16,669 cut.
+    olfactory_to_desc_path = np.maximum(olfactory_to_desc_path, olfactory_three_edge)
+    descending_to_leg_path = np.maximum(descending_to_leg_path, desc_leg_three_edge)
 
     # V1.04 is fail-closed at the source-analysis level. A build is not allowed
     # to publish a reduced graph whose three intended behavioural route families
@@ -555,6 +629,8 @@ def main(root: Path) -> None:
             ("turn", route_turn),
             ("escape", route_escape),
             ("olfactory_forward", route_olfactory_forward),
+            ("olfactory_to_desc", olfactory_to_desc_path),
+            ("descending_to_leg", descending_to_leg_path),
         )
         if not np.any(score > 0)
     ]
@@ -575,6 +651,8 @@ def main(root: Path) -> None:
     route_sensorimotor_n = normalize_score(route_sensorimotor)
     route_olfactory_forward_n = normalize_score(route_olfactory_forward)
     route_olfactory_motor_n = normalize_score(route_olfactory_motor)
+    olfactory_to_desc_n = normalize_score(olfactory_to_desc_path)
+    descending_to_leg_n = normalize_score(descending_to_leg_path)
     route_halt_n = normalize_score(route_halt)
     degree_n = normalize_score(annotated["degree"].to_numpy(np.float64))
 
@@ -584,6 +662,8 @@ def main(root: Path) -> None:
     annotated["route_sensorimotor"] = route_sensorimotor_n
     annotated["route_olfactory_forward"] = route_olfactory_forward_n
     annotated["route_olfactory_motor"] = route_olfactory_motor_n
+    annotated["route_olfactory_to_desc"] = olfactory_to_desc_n
+    annotated["route_desc_to_leg"] = descending_to_leg_n
     annotated["route_halt"] = route_halt_n
 
     # Source ORN census is validated above independently of selection scores.
@@ -724,8 +804,10 @@ def main(root: Path) -> None:
         "route_forward": 650,
         "route_turn": 600,
         "route_sensorimotor": 450,
-        "route_olfactory_forward": 700,
-        "route_olfactory_motor": 350,
+        "route_olfactory_to_desc": 800,
+        "route_desc_to_leg": 800,
+        "route_olfactory_forward": 500,
+        "route_olfactory_motor": 250,
     }
     route_parts = []
     route_ids = set()
@@ -762,13 +844,24 @@ def main(root: Path) -> None:
         route_ids.update(turn_seed.bodyId.astype(int).tolist())
         remaining_slots -= len(turn_seed)
 
-    # Explicitly reserve central bridge cells with measured ORN-driven route support.
-    # This is the key structural correction for long-range food recruitment.
-    for score_col in ("route_olfactory_forward", "route_olfactory_motor"):
+    # Explicitly reserve central bridge cells for the two distinct causal halves
+    # of food-to-locomotion routing. Both scores are computed from real published
+    # edges: ORN -> intermediate -> any retained DN, and any retained DN ->
+    # intermediate -> leg motor. The bridge candidate itself is non-sensory so that
+    # the protected cells represent central/VNC premotor circuitry rather than an
+    # accidental sensory relay. Zero-score cells are never counted against a route
+    # quota. This avoids requiring a manually named "forward" DN for the existence
+    # of a locomotor chain.
+    food_bridge_pool = intermediate_pool[~intermediate_pool["is_sensory"]].copy()
+    for score_col in ("route_olfactory_to_desc", "route_desc_to_leg",
+                      "route_olfactory_forward", "route_olfactory_motor"):
         if remaining_slots <= 0:
             break
         quota = route_quota[score_col]
-        candidates = intermediate_pool[~intermediate_pool.bodyId.isin(route_ids)].sort_values(
+        candidates = food_bridge_pool[
+            ~food_bridge_pool.bodyId.isin(route_ids)
+            & (food_bridge_pool[score_col] > 0)
+        ].sort_values(
             [score_col, "route_olfactory_forward", "route_olfactory_motor", "degree", "bodyId"],
             ascending=[False, False, False, False, True],
         )
@@ -779,7 +872,8 @@ def main(root: Path) -> None:
             remaining_slots -= len(part)
 
     for score_col, quota in route_quota.items():
-        if score_col in ("route_turn", "route_halt", "route_olfactory_forward", "route_olfactory_motor"):
+        if score_col in ("route_turn", "route_halt", "route_olfactory_to_desc",
+                         "route_desc_to_leg", "route_olfactory_forward", "route_olfactory_motor"):
             continue
         if remaining_slots <= 0:
             break
@@ -872,7 +966,9 @@ def main(root: Path) -> None:
     if len(selected) != TARGET:
         raise AssertionError((len(selected), TARGET))
 
-    for route_name in ("route_forward", "route_turn", "route_escape", "route_olfactory_forward"):
+    for route_name in ("route_forward", "route_turn", "route_escape",
+                       "route_olfactory_forward", "route_olfactory_to_desc",
+                       "route_desc_to_leg"):
         if not np.any(selected[route_name].to_numpy(np.float64) > 0):
             raise AssertionError(
                 f"selected set contains no non-zero measured {route_name} cell"
@@ -941,6 +1037,8 @@ def main(root: Path) -> None:
     # are consumed below when classifying retained sensor->DN and DN->motor
     # edges and when writing route metadata to the binary file.
     channel_selected = selected["channel"].to_numpy(np.int8)
+    is_desc_selected = selected["superclass"].astype(str).eq("descending_neuron").to_numpy(bool)
+    is_motor_selected = selected["superclass"].astype(str).eq("vnc_motor").to_numpy(bool)
     descending_role_selected = selected["descending_role"].to_numpy(np.int8)
     motor_role_selected = selected["motor_role"].to_numpy(np.int8)
     route_forward_selected = selected["route_forward"].to_numpy(np.float64)
@@ -967,6 +1065,8 @@ def main(root: Path) -> None:
     retained_intermediate_to_motor_edges = 0
     retained_desc_to_intermediate_to_motor_paths = 0
     retained_two_hop_by_role = np.zeros((5, 8), dtype=np.int64)
+    retained_desc_to_leg_direct_any_role_edges = 0
+    retained_desc_to_leg_direct_any_role_contacts = 0
     desc_to_intermediate = {}
     intermediate_to_motor = {}
     for bi in range(reader.num_record_batches):
@@ -983,7 +1083,7 @@ def main(root: Path) -> None:
                 # FBC103 is purely structural. Preserve every published
                 # retained edge with its raw positive MaleCNS contact count.
                 # Neurotransmitter sign and dynamics normalization belong only
-                # to the separate FBD104 layer.
+                # to the separate FBD105 layer.
                 edges.append((src_i, dst_i, float(d)))
                 contacts += int(d)
                 src_ch = int(channel_selected[src_i])
@@ -996,21 +1096,28 @@ def main(root: Path) -> None:
                 if src_desc > 0 and dst_mr > 0:
                     retained_desc_motor[src_desc, dst_mr] += int(d)
                     retained_desc_motor_edges += 1
+                # Direct DN -> LEG is retained for every DN, regardless of its
+                # descriptive role label. This is the ground-truth direct VNC
+                # motor path available in the selected induced subgraph.
+                if is_desc_selected[src_i] and dst_mr == 1:
+                    retained_desc_to_leg_direct_any_role_edges += 1
+                    retained_desc_to_leg_direct_any_role_contacts += int(d)
 
-                # Intermediate/premotor cells are non-sensory, non-DN,
-                # non-MN retained neurons. This avoids counting a sensory
-                # feedback cell as the sole "premotor" bridge.
+                # Intermediate/premotor cells are non-sensory, non-DN, non-MN
+                # retained neurons. This avoids counting a sensory feedback cell
+                # as the sole "premotor" bridge. Crucially, source DN status uses
+                # the authoritative retained superclass, not the optional role label.
                 src_is_intermediate = (
-                    src_desc == 0
-                    and int(motor_role_selected[src_i]) == 0
+                    not is_desc_selected[src_i]
+                    and not is_motor_selected[src_i]
                     and int(channel_selected[src_i]) >= 4
                 )
                 dst_is_intermediate = (
-                    dst_desc == 0
-                    and dst_mr == 0
+                    not is_desc_selected[dst_i]
+                    and not is_motor_selected[dst_i]
                     and int(channel_selected[dst_i]) >= 4
                 )
-                if src_desc > 0 and dst_is_intermediate:
+                if is_desc_selected[src_i] and dst_is_intermediate:
                     desc_to_intermediate.setdefault(src_i, set()).add(dst_i)
                     retained_desc_to_intermediate_edges += 1
                 if src_is_intermediate and dst_mr > 0:
@@ -1029,17 +1136,23 @@ def main(root: Path) -> None:
     # real two-edge path in the published graph; no synthetic bridge is added.
     for dn_i, mids in desc_to_intermediate.items():
         dn_role = int(descending_role_selected[dn_i])
-        if dn_role <= 0:
-            continue
         for mid_i in mids:
             motors = intermediate_to_motor.get(mid_i)
             if not motors:
                 continue
             retained_desc_to_intermediate_to_motor_paths += len(motors)
+            if dn_role <= 0:
+                continue
             for motor_i in motors:
                 mr = int(motor_role_selected[motor_i])
                 if mr > 0:
                     retained_two_hop_by_role[dn_role, mr] += 1
+
+    if retained_desc_to_leg_direct_any_role_edges <= 0 and retained_desc_to_intermediate_to_motor_paths <= 0:
+        raise RuntimeError(
+            "FBR-10-OLF2 retained graph contains no measured DN->LEG direct or "
+            "DN->intermediate->LEG-MN path; refusing to publish a locomotor-silent graph."
+        )
 
     # FBC103 stores the exact raw positive structural contact count.
     # Do not apply neurotransmitter signs, normalization, or dynamical gains here.
@@ -1113,7 +1226,7 @@ def main(root: Path) -> None:
     meta = root / "app" / "src" / "main" / "java" / "com" / "example" / "flybrain" / "GeneratedConnectomeMeta.kt"
     motor_role_counts = {int(k): int(v) for k,v in selected.groupby("motor_role").size().to_dict().items()}
 
-    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FBR-10-OLF1 · FBD104 · VNCSEM102"\n    const val FLYBRAIN_VERSION = "1.17.1"\n    const val FLYBRAIN_VERSION_CODE = 132\n    const val APP_VERSION = "1.17.1"\n    const val APP_VERSION_CODE = 132\n    const val REDUCTION_ID = "FBR-10-OLF1"\n    const val RETAINED_OLFACTORY_ORNS = %d\n    // 54 distinct published (type, entryNerve) combinations; 53 unique\n    // non-null type strings because ORN_VA7l occurs under AN and MxLbN.\n    const val RETAINED_OLFACTORY_ORN_TYPES = %d\n    const val RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = %d\n    const val BINARY_SHA256 = "%s"\n    const val FORMAT_MAGIC = "FBC103"\n    const val FORMAT_VERSION = 103\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_OTHER = 6\n    const val MOTOR_FUNCTION_NONE = 0\n    const val MOTOR_FUNCTION_JUMP = 1\n}\n' % (TARGET_ORNS, retained_orn_types, len(retained_orn_type_entry_nerve_pairs), fbc_sha, TARGET, len(edges), contacts,
+    meta.write_text('package com.example.flybrain\n\nobject GeneratedConnectomeMeta {\n    const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102"\n    const val FLYBRAIN_VERSION = "1.18.3"\n    const val FLYBRAIN_VERSION_CODE = 136\n    const val APP_VERSION = "1.18.3"\n    const val APP_VERSION_CODE = 136\n    const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"\n    const val RETAINED_OLFACTORY_ORNS = %d\n    // 54 distinct published (type, entryNerve) combinations; 53 unique\n    // non-null type strings because ORN_VA7l occurs under AN and MxLbN.\n    const val RETAINED_OLFACTORY_ORN_TYPES = %d\n    const val RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = %d\n    const val BINARY_SHA256 = "%s"\n    const val FORMAT_MAGIC = "FBC103"\n    const val FORMAT_VERSION = 103\n    const val NEURONS = %d\n    const val EDGES = %d\n    const val CONTACTS_RETAINED = %dL\n    const val VIS_START = %d\n    const val VIS_END = %d\n    const val OLF_START = %d\n    const val OLF_END = %d\n    const val GUST_START = %d\n    const val GUST_END = %d\n    const val MECH_START = %d\n    const val MECH_END = %d\n    const val DESC_START = %d\n    const val DESC_END = %d\n    const val ASC_START = %d\n    const val ASC_END = %d\n    const val VMOTOR_START = %d\n    const val VMOTOR_END = %d\n    const val OTHER_START = %d\n    const val OTHER_END = %d\n    const val MOTOR_LEG = 1\n    const val MOTOR_WING = 2\n    const val MOTOR_HALTERE = 3\n    const val MOTOR_NECK = 4\n    const val MOTOR_ABDOMEN = 5\n    const val MOTOR_OTHER = 6\n    const val MOTOR_FUNCTION_NONE = 0\n    const val MOTOR_FUNCTION_JUMP = 1\n}\n' % (TARGET_ORNS, retained_orn_types, len(retained_orn_type_entry_nerve_pairs), fbc_sha, TARGET, len(edges), contacts,
        population_ranges["visual"][0], population_ranges["visual"][1], population_ranges["olfactory"][0], population_ranges["olfactory"][1],
        ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
        desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]))
@@ -1162,9 +1275,15 @@ def main(root: Path) -> None:
         "olfactory_route_forward_selected_nonzero": int((route_olfactory_forward_selected > 0).sum()),
         "olfactory_route_motor_source_nonzero": int((route_olfactory_motor > 0).sum()),
         "olfactory_route_motor_selected_nonzero": int((route_olfactory_motor_selected > 0).sum()),
+        "olfactory_to_desc_source_nonzero": int((olfactory_to_desc_path > 0).sum()),
+        "olfactory_to_desc_three_edge_source_nonzero": int((olfactory_three_edge > 0).sum()),
+        "olfactory_to_desc_selected_nonzero": int((selected["route_olfactory_to_desc"] > 0).sum()),
+        "descending_to_leg_source_nonzero": int((descending_to_leg_path > 0).sum()),
+        "descending_to_leg_three_edge_source_nonzero": int((desc_leg_three_edge > 0).sum()),
+        "descending_to_leg_selected_nonzero": int((selected["route_desc_to_leg"] > 0).sum()),
         "candidate_edges_between_retained_neurons": candidate_edges,
         "contacts_retained": contacts,
-        "edge_weight_definition": "raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer",
+        "edge_weight_definition": "raw positive MaleCNS contact counts; neurotransmitter sign is applied only in FBD105",
         "superclass_counts_source": {str(k): int(v) for k,v in counts.items()},
         "superclass_extra_quota": {str(k): int(v) for k,v in extra_quota.items()},
         "channel_ranges": ranges,
@@ -1180,10 +1299,10 @@ def main(root: Path) -> None:
             for k, v in selected[selected["superclass"].astype(str).eq("descending_neuron")]
             .groupby(["type", "descending_role"]).size().to_dict().items()
         },
-        "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
+        "motor_role_definition": "authoritative MaleCNS class/subclass vocabulary shared with runtime VNC semantics; runtime movement is driven only by measured vnc_motor activity",
         "halt_role_definition": "FG and BB are walk-OFF halt populations; BRK is the VNC brake population; roles are annotation metadata only and do not create edges",
         "descending_role_definition": "published behavioural cell-type names plus conservative annotation keywords; descriptive metadata only and never a synthetic current source",
-        "route_score_definition": "route-family topology scores combine measured published edges; generic forward uses all sensory modalities, while explicit olfactory preservation uses real ORN->candidate->forward-DN and ORN->candidate->motor support; scores are selection/readout metadata only and never create edges",
+        "route_score_definition": "route-family topology scores combine measured published edges; explicit food-pathway preservation uses the complete retained DN population and protects measured ORN->candidate->DN, ORN->A->B->DN, DN->candidate->LEG and DN->A->B->LEG bridges; scores are selection metadata only and never create edges",
         "route_score_source_counts": source_route_counts,
         "route_score_selected_counts": selected_route_counts,
         "halt_selected_nonzero": int((halt_role_selected > 0).sum()),
@@ -1205,6 +1324,8 @@ def main(root: Path) -> None:
         "retained_desc_to_intermediate_edges": int(retained_desc_to_intermediate_edges),
         "retained_intermediate_to_motor_edges": int(retained_intermediate_to_motor_edges),
         "retained_desc_to_intermediate_to_motor_paths": int(retained_desc_to_intermediate_to_motor_paths),
+        "retained_desc_to_leg_direct_any_role_edges": int(retained_desc_to_leg_direct_any_role_edges),
+        "retained_desc_to_leg_direct_any_role_contacts": int(retained_desc_to_leg_direct_any_role_contacts),
         "retained_desc_to_intermediate_to_motor_by_role_paths": retained_two_hop_by_role.tolist(),
         "retained_sensor_to_desc_by_channel_role_contacts": retained_sensor_desc.tolist(),
         "retained_desc_to_motor_by_role_contacts": retained_desc_motor.tolist(),

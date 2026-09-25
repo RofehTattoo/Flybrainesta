@@ -123,7 +123,7 @@ def main():
     print("VNC-03 anatomical census: PASS")
     print("VNC-04 official row-by-row semantic match: PASS")
     print("VNC-05 current FBC103 SHA matches semantic report: PASS")
-    print("VNC-06 FBD104 untouched by this layer: PASS (build-level invariant)")
+    print("VNC-06 FBD105 untouched by this layer: PASS (build-level invariant)")
     print("class completions:", report.get("class_completion_bodyIds", []))
     print("reclassified from frozen role byte:", report["reclassified_from_old_fbc103"])
 

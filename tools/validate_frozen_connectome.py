@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the current frozen FBR-10-OLF1 FBC103 artifact.
+"""Validate the current frozen FBR-10-OLF2-MOTORROUTE FBC103 artifact.
 
 Historical FBR-10 v1.14 validation belongs under docs/history and is never used
 as the current release gate.
@@ -30,10 +30,10 @@ def main() -> None:
     assert m, "missing BINARY_SHA256"
     expected_sha = m.group(1)
     expected_edges = meta_int(meta, "EDGES")
-    assert "FBR-10-OLF1" in meta
+    assert "FBR-10-OLF2-MOTORROUTE" in meta
     assert meta_int(meta, "NEURONS") == 16669
     assert meta_int(meta, "FORMAT_VERSION") == 103
-    assert report["reduction"] == "FBR-10-OLF1"
+    assert report["reduction"] == "FBR-10-OLF2-MOTORROUTE"
     assert report["neurons_retained"] == 16669
     assert report["edges_retained"] == expected_edges
     assert report["sha256"] == expected_sha
@@ -54,7 +54,7 @@ def main() -> None:
         seen.add((src, dst)); contacts += int(weight)
     assert contacts == report["contacts_retained"]
     assert len(nodes) == n
-    print("CURRENT FBR-10-OLF1 FBC103: PASS")
+    print("CURRENT FBR-10-OLF2-MOTORROUTE FBC103: PASS")
     print(f"neurons={n} edges={e} contacts={contacts} sha256={expected_sha}")
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
 
 assert 'olfactoryNeuronIndices' in MAIN
 assert 'for (i in olfactoryNeuronIndices)' in MAIN
-assert MAIN.count('injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)') == 1
+assert 'setMappedSensoryRate(mechanosensoryReceptorIndices, wallSignal * 80f)' in MAIN
 assert 'olfactoryPopulationRate()' in MAIN
 assert 'mechanosensoryPopulationRate()' in MAIN
 assert 'olfProjectionMode' not in MAIN
@@ -29,17 +29,18 @@ body_start = MAIN.index('private fun driveBody')
 body_end = MAIN.index('private fun runNeuralSimulation', body_start)
 body = MAIN[body_start:body_end]
 assert 'foodDirectionalBias' not in body
-assert 'SENSORY_KICK_LIMIT' in MAIN
-assert 'OlfactoryInputEncoder.encode(' in MAIN
+assert 'externalRateHz' in MAIN
+assert 'injectOlfactoryPopulation' in MAIN
 assert 'coerceIn(-SENSORY_KICK_LIMIT, SENSORY_KICK_LIMIT)' not in MAIN
+assert 'driveBody' in MAIN
 
 # The builder is source-backed and must cross both annotation and NT provenance.
 for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 264', 'EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54', 'neurotransmitters']:
     assert token in BUILDER, token
 
-assert 'APP_VERSION = "1.17.1"' in META
-assert 'APP_VERSION_CODE = 132' in META
-assert 'REDUCTION_ID = "FBR-10-OLF1"' in META
+assert 'APP_VERSION = "1.18.3"' in META
+assert 'APP_VERSION_CODE = 136' in META
+assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
 assert 'route_olfactory_forward' not in MAIN
 assert 'side_from_nerve' not in BUILDER
 print('OLF ANATOMICAL INPUT STATIC AUDIT: PASS')

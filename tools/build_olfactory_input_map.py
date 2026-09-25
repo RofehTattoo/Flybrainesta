@@ -37,7 +37,7 @@ def side(v):
 
 
 def is_olfactory_orn(r):
-    """Authoritative FBR-10-OLF1 ORN selector.
+    """Authoritative FBR-10-OLF2-MOTORROUTE ORN selector.
 
     Four official MaleCNS v1.0 ORNs have a NULL `type` but are explicitly
     annotated as cb_sensory/olfactory with AN entry nerve. Their bodyIds are
@@ -75,7 +75,7 @@ def main():
     actual_fbc_sha = sha256(fbc)
     if len(nodes) != 16669: raise SystemExit(f"FBC node count mismatch: {len(nodes)}")
     crep = json.loads(Path(args.connectome_report).read_text(encoding="utf-8"))
-    if crep.get("reduction") != "FBR-10-OLF1": raise SystemExit("connectome release id mismatch")
+    if crep.get("reduction") != "FBR-10-OLF2-MOTORROUTE": raise SystemExit("connectome release id mismatch")
     if crep.get("olfactory_orns_retained") != EXPECTED_ORNS: raise SystemExit("connectome ORN count mismatch")
     retained_type_entry_nerve_pairs = crep.get("olfactory_orn_type_entry_nerve_pairs_retained")
     if not isinstance(retained_type_entry_nerve_pairs, list):
@@ -198,13 +198,13 @@ def main():
         w.writeheader(); w.writerows(out)
 
     rep = {
-        "version": "1.17.0-OLF1-ORN-AUDIT",
+        "version": "1.18.3-OLF2-ORN-AUDIT",
         "status": "PASS",
         "annotation_sha256": ANN_SHA,
         "neurotransmitter_sha256": NT_SHA,
         "fbc103_sha256": actual_fbc_sha,
         "fbc103_modified": False,
-        "fbc103_release_id": "FBR-10-OLF1",
+        "fbc103_release_id": "FBR-10-OLF2-MOTORROUTE",
         "olf_retained": len(out),
         "historical_olf_block": {"start": 618, "end": 739, "used_for_olfactory_input": False},
         "side_counts": side_counts,

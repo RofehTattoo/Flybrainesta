@@ -4,7 +4,7 @@ import ast
 ROOT = Path(__file__).resolve().parents[1]
 B = (ROOT / "tools" / "build_connectome.py").read_text()
 
-assert 'REDUCTION_ID = "FBR-10-OLF1"' in B
+assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in B
 assert 'TARGET_ORNS = 264' in B
 assert 'EXPECTED_ORN_TYPES = 54' in B
 assert 'UNTYPED_ORN_BODY_IDS = frozenset({242812, 242908, 488209, 956041})' in B

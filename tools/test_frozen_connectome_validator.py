@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-free smoke test for the current FBR-10-OLF1 validator."""
+"""Dependency-free smoke test for the current FBR-10-OLF2-MOTORROUTE validator."""
 import ast
 from pathlib import Path
 
@@ -11,6 +11,6 @@ for node in imports:
     names = [a.name.split('.')[0] for a in node.names]
     assert 'numpy' not in names, 'validator must not require NumPy'
 assert 'from fbc103_reader import' in src
-assert 'FBR-10-OLF1' in src
+assert 'FBR-10-OLF2-MOTORROUTE' in src
 assert 'BINARY_SHA256' in src
-print('CURRENT FBR-10-OLF1 VALIDATOR DEPENDENCY CHECK: PASS')
+print('CURRENT FBR-10-OLF2-MOTORROUTE VALIDATOR DEPENDENCY CHECK: PASS')

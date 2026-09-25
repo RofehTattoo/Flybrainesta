@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
-"""Build the signed/normalized dynamics layer for the current FBR-10 release graph.
+"""Build FBD105: signed MaleCNS dynamics using raw retained contact counts.
 
-The structural FBC103 artifact is not modified by this tool. It derives a separate
-runtime dynamics artifact from:
-  - app/src/main/res/raw/malecns_reduced.bin (current FBR-10 topology/metadata)
-  - official MaleCNS v1.0 body-neurotransmitters Feather table
+FBC103 remains a structural artifact. FBD105 is a separate runtime dynamics layer
+that maps each retained source->target connection to:
+    signed_contact_count * W_SYN_REDUCED_MV
+where the sign comes from the official MaleCNS neurotransmitter table.
 
-Neurotransmitter convention is intentionally the same convention historically
-used by FlyBrain's LIF builder:
-  acetylcholine -> +1
-  GABA          -> -1
-  glutamate     -> -1
-  other/unknown/modulatory -> 0 (edge omitted from fast current)
-
-The edge magnitude is normalized per postsynaptic target over recognized
-fast-synaptic contacts and scaled by 0.42, preserving the project's previous
-signed-LIF scaling convention without altering the frozen connectome.
+This replaces the previous FBD104 per-target normalization, which destroyed the
+absolute magnitude information carried by MaleCNS connection weights. The LIF
+parameters follow Shiu et al. (Nature 2024). This release deliberately uses the
+published 0.275 mV/synapse value directly; no density compensation is silently
+introduced into the scientific dynamics. The fact that FBR-10 is reduced is handled
+by the topology itself, not by changing individual synaptic strength.
 """
 from __future__ import annotations
 
@@ -30,11 +26,26 @@ from pathlib import Path
 import pyarrow.feather as feather
 
 FBC_MAGIC = b"FBC103\x00\x00"
-FBD_MAGIC = b"FBD104\x00\x00"
-NORM_SCALE = 0.42
+FBD_MAGIC = b"FBD105\x00\x00"
+# Shiu et al. 2024: one free parameter, 0.275 mV per synapse.
+W_SYN_FULL_MV = 0.275
+W_SYN_REDUCED_MV = W_SYN_FULL_MV
+# Whole-neuron sign convention used by the reference Drosophila LIF model:
+# cholinergic and monoaminergic outputs are excitatory; GABA/glutamate/histamine
+# are inhibitory. Monoamines are a simplification of neuromodulation, but using the
+# same convention is more reproducible than silently discarding their edges.
 NT_SIGN = {
     "acetylcholine": 1.0,
     "ach": 1.0,
+    "dopamine": 1.0,
+    "dopaminergic": 1.0,
+    "octopamine": 1.0,
+    "octopaminergic": 1.0,
+    "serotonin": 1.0,
+    "serotonergic": 1.0,
+    "5-ht": 1.0,
+    "histamine": -1.0,
+    "histaminergic": -1.0,
     "gaba": -1.0,
     "gamma-aminobutyric acid": -1.0,
     "glutamate": -1.0,
@@ -42,7 +53,6 @@ NT_SIGN = {
 }
 NODE_BYTES = 26
 EDGE_BYTES = 12
-CURRENT_FBC103_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"
 EXPECTED_NT_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
 
 
@@ -58,7 +68,7 @@ def load_structural(path: Path):
     raw = path.read_bytes()
     b = memoryview(raw)
     if len(b) < 16 or bytes(b[:8]) != FBC_MAGIC:
-        raise RuntimeError("FBR-10-OLF1 structural artifact is not FBC103")
+        raise RuntimeError("FBR-10-OLF2-MOTORROUTE structural artifact is not FBC103")
     n, e = struct.unpack_from("<II", b, 8)
     expected = 16 + n * NODE_BYTES + e * EDGE_BYTES
     if len(raw) != expected:
@@ -89,31 +99,85 @@ def load_structural(path: Path):
     return n, e, body_ids, edges
 
 
+def _mode_unique(values: list[str]) -> str | None:
+    counts = Counter(v for v in values if v)
+    if not counts:
+        return None
+    best = counts.most_common()
+    if len(best) > 1 and best[0][1] == best[1][1]:
+        return None
+    return best[0][0]
+
+
+def _is_known_nt(name: str | None) -> bool:
+    return bool(name) and name.strip().lower() in NT_SIGN
+
+
+def resolve_nt_label(consensus: str | None, predicted: str | None) -> tuple[str | None, str]:
+    """Resolve MaleCNS transmitter label without inventing a class.
+
+    Preference order:
+      1) consensus_nt when it is recognized by the runtime sign map;
+      2) predicted_nt when consensus is unclear/unrecognized/missing;
+      3) unresolved (None) otherwise.
+
+    This preserves the official consensus label whenever usable while recovering
+    real signed edges where the published consensus is explicitly `unclear`.
+    """
+    c = (consensus or "").strip().lower()
+    p = (predicted or "").strip().lower()
+    if _is_known_nt(c):
+        return c, "consensus"
+    if _is_known_nt(p):
+        return p, "predicted_fallback"
+    return None, "unresolved"
+
+
 def load_nt(path: Path):
-    table = feather.read_table(path, columns=["body", "consensus_nt"])
+    table = feather.read_table(path, columns=["body", "consensus_nt", "predicted_nt"])
     bodies = table.column("body").to_pylist()
-    nts = table.column("consensus_nt").to_pylist()
-    grouped: dict[int, Counter[str]] = defaultdict(Counter)
-    nonempty_rows = 0
-    for body, nt in zip(bodies, nts):
-        if body is None or nt is None:
+    consensus = table.column("consensus_nt").to_pylist()
+    predicted = table.column("predicted_nt").to_pylist()
+
+    grouped_c: dict[int, list[str]] = defaultdict(list)
+    grouped_p: dict[int, list[str]] = defaultdict(list)
+    nonempty_consensus = 0
+    nonempty_predicted = 0
+    for body, c, p in zip(bodies, consensus, predicted):
+        if body is None:
             continue
-        name = str(nt).strip().lower()
-        if name:
-            grouped[int(body)][name] += 1
-            nonempty_rows += 1
+        body_i = int(body)
+        c_name = "" if c is None else str(c).strip().lower()
+        p_name = "" if p is None else str(p).strip().lower()
+        if c_name:
+            grouped_c[body_i].append(c_name)
+            nonempty_consensus += 1
+        if p_name:
+            grouped_p[body_i].append(p_name)
+            nonempty_predicted += 1
 
     mapping: dict[int, str] = {}
+    consensus_used = 0
+    predicted_fallback_used = 0
+    unresolved = 0
     conflicts = 0
-    for body, counts in grouped.items():
-        # consensus_nt is repeated across prediction rows. A unique mode is
-        # accepted; ties remain explicitly unresolved rather than guessed.
-        best = counts.most_common()
-        if len(best) > 1 and best[0][1] == best[1][1]:
+    all_bodies = set(grouped_c) | set(grouped_p)
+    for body in all_bodies:
+        c = _mode_unique(grouped_c.get(body, []))
+        p = _mode_unique(grouped_p.get(body, []))
+        if c is None and len(grouped_c.get(body, [])) > 1:
             conflicts += 1
+        label, source = resolve_nt_label(c, p)
+        if label is None:
+            unresolved += 1
             continue
-        mapping[body] = best[0][0]
-    return mapping, conflicts, nonempty_rows
+        mapping[body] = label
+        if source == "consensus":
+            consensus_used += 1
+        else:
+            predicted_fallback_used += 1
+    return (mapping, conflicts, nonempty_consensus, nonempty_predicted,
+            consensus_used, predicted_fallback_used, unresolved)
 
 
 def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected_structural_sha: str | None):
@@ -125,13 +189,14 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected
     if not allow_unpinned and nt_hash != EXPECTED_NT_SHA256:
         raise RuntimeError(f"neurotransmitter SHA256 mismatch: {nt_hash} != {EXPECTED_NT_SHA256}")
     n, structural_edges, body_ids, edges = load_structural(structural)
-    nt, nt_conflicts, nt_nonempty_rows = load_nt(nt_path)
+    (nt, nt_conflicts, nt_nonempty_rows, nt_predicted_nonempty_rows,
+     nt_consensus_used, nt_predicted_fallback_used, nt_unresolved_bodies) = load_nt(nt_path)
 
     signs = bytearray(n)
     recognized_nodes = 0
     for i, body in enumerate(body_ids):
         sign = NT_SIGN.get(nt.get(body, ""), 0.0)
-        # Physical files store bytes as unsigned 0..255. FBD104 defines
+        # Physical files store bytes as unsigned 0..255. FBD105 defines
         # the signed-node convention as 0 = unknown, 1 = excitatory,
         # 0xFF = inhibitory (-1 when decoded as a Kotlin Byte).
         sign_byte = 1 if sign > 0 else (0xFF if sign < 0 else 0)
@@ -139,7 +204,7 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected
         if sign_byte != 0:
             recognized_nodes += 1
     if not all(x in (0, 1, 0xFF) for x in signs):
-        raise AssertionError("FBD104 sign encoding must be 0, 1, or 0xFF")
+        raise AssertionError("FBD105 sign encoding must be 0, 1, or 0xFF")
 
     resolved = []
     unresolved = 0
@@ -150,7 +215,7 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected
         sign_byte = signs[src]
         # Decode the on-disk unsigned byte representation back to the
         # mathematical sign before applying it to edge weights.
-        # FBD104: 0 = unknown/modulatory, 1 = excitatory, 0xFF = inhibitory.
+        # FBD105: 0 = unknown/modulatory, 1 = excitatory, 0xFF = inhibitory.
         sign = -1 if sign_byte == 0xFF else (1 if sign_byte == 1 else 0)
         if sign == 0:
             unresolved += 1
@@ -162,34 +227,42 @@ def main(root: Path, nt_path: Path, output: Path, allow_unpinned: bool, expected
             i_contact += int(round(raw_weight))
         resolved.append((src, dst, raw_weight * float(sign)))
 
-    normalized = []
+    weighted = []
     for src, dst, signed_raw in resolved:
-        denom = max(1.0, target_totals[dst])
-        normalized.append((src, dst, signed_raw / denom * NORM_SCALE))
-    normalized.sort(key=lambda x: (x[1], x[0]))
+        weighted.append((src, dst, signed_raw * W_SYN_REDUCED_MV))
+    weighted.sort(key=lambda x: (x[1], x[0]))
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as f:
         f.write(FBD_MAGIC)
-        f.write(struct.pack("<II", n, len(normalized)))
+        f.write(struct.pack("<II", n, len(weighted)))
         f.write(signs)
-        for src, dst, weight in normalized:
+        for src, dst, weight in weighted:
             f.write(struct.pack("<iif", src, dst, float(weight)))
 
     report = {
-        "format": "FBD104",
+        "format": "FBD105",
         "structural_format": "FBC103",
-        "structural_release_id": "FBR-10-OLF1",
+        "structural_release_id": "FBR-10-OLF2-MOTORROUTE",
         "neurons": n,
         "structural_edges": structural_edges,
-        "signed_edges": len(normalized),
+        "signed_edges": len(weighted),
         "unresolved_or_modulatory_edges": unresolved,
         "recognized_neurons": recognized_nodes,
-        "nt_body_ids_with_consensus": len(nt),
-        "nt_nonempty_rows": nt_nonempty_rows,
+        "nt_body_ids_with_resolved_sign": len(nt),
+        "nt_nonempty_consensus_rows": nt_nonempty_rows,
+        "nt_nonempty_predicted_rows": nt_predicted_nonempty_rows,
         "nt_conflicting_body_ids": nt_conflicts,
-        "normalization": "per-postsynaptic target sum(abs(raw recognized fast contacts))",
-        "normalization_scale": NORM_SCALE,
+        "nt_consensus_signs_used": nt_consensus_used,
+        "nt_predicted_fallback_signs_used": nt_predicted_fallback_used,
+        "nt_unresolved_bodies": nt_unresolved_bodies,
+        "nt_resolution_policy": "consensus_nt when recognized; predicted_nt fallback only when consensus is unclear/unrecognized/missing; otherwise unresolved",
+        "weight_definition": "signed raw retained MaleCNS contact count * published W_SYN",
+        "w_syn_mv": W_SYN_FULL_MV,
+        "w_syn_full_mv": W_SYN_FULL_MV,
+        "w_syn_reduced_mv": W_SYN_REDUCED_MV,
+        "density_compensation": 1.0,
+        "dynamics_convention": "reference Shiu et al. 2024 sign/weight convention; no reduced-network weight compensation",
         "edge_signs": NT_SIGN,
         "excitatory_contacts": e_contact,
         "inhibitory_contacts": i_contact,
@@ -210,7 +283,7 @@ if __name__ == "__main__":
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     ap.add_argument("--nt", type=Path, required=True)
     ap.add_argument("--allow-unpinned", action="store_true", help="allow non-pinned source hashes for local development only")
-    ap.add_argument("--expected-structural-sha", default=CURRENT_FBC103_SHA256, help="pin the current FBR-10-OLF1 FBC103 SHA; override only for historical reproduction")
+    ap.add_argument("--expected-structural-sha", default=None, help="SHA-256 emitted by the current connectome build; required for pinned CI")
     ap.add_argument(
         "--output",
         type=Path,

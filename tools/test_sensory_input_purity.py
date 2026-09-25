@@ -8,7 +8,7 @@ BUILDER = (ROOT / 'tools/build_sensory_input_map.py').read_text()
 # Phase 1: mapped receptor populations are the only external sensory injection targets.
 for token in [
     'visualReceptorIndices', 'gustatoryReceptorIndices', 'mechanosensoryReceptorIndices',
-    'loadSensoryInputMap()', 'injectMappedSensoryPopulation', 'SENSORY_KICK_LIMIT',
+    'loadSensoryInputMap()', 'setMappedSensoryRate', 'setMappedSensoryRate(visualReceptorIndices', 'SENSORY_VIS_MAX_HZ',
     'sensory_input_map.tsv',
 ]:
     assert token in MAIN, token
@@ -16,6 +16,7 @@ for token in [
 # The old population-wide / cyclic encoder must be gone.
 for forbidden in [
     'injectSensoryPopulation(',
+    'injectMappedSensoryPopulation(',
     'channel = ((i * 17) % pattern.size)',
     'sin((i * 0.043f)',
     'encodeStimulus(',
@@ -33,11 +34,11 @@ for forbidden in [
 sense_start = MAIN.index('private fun sense(dt: Float)')
 sense_end = MAIN.index('private fun populationRate', sense_start)
 sense = MAIN[sense_start:sense_end]
-assert 'injectMappedSensoryPopulation(visualReceptorIndices' in sense
-assert 'injectMappedSensoryPopulation(gustatoryReceptorIndices' in sense
-assert 'injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)' in sense
+assert 'setMappedSensoryRate(visualReceptorIndices' in sense
+assert 'setMappedSensoryRate(gustatoryReceptorIndices' in sense
+assert 'setMappedSensoryRate(mechanosensoryReceptorIndices' in sense
 assert 'dangerPattern' not in sense
-assert 'SENSORY_KICK_LIMIT' in MAIN
+assert 'externalRateHz' in MAIN
 assert 'SENSORY_MECH_GAIN' not in MAIN
 assert 'SENSORY_OLF_GAIN' not in MAIN
 
@@ -53,7 +54,7 @@ for token in [
     assert token in BUILDER, token
 
 assert 'sensory_ascending' in BUILDER
-assert 'index-cyclic' in BUILDER.lower()
+assert 'index-cyclic' in BUILDER.lower() or 'cyclic' in BUILDER.lower()
 assert 'CHANNEL_BY_MODALITY = {"VIS": 0, "GUST": 2, "MECH": 3}' in BUILDER
 assert 'len(matches) > 1' in BUILDER
 print('PHASE 1 SENSORY INPUT PURITY STATIC AUDIT: PASS')

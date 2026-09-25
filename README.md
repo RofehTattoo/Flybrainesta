@@ -1,4 +1,4 @@
-# FlyBrain — V1.17.0 / FBR-10-OLF1
+# FlyBrain — V1.18.3 / FBR-10-OLF2-MOTORROUTE
 
 FlyBrain is an Android simulation built from the published MaleCNS v1.0 connectome of the male *Drosophila* central nervous system.
 
@@ -7,14 +7,14 @@ FlyBrain is an Android simulation built from the published MaleCNS v1.0 connecto
 - MaleCNS v1.0
 - 166,700 source neurons
 - 16,669 retained neurons
-- 2,483,165 structural FBC103 edges
+- canonical CI-generated structural FBC103 edges (count recorded in the generated report)
 - 20,992,679 retained contacts
 - 264 retained real ORNs
 - 53 ORN type labels / 54 published `(type, entryNerve)` combinations
 - FBC103 SHA-256:
-  `0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf`
+  `bootstrap binary SHA: 0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf`
 
-The historical FBR-10 v1.14 artifact (2,064,951 edges, SHA `bfadc30f...`) is preserved under `docs/history/fbr10-v1.14/` and is not the current structural release.
+The checked-in `malecns_reduced.bin` is a bootstrap artifact only; the GitHub Actions workflow downloads the pinned MaleCNS v1.0 sources and regenerates the canonical FBR-10-OLF2 graph, maps and FBD105 layer before compiling the APK.
 
 ## Scientific constraints
 
@@ -40,15 +40,15 @@ External stimuli are mapped only to receptor populations derived from official M
 
 Sensory input is an environmental interface, not a graph mutation. The current olfactory interface models two virtual antenna sampling points and applies the measured left/right concentration to anatomically sided retained ORNs. MaleCNS v1.0 does not provide an odorant-specific food/receptor affinity table in this release, so the simulator does not invent one.
 
-All single-receptor environmental kicks are capped at the same order as the post-gain synaptic-current limit (`0.55`) to prevent the environmental interface from numerically overwhelming the retained network.
+Environmental receptor stimulation is represented as Poisson spike events; it does not inject direct motor current. The food odor field is spatially sampled at two virtual antenna points.
 
 ## Neural integration
 
 - Public neural frame: 20 ms.
 - Internal integration: four 5 ms substeps.
-- Synaptic trace: exact exponential decay with `tau_syn = 5 ms`.
-- Membrane leak: analytical exponential integration with `tau_mem = 20 ms`.
-- Refractory period: 2.2 ms, represented on the 5 ms internal grid.
+- Synaptic alpha-state: analytical exact integration with `tau_syn = 5 ms`.
+- Membrane leak: analytical exact integration with `tau_mem = 20 ms`.
+- Refractory period: 2.2 ms on a 0.5 ms internal grid; threshold reset follows the reference model.
 - Plasticity: disabled by default.
 
 ## Motor/body boundary
@@ -93,11 +93,11 @@ py tools/test_test_vnc_motor_semantics_logic.py
 Then:
 
 ```text
-py tools/validate_validate_fbr10_olf1.py --fbc103 app/src/main/res/raw/malecns_reduced.bin --report app/src/main/res/raw/malecns_reduced_report.json
-py tools/validate_validate_generated_connectome.py
+py tools/validate_fbr10_olf2.py --fbc103 app/src/main/res/raw/malecns_reduced.bin --report app/src/main/res/raw/malecns_reduced_report.json
+py tools/validate_generated_connectome.py
 ```
 
-FBD104 validation requires the generated `malecns_fbr10_dynamics.bin` and its build report.
+FBD105 validation requires the generated `malecns_fbr10_dynamics.bin` and its build report.
 
 ## Historical documentation
 

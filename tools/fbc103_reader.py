@@ -13,7 +13,7 @@ float32 routeForward
 float32 routeTurn
 float32 routeEscape
 
-This is the layout emitted by the canonical FBR-10-OLF1 builder and consumed by MainActivity. The reader is format-generic; release-specific SHA pinning belongs in the validator, not in the parser.
+This is the layout emitted by the canonical FBR-10-OLF2-MOTORROUTE builder and consumed by MainActivity. The reader is format-generic; release-specific SHA pinning belongs in the validator, not in the parser.
 There is no reserved byte and the first byte after bodyId is the superclass code.
 """
 from __future__ import annotations

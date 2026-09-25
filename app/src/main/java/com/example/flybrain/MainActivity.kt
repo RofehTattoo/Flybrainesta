@@ -172,49 +172,41 @@ class MainActivity : Activity() {
         // body-to-body connections from the source connectome.
         private val N = GeneratedConnectomeMeta.NEURONS
 
-        // V1.15: fixed synaptic gains for the signed/normalized FBD104 dynamics
-        // layer. They are model parameters, not an adaptive controller.
-        private val SENSORY_VIS_GAIN = 0.70f
-        // V1.17.0: food/olfaction uses an official-annotation-derived per-ORN map.
+        // V1.18: sensory interfaces are encoded as Poisson spike rates; the neural
+        // substrate itself uses the reference-style LIF/alpha-synapse dynamics.
+        private val SENSORY_VIS_MAX_HZ = 120f
+        // V1.18.3: food/olfaction uses an official-annotation-derived per-ORN map.
         // The gain is an environmental sensor calibration parameter only; it never
         // writes motor state or a turn command.
-        private val FOOD_OLF_GAIN = 6.00f
+        private val FOOD_OLF_MAX_HZ = 160f
         // Calibrated to the normalized scene: odor presence decays over a
         // local neighborhood instead of saturating almost the entire arena.
         private val FOOD_OLF_SIGMA = OlfactorySensorModel.ODOR_SIGMA
-        // All environmental sensory inputs are discrete voltage kicks. Keep the
-        // largest single receptor kick on the same order as the post-gain synaptic
-        // current cap, preventing an external sensor from numerically overwhelming
-        // the retained network.
-        private val SENSORY_KICK_LIMIT = 0.55f
         private val EXPECTED_RETAINED_OLFACTORY_ORNS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORNS
         private val EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS
         private val SENSORY_GUST_GAIN = 0.85f
 
-        // PHASE 2B: preserve the public neural frame at 20 ms while resolving
-        // the 5 ms synaptic timescale internally. This changes temporal resolution
-        // only; FBC103, FBD104, gains and thresholds remain untouched.
+        // Reference-style neural dynamics (Shiu et al., Nature 2024):
+        // v_rest = v_reset = -52 mV, threshold = -45 mV, tau_m = 20 ms,
+        // tau_syn = 5 ms, refractory = 2.2 ms, delay = 1.8 ms. Android uses
+        // a 0.5 ms fixed step, rounding the 1.8 ms delay to 2.0 ms.
         private val NEURAL_FRAME_DT_SECONDS = 0.020f
-        private val NEURAL_SUBSTEP_DT_SECONDS = 0.005f
-        private val NEURAL_SUBSTEPS_PER_FRAME = 4
+        private val NEURAL_SUBSTEP_DT_SECONDS = 0.0005f
+        private val NEURAL_SUBSTEPS_PER_FRAME = 40
         private val REFRACTORY_SECONDS = 0.0022f
-
-        // These values are deliberately frozen during an experiment. Adaptive
-        // gain was removed because it altered the neural substrate in response
-        // to the very stimulus being measured.
-        private var gainOther = 3.60f
-        private var gainAsc = 3.40f
-        private var gainDesc = 4.00f
-        private var gainMotor = 3.60f
-        private val V_REST = -0.72f
-        private val V_THRESHOLD = -0.50f
-        private val V_RESET = -0.84f
-        // V1.16.2+: keep the intended 20 ms membrane time constant but integrate
-        // the leak analytically. The former Euler term used 50 s^-1 with dt=20 ms,
-        // making (1 - tau^-1*dt) = 0 and erasing all subthreshold membrane memory
-        // at every neural tick. This change affects only numerical integration; it
-        // does not modify FBC103, FBD104, topology, sensory mapping, or motor rules.
+        private val SYNAPTIC_DELAY_SECONDS = 0.0018f
+        private val SYNAPTIC_DELAY_STEPS = 4
         private val TAU_MEMBRANE_SECONDS = 0.020f
+        private val TAU_SYNAPSE_SECONDS = 0.005f
+        private val V_REST = -52.0f
+        private val V_THRESHOLD = -45.0f
+        private val V_RESET = -52.0f
+
+        // Motor-actuator dynamics: muscle force is driven only by measured VNC
+        // motor-neuron spike output, but it is not a boolean per 20 ms frame.
+        // A short first-order activation state avoids frame-quantized limb force.
+        // This is an actuator filter, not a sensory or action shortcut.
+        private val MOTOR_ACTIVATION_TAU_SECONDS = 0.040f
 
         private val VIS_START = GeneratedConnectomeMeta.VIS_START
         private val VIS_END = GeneratedConnectomeMeta.VIS_END
@@ -235,9 +227,17 @@ class MainActivity : Activity() {
         private val MOTOR_END = GeneratedConnectomeMeta.VMOTOR_END
 
         private val v = FloatArray(N) { V_REST }
-        private val adapt = FloatArray(N)
+        // g is the aggregate synaptic state in mV. Unlike the previous
+        // per-tick voltage kick, it has its own 5 ms decay and is driven by
+        // delayed presynaptic spike events.
+        private val synConductance = FloatArray(N)
         private val fired = BooleanArray(N)
-        private val prevFired = BooleanArray(N)
+        private val externalForced = BooleanArray(N)
+        private val externalRateHz = FloatArray(N)
+        private val rngState = LongArray(N) { i ->
+            val z = -7046029254386353131L xor (i.toLong() * 2862933555777941757L)
+            if (z == 0L) 1L else z
+        }
         private val motorRole = ByteArray(N)
         // V1.15.2 anatomical VNC semantics are loaded from the official-annotation-derived asset.
         // The FBC103 role byte remains frozen and is retained only for provenance/audit.
@@ -313,8 +313,6 @@ class MainActivity : Activity() {
         private val routeTurn = FloatArray(N)
         private val routeEscape = FloatArray(N)
         private val refractory = FloatArray(N)
-        // V1.13: short-lived synaptic trace (~5 ms), matching the published LIF model timescale.
-        private val synTrace = FloatArray(N)
         // V1.15.5 diagnostic: read-only net synaptic drive immediately before LIF thresholding.
         // This is telemetry only and never feeds back into the dynamics.
         private val lastSynDrive = FloatArray(N)
@@ -333,20 +331,15 @@ class MainActivity : Activity() {
         // while a latch preserves any spike that occurred during the four internal
         // 5 ms substeps. This keeps the legacy display semantics unchanged.
         private val frameFired = BooleanArray(N)
-        // External sensory drive is stored as a per-step voltage/current kick and
-        // applied inside the LIF update AFTER the membrane leak. In the previous
-        // V1.13 implementation sense() wrote directly into v[], but stepBrain()
-        // then applied a full Euler leak with dt=20 ms and tau=20 ms, which reset
-        // the injected voltage back to V_REST before threshold evaluation. That
-        // made every stimulus effectively invisible to the neurons.
-        private val sensoryCurrent = FloatArray(N)
         // FBR-10 dynamics layer: +1 excitatory, -1 inhibitory, 0 unknown/modulatory.
         private val neuroSign = ByteArray(N)
 
         private val incoming = Array(N) { IntArray(0) }
-        private val incomingW = Array(N) { FloatArray(0) }
-        private val baseW = Array(N) { FloatArray(0) }
-        private val eligibility = Array(N) { FloatArray(0) }
+        private val outgoing = Array(N) { IntArray(0) }
+        private val outgoingW = Array(N) { FloatArray(0) }
+        private val pendingSpikeSources = Array(SYNAPTIC_DELAY_STEPS + 1) { IntArray(N) }
+        private val pendingSpikeCounts = IntArray(SYNAPTIC_DELAY_STEPS + 1)
+        private var pendingSpikeCursor = 0
 
         var foodOn = false
         var lightOn = false
@@ -536,12 +529,13 @@ class MainActivity : Activity() {
             }
             val ratio = NEURAL_FRAME_DT_SECONDS / NEURAL_SUBSTEP_DT_SECONDS
             if (abs(ratio - NEURAL_SUBSTEPS_PER_FRAME.toFloat()) > 0.0001f) {
-                throw IllegalStateException(
-                    "substepping inconsistente frame=$NEURAL_FRAME_DT_SECONDS sub=$NEURAL_SUBSTEP_DT_SECONDS n=$NEURAL_SUBSTEPS_PER_FRAME"
-                )
+                throw IllegalStateException("substepping inconsistente frame=$NEURAL_FRAME_DT_SECONDS sub=$NEURAL_SUBSTEP_DT_SECONDS n=$NEURAL_SUBSTEPS_PER_FRAME")
             }
-            if (NEURAL_SUBSTEP_DT_SECONDS > 0.0050001f) {
-                throw IllegalStateException("substep supera tau_syn=5ms: $NEURAL_SUBSTEP_DT_SECONDS")
+            if (NEURAL_SUBSTEP_DT_SECONDS > 0.001f) {
+                throw IllegalStateException("substep demasiado grande para tau_syn=5ms")
+            }
+            if (SYNAPTIC_DELAY_STEPS <= 0 || abs(SYNAPTIC_DELAY_STEPS * NEURAL_SUBSTEP_DT_SECONDS - SYNAPTIC_DELAY_SECONDS) > 0.0003f) {
+                throw IllegalStateException("retardo sinaptico incompatible con el substep")
             }
         }
 
@@ -612,24 +606,19 @@ class MainActivity : Activity() {
         fun resetSimulation() {
             for (i in 0 until N) {
                 v[i] = V_REST
-                adapt[i] = 0f
                 fired[i] = false
-                prevFired[i] = false
                 frameFired[i] = false
                 refractory[i] = 0f
-                synTrace[i] = 0f
+                synConductance[i] = 0f
+                externalForced[i] = false
+                externalRateHz[i] = 0f
                 lastSynDrive[i] = 0f
                 visualActivity[i] = 0f
-                sensoryCurrent[i] = 0f
                 if (i in MOTOR_START until MOTOR_END) {
                     val mi = i - MOTOR_START
                     motorSubstepSpikeCounts[mi] = 0
                     motorSynDriveSum[mi] = 0f
                     motorSynDrivePeak[mi] = 0f
-                }
-                for (k in incomingW[i].indices) {
-                    incomingW[i][k] = baseW[i][k]
-                    eligibility[i][k] = 0f
                 }
             }
             flyX = .24f
@@ -639,10 +628,6 @@ class MainActivity : Activity() {
             flightFactor = 0f
             flightPhase = 0f
             jumpActivityCacheValue = 0f
-            gainOther = 3.60f
-            gainAsc = 3.40f
-            gainDesc = 4.00f
-            gainMotor = 3.60f
             foodX = .76f
             foodY = .35f
             lightX = .72f
@@ -761,6 +746,8 @@ class MainActivity : Activity() {
             diagWindowElapsed = 0f
             baselineCaptureSeconds = 0f
             baselineReady = false
+            for (slot in pendingSpikeCounts.indices) pendingSpikeCounts[slot] = 0
+            pendingSpikeCursor = 0
             java.util.Arrays.fill(dnWindowSpikes, 0)
             java.util.Arrays.fill(motorWindowSpikes, 0)
             java.util.Arrays.fill(dnBaselineSpikes, 0)
@@ -793,6 +780,13 @@ class MainActivity : Activity() {
             selectedStimulus = 0
             legActivityCache = 0f
             wingActivityCache = 0f
+            legActivationState = 0f
+            leftLegActivationState = 0f
+            rightLegActivationState = 0f
+            wingActivationState = 0f
+            neckActivationState = 0f
+            jumpActivationState = 0f
+            abdomenActivationState = 0f
             wingBeatPhase = 0f
             if (buzzStreamId != 0) {
                 soundPool?.stop(buzzStreamId)
@@ -811,15 +805,14 @@ class MainActivity : Activity() {
         private fun buildBrain() {
             connectomeLoaded = loadMeasuredConnectome()
             if (!connectomeLoaded) {
-                runtimeFault = connectomeError.ifEmpty { "no se pudo cargar FBR-10 / dinámica FBD104" }
+                runtimeFault = connectomeError.ifEmpty { "no se pudo cargar FBR-10 / dinámica FBD105" }
                 // Fail closed: never substitute an artificial graph for the
                 // published connectome. This makes a packaging/format error
                 // visible instead of producing scientifically misleading output.
                 for (i in 0 until N) {
                     incoming[i] = IntArray(0)
-                    incomingW[i] = FloatArray(0)
-                    baseW[i] = FloatArray(0)
-                    eligibility[i] = FloatArray(0)
+                    outgoing[i] = IntArray(0)
+                    outgoingW[i] = FloatArray(0)
                 }
             }
         }
@@ -1049,39 +1042,6 @@ class MainActivity : Activity() {
             )
         }
 
-        private fun injectOlfactoryPopulation(enabled: Boolean, sx: Float, sy: Float, gain: Float) {
-            if (!enabled) return
-            val left = antennaOdorConcentration(sx, sy, -1)
-            val right = antennaOdorConcentration(sx, sy, 1)
-            val encoded = OlfactoryInputEncoder.encode(
-                left = left,
-                right = right,
-                gain = gain,
-                limit = SENSORY_KICK_LIMIT
-            )
-            for (i in olfactoryNeuronIndices) {
-                val current = when (olfactorySide[i].toInt()) {
-                    -1 -> encoded.left
-                    1 -> encoded.right
-                    else -> encoded.center
-                }
-                sensoryCurrent[i] += current
-            }
-            // These diagnostics report the actual bounded currents injected into
-            // the ORN populations, not the pre-limit concentration*gain values.
-            olfInputLeftCache = encoded.left
-            olfInputCenterCache = encoded.center
-            olfInputRightCache = encoded.right
-            olfInputFrontCache = 0f
-            olfInputRearCache = 0f
-            foodDirectionalBias = ((left - right) / (left + right + .001f)).coerceIn(-1f, 1f)
-            // Presence/strength is kept separate from receptor gain and from
-            // signed bilateral contrast. It remains a smooth concentration signal
-            // instead of saturating merely because the neural kick gain is high.
-            val bilateral = (left + right) * 0.5f
-            foodDrive = bilateral.coerceIn(0f, 1f)
-        }
-
         private fun loadVncMotorSemantics() {
             val parsed = assets.open("vnc_motor_semantics.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
                 val header = reader.readLine() ?: throw IllegalStateException("VNCSEM cabecera ausente")
@@ -1276,25 +1236,20 @@ class MainActivity : Activity() {
                 val writePos = IntArray(n)
                 for (i in 0 until n) {
                     incoming[i] = IntArray(incomingCount[i])
-                    incomingW[i] = FloatArray(incomingCount[i])
-                    baseW[i] = FloatArray(incomingCount[i])
-                    eligibility[i] = FloatArray(incomingCount[i])
                 }
                 for (k in 0 until e) {
                     val target = dsts[k]
                     val pos = writePos[target]++
                     incoming[target][pos] = srcs[k]
-                    incomingW[target][pos] = weights[k]
-                    baseW[target][pos] = weights[k]
                 }
                 buildBrainDisplayGraph()
                 loadedEdgeCount = e
                 if (!loadDynamicsLayer()) {
-                    throw IllegalStateException(connectomeError.ifEmpty { "FBD104 dynamics layer unavailable" })
+                    throw IllegalStateException(connectomeError.ifEmpty { "FBD105 dynamics layer unavailable" })
                 }
                 if (loadedDynamicsEdgeCount <= 0 || loadedDynamicsEdgeCount > loadedEdgeCount) {
                     throw IllegalStateException(
-                        "FBD104 edges=$loadedDynamicsEdgeCount incompatible con FBC103 edges=$loadedEdgeCount"
+                        "FBD105 edges=$loadedDynamicsEdgeCount incompatible con FBC103 edges=$loadedEdgeCount"
                     )
                 }
                 if (loadedEdgeCount != GeneratedConnectomeMeta.EDGES) {
@@ -1323,66 +1278,64 @@ class MainActivity : Activity() {
                 }
                 val bytes = resources.openRawResource(resourceId).use { it.readBytes() }
                 val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-                if (b.remaining() < 17) throw IllegalStateException("FBD104 cabecera incompleta")
+                if (b.remaining() < 17) throw IllegalStateException("FBD105 cabecera incompleta")
                 val magic = ByteArray(8)
                 b.get(magic)
                 val magicText = magic.toString(Charsets.US_ASCII).trimEnd('\u0000')
-                if (magicText != "FBD104") throw IllegalStateException("magic=$magicText esperado=FBD104")
+                if (magicText != "FBD105") throw IllegalStateException("magic=$magicText esperado=FBD105")
                 val n = b.int
                 val e = b.int
-                if (n != N) throw IllegalStateException("FBD104 neuronas=$n esperado=$N")
-                if (e < 0 || e > 50_000_000) throw IllegalStateException("FBD104 edges=$e fuera de rango")
+                if (n != N) throw IllegalStateException("FBD105 neuronas=$n esperado=$N")
+                if (e < 0 || e > 50_000_000) throw IllegalStateException("FBD105 edges=$e fuera de rango")
                 val expectedBytes = 16L + n.toLong() + e.toLong() * 12L
                 if (bytes.size.toLong() != expectedBytes) {
-                    throw IllegalStateException("FBD104 tamaño=${bytes.size} esperado=$expectedBytes")
+                    throw IllegalStateException("FBD105 tamaño=${bytes.size} esperado=$expectedBytes")
                 }
                 repeat(n) { idx ->
                     neuroSign[idx] = b.get()
                     val sign = neuroSign[idx].toInt()
                     if (sign != -1 && sign != 0 && sign != 1) {
-                        throw IllegalStateException("FBD104 signo invalido en nodo $idx")
+                        throw IllegalStateException("FBD105 signo invalido en nodo $idx")
                     }
                 }
+
                 val srcs = IntArray(e)
                 val dsts = IntArray(e)
                 val weights = FloatArray(e)
                 val incomingCount = IntArray(n)
-                repeat(e) {
+                val outgoingCount = IntArray(n)
+                repeat(e) { edgeIndex ->
                     val src = b.int
                     val dst = b.int
                     val weight = b.float
-                    if (src !in 0 until n || dst !in 0 until n) {
-                        throw IllegalStateException("FBD104 edge[$it] fuera de rango: $src->$dst")
-                    }
-                    if (!weight.isFinite() || weight == 0f) {
-                        throw IllegalStateException("FBD104 edge[$it] con peso invalido")
-                    }
-                    if (neuroSign[src].toInt() == 0) {
-                        throw IllegalStateException("FBD104 edge[$it] usa presinaptica sin signo")
-                    }
-                    if ((weight > 0f) != (neuroSign[src].toInt() > 0)) {
-                        throw IllegalStateException("FBD104 signo de peso inconsistente en edge[$it]")
-                    }
-                    srcs[it] = src
-                    dsts[it] = dst
-                    weights[it] = weight
+                    if (src !in 0 until n || dst !in 0 until n) throw IllegalStateException("FBD105 edge[$edgeIndex] fuera de rango: $src->$dst")
+                    if (!weight.isFinite() || weight == 0f) throw IllegalStateException("FBD105 edge[$edgeIndex] con peso invalido")
+                    if (neuroSign[src].toInt() == 0) throw IllegalStateException("FBD105 edge[$edgeIndex] usa presinaptica sin signo")
+                    if ((weight > 0f) != (neuroSign[src].toInt() > 0)) throw IllegalStateException("FBD105 signo inconsistente en edge[$edgeIndex]")
+                    srcs[edgeIndex] = src
+                    dsts[edgeIndex] = dst
+                    weights[edgeIndex] = weight
                     incomingCount[dst]++
+                    outgoingCount[src]++
                 }
-                if (b.hasRemaining()) throw IllegalStateException("FBD104 bytes restantes=${b.remaining()}")
+                if (b.hasRemaining()) throw IllegalStateException("FBD105 bytes restantes=${b.remaining()}")
 
                 for (i in 0 until n) {
                     incoming[i] = IntArray(incomingCount[i])
-                    incomingW[i] = FloatArray(incomingCount[i])
-                    baseW[i] = FloatArray(incomingCount[i])
-                    eligibility[i] = FloatArray(incomingCount[i])
+                    outgoing[i] = IntArray(outgoingCount[i])
+                    outgoingW[i] = FloatArray(outgoingCount[i])
                 }
-                val writePos = IntArray(n)
+                val inPos = IntArray(n)
+                val outPos = IntArray(n)
                 for (k in 0 until e) {
-                    val target = dsts[k]
-                    val pos = writePos[target]++
-                    incoming[target][pos] = srcs[k]
-                    incomingW[target][pos] = weights[k]
-                    baseW[target][pos] = weights[k]
+                    val src = srcs[k]
+                    val dst = dsts[k]
+                    val w = weights[k]
+                    val ip = inPos[dst]++
+                    incoming[dst][ip] = src
+                    val op = outPos[src]++
+                    outgoing[src][op] = dst
+                    outgoingW[src][op] = w
                 }
                 loadedDynamicsEdgeCount = e
                 dynamicsLoaded = true
@@ -1540,183 +1493,194 @@ class MainActivity : Activity() {
             return gaussian(d, sigma)
         }
 
-        private fun injectMappedSensoryPopulation(indices: IntArray, input: Float, gain: Float = 1f) {
-            if (input == 0f || indices.isEmpty()) return
-            val current = input * gain
-            for (index in indices) {
-                sensoryCurrent[index] += current
+        private fun setMappedSensoryRate(indices: IntArray, rateHz: Float) {
+            if (indices.isEmpty() || rateHz <= 0f) return
+            val bounded = rateHz.coerceIn(0f, 260f)
+            for (index in indices) externalRateHz[index] = bounded
+        }
+
+        private fun xorshiftUnit(index: Int): Float {
+            var x = rngState[index]
+            x = x xor (x shl 13)
+            x = x xor (x ushr 7)
+            x = x xor (x shl 17)
+            rngState[index] = if (x == 0L) 1L else x
+            val bits = (x ushr 32) and 0xffffffffL
+            return bits.toFloat() / 4294967296f
+        }
+
+        private fun poissonEvent(index: Int, dt: Float): Boolean {
+            val rate = externalRateHz[index]
+            if (rate <= 0f) return false
+            val probability = (-Math.expm1((-rate * dt).toDouble())).toFloat()
+            return xorshiftUnit(index) < probability
+        }
+
+        private fun injectOlfactoryPopulation(enabled: Boolean, sx: Float, sy: Float, maxRateHz: Float) {
+            if (!enabled) {
+                olfInputLeftCache = 0f
+                olfInputCenterCache = 0f
+                olfInputRightCache = 0f
+                olfInputFrontCache = 0f
+                olfInputRearCache = 0f
+                foodDirectionalBias = 0f
+                foodDrive = 0f
+                return
             }
+            val left = antennaOdorConcentration(sx, sy, -1)
+            val right = antennaOdorConcentration(sx, sy, 1)
+            val center = (left + right) * .5f
+            for (i in olfactoryNeuronIndices) {
+                val concentration = when (olfactorySide[i].toInt()) {
+                    -1 -> left
+                    1 -> right
+                    else -> center
+                }
+                externalRateHz[i] = (concentration * maxRateHz).coerceIn(0f, 260f)
+            }
+            olfInputLeftCache = left
+            olfInputCenterCache = center
+            olfInputRightCache = right
+            olfInputFrontCache = 0f
+            olfInputRearCache = 0f
+            foodDirectionalBias = ((left - right) / (left + right + .001f)).coerceIn(-1f, 1f)
+            foodDrive = center
         }
 
         private fun sense(dt: Float) {
-            // External sensory drive is a bounded, normalized voltage-dose (ΔV),
-            // sampled once per 20 ms neural frame; it is NOT a physical current in A.
-            // Clear it before encoding the current environmental state so samples do
-            // not accumulate across frames. stepBrainSubstep holds this sample across
-            // the four 5 ms substeps and distributes the calibrated frame dose.
-            java.util.Arrays.fill(sensoryCurrent, 0f)
-            val foodGustatoryIntensity = stimulusIntensity(
-                foodOn, foodX, foodY, .065f
-            ) * 2.35f * (1f - satiety * .35f)
+            // V1.18: environmental inputs are rate encoders, not voltage kicks.
+            // They are converted to Poisson spike trains in stepBrainSubstep(),
+            // matching the event-based external stimulation used by the reference LIF model.
+            java.util.Arrays.fill(externalRateHz, 0f)
+            val foodGustatoryIntensity = stimulusIntensity(foodOn, foodX, foodY, .065f) * 2.35f * (1f - satiety * .35f)
             val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .48f) * 1.55f
             val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .48f) * 2.15f
 
-            // PELIGRO retains a deterministic environmental looming component, but it
-            // is delivered only to retained visual photoreceptors. The old direct
-            // mechanosensory injection is intentionally removed: a remote threat is
-            // not physical contact. Mechanosensory receptors receive only the physical
-            // boundary/proprioceptive feedback below.
-            // Looming is derived from measured relative approach, not from wall-clock
-            // phase. A static danger object therefore produces no artificial looming
-            // oscillation; moving the stimulus toward the fly increases the signal.
             val dangerDistance = hypot(dangerX - flyX, dangerY - flyY)
             val approachRate = if (dangerOn && previousDangerDistance.isFinite()) {
-                ((previousDangerDistance - dangerDistance) / dt.coerceAtLeast(0.001f)).coerceAtLeast(0f)
+                ((previousDangerDistance - dangerDistance) / dt.coerceAtLeast(.001f)).coerceAtLeast(0f)
             } else 0f
-            dangerLoom = if (dangerOn) {
-                (approachRate / 0.35f).coerceIn(0f, 1f)
-            } else 0f
+            dangerLoom = if (dangerOn) (approachRate / .35f).coerceIn(0f, 1f) else 0f
             previousDangerDistance = if (dangerOn) dangerDistance else Float.NaN
             val visualThreatIntensity = dangerBaseIntensity * (.45f + .80f * dangerLoom)
             val combinedVisualIntensity = (lightIntensity + visualThreatIntensity).coerceIn(0f, 3.5f)
 
-            // PHASE 1: external stimuli enter only anatomically identified receptor
-            // populations derived from official MaleCNS annotations. No population-wide
-            // index projection, cyclic channeling or per-index sinusoidal micro-pattern remains.
-            injectMappedSensoryPopulation(visualReceptorIndices, combinedVisualIntensity, SENSORY_VIS_GAIN)
-            injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_GAIN * (1f - satiety * .45f))
-            injectMappedSensoryPopulation(gustatoryReceptorIndices, foodGustatoryIntensity, SENSORY_GUST_GAIN)
+            setMappedSensoryRate(visualReceptorIndices, combinedVisualIntensity / 3.5f * SENSORY_VIS_MAX_HZ)
+            injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_MAX_HZ)
+            setMappedSensoryRate(gustatoryReceptorIndices, foodGustatoryIntensity / 2.35f * 180f)
 
-            // Boundary contact/proprioceptive feedback is the only mechanosensory
-            // world-interface in this phase and is delivered only to mapped receptors.
-
-            // Contact/proprioceptive feedback from boundaries. This is sensory
-            // feedback, not a command to turn.
             val wall = min(min(flyX - .06f, .94f - flyX), min(flyY - .10f, .79f - flyY)).coerceIn(0f, .4f)
             val wallSignal = (1f - wall / .4f).coerceIn(0f, 1f)
             wallDistanceCache = wall
             wallSignalCache = wallSignal
-            injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)
+            setMappedSensoryRate(mechanosensoryReceptorIndices, wallSignal * 80f)
 
             lightDrive = lightIntensity.coerceIn(0f, 1f)
             dangerDrive = visualThreatIntensity.coerceIn(0f, 1f)
-
             foodSignalDisplay = .90f * foodSignalDisplay + .10f * foodDrive
             lightSignalDisplay = .90f * lightSignalDisplay + .10f * lightDrive
             dangerSignalDisplay = .90f * dangerSignalDisplay + .10f * dangerDrive
-
             sensoryDisplay = .90f * sensoryDisplay + .10f * ((foodDrive + lightDrive + dangerDrive) / 3f)
+        }
 
-            // Adaptation is integrated once, in stepBrainSubstep(), for every neuron.
-            // Do not subtract it here as well: that would double-count adaptation for
-            // sensory neurons while still decaying the state only once.
-            for (i in 0 until SENSOR_END) {
-                adapt[i] *= exp((-dt * 2.0f).toDouble()).toFloat()
+        private fun scheduleSpike(source: Int) {
+            val slot = (pendingSpikeCursor + SYNAPTIC_DELAY_STEPS) % pendingSpikeSources.size
+            val count = pendingSpikeCounts[slot]
+            if (count >= pendingSpikeSources[slot].size) {
+                throw IllegalStateException("cola sinaptica saturada en slot=$slot")
             }
+            pendingSpikeSources[slot][count] = source
+            pendingSpikeCounts[slot] = count + 1
+        }
+
+        private fun deliverDelayedSynapses() {
+            val slot = pendingSpikeCursor
+            val count = pendingSpikeCounts[slot]
+            for (p in 0 until count) {
+                val source = pendingSpikeSources[slot][p]
+                val targets = outgoing[source]
+                val weights = outgoingW[source]
+                for (k in targets.indices) {
+                    // Match Brian2's event semantics: on_pre still executes while
+                    // the target is refractory. The (unless refractory) flag
+                    // freezes membrane-potential integration, not synaptic
+                    // event delivery. The synaptic state still decays with its
+                    // published 5 ms time constant while the membrane is refractory.
+                    val target = targets[k]
+                    synConductance[target] += weights[k]
+                }
+            }
+            pendingSpikeCounts[slot] = 0
+        }
+
+        private fun forceExternalSpike(index: Int) {
+            fired[index] = true
+            frameFired[index] = true
+            v[index] = V_RESET
+            synConductance[index] = 0f
+            refractory[index] = 0f
+            externalForced[index] = true
+            scheduleSpike(index)
         }
 
         private fun stepBrainSubstep(dt: Float, applySensoryKick: Boolean): Int {
-            for (i in 0 until N) prevFired[i] = fired[i]
+            deliverDelayedSynapses()
 
-            // V1.04: a spike creates a short-lived synaptic trace. The temporal
-            // trace is applied to the published retained graph; it does not alter topology.
-            val synDecay = exp((-dt / .005f).toDouble()).toFloat()
-            val membraneDecay = exp((-dt / TAU_MEMBRANE_SECONDS).toDouble()).toFloat()
-
-            // Synchronous network update: first snapshot every neuron's outgoing
-            // synaptic trace from the PREVIOUS substep, then evaluate any target.
-            // Updating synTrace inside the membrane loop made results depend on
-            // neuron index: targets later in the array could see this substep's
-            // newly updated source trace, while earlier targets saw the old trace.
-            // That accidental Gauss-Seidel-like sweep biases propagation and can
-            // suppress/reorder recruitment of descending and VNC motor neurons.
-            for (i in 0 until N) {
-                synTrace[i] = (synTrace[i] * synDecay + if (prevFired[i]) 1f else 0f).coerceAtMost(3f)
-            }
-
-            // All neurons now read the same completed synaptic-state snapshot.
-            for (i in 0 until N) {
-                if (refractory[i] > 0f) {
-                    refractory[i] -= dt
-                    fired[i] = false
-                    // A refractory neuron contributes no current for this substep.
-                    // Clear the read-only motor-drive cache to prevent a previous
-                    // substep's value from leaking into the 20 ms output aggregate.
-                    lastSynDrive[i] = 0f
-                    continue
-                }
-
-                val targetIsMotor = i in MOTOR_START until MOTOR_END
-                var syn = 0f
-                val src = incoming[i]
-                val w = incomingW[i]
-                for (k in src.indices) {
-                    val source = src[k]
-                    // V1.13: every runtime synaptic contribution is the signed
-                    // published edge itself. No artificial "halt gain" is applied.
-                    syn += w[k] * synTrace[source]
-                }
-                // The normalized signed drive is bounded only after population
-                // gain. This keeps inhibition/excitation balanced without
-                // changing the frozen edge topology.
-                syn = syn.coerceIn(-.75f, .75f)
-
-                val isMotor = targetIsMotor
-                val isDesc = i in DESC_START until DESC_END
-                // V1.13: remove synthetic locomotor/tonic currents that previously
-                // kept the fly moving even when the retained network had no motor
-                // reason to do so. A very small background fluctuation remains to
-                // represent unresolved intrinsic activity without commanding a behavior.
-                // V1.13: no stochastic background current. A silent baseline is
-                // preferable to synthetic spikes that could be mistaken for emergent
-                // activity. Any spontaneous firing must come from the retained graph
-                // dynamics or from an explicit sensory input.
-                val centralNoise = 0f
-
-                // V1.15: gains are fixed model parameters. The previous adaptive
-                // controller was coupled to stimulus presentation and therefore
-                // changed the system while it was being measured. FBD104 already
-                // contains signed, normalized synaptic weights; these gains are
-                // now held constant so stimulus comparisons are reproducible.
-                val synGain = when {
-                    isMotor -> gainMotor
-                    isDesc -> gainDesc
-                    i in ASC_START until ASC_END -> gainAsc
-                    else -> gainOther
-                }
-
-                val synCurrent = (syn * synGain).coerceIn(-.55f, .55f)
-                lastSynDrive[i] = synCurrent
-                // V1.16.2: analytic membrane leak. With tau_m=20 ms and a 20 ms
-                // neural step, the exact retention factor is exp(-1)=0.367879, so
-                // the membrane retains physical temporal state instead of being
-                // reset to V_REST by the Euler factor 1 - dt/tau = 0.
-                // Sensory/synaptic terms are normalized ΔV kicks, not SI currents;
-                // do not multiply them by dt. The environmental sample is held for
-                // the whole 20 ms public frame and distributed across the four 5 ms
-                // integration substeps. This preserves the total injected ΔV per
-                // frame while avoiding an artificial 5 ms impulse that disappears
-                // before the downstream olfactory/circuit neurons can integrate it.
-                val externalCurrent = if (applySensoryKick && i < SENSOR_END) {
-                    sensoryCurrent[i] / NEURAL_SUBSTEPS_PER_FRAME.toFloat()
-                } else 0f
-                val membraneLeak = (V_REST - v[i]) * (1f - membraneDecay)
-                v[i] += membraneLeak - adapt[i] * dt +
-                    synCurrent + externalCurrent + centralNoise
-                fired[i] = v[i] >= V_THRESHOLD
-
-                if (fired[i]) {
-                    v[i] = V_RESET
-                    adapt[i] = min(.18f, adapt[i] + .026f)
-                    refractory[i] = REFRACTORY_SECONDS
-                    frameFired[i] = true
+            // External receptor spikes are Poisson events. The event itself is a
+            // forced spike, as in the reference PoissonInput formulation.
+            if (applySensoryKick) {
+                for (i in 0 until SENSOR_END) {
+                    if (poissonEvent(i, dt)) forceExternalSpike(i)
                 }
             }
 
             var stepSpikes = 0
+            val a = exp((-dt / TAU_MEMBRANE_SECONDS).toDouble()).toFloat()
+            val b = exp((-dt / TAU_SYNAPSE_SECONDS).toDouble()).toFloat()
+            val coupling = TAU_SYNAPSE_SECONDS / (TAU_MEMBRANE_SECONDS - TAU_SYNAPSE_SECONDS)
+
             for (i in 0 until N) {
-                if (fired[i]) stepSpikes++
+                if (externalForced[i]) {
+                    externalForced[i] = false
+                    stepSpikes++
+                    continue
+                }
+                if (refractory[i] > 0f) {
+                    fired[i] = false
+                    // Match the reference Brian2 refractory semantics used by
+                    // Shiu et al.: refractory neurons do not integrate either
+                    // membrane or synaptic state until the refractory interval
+                    // has elapsed. Presynaptic events may still be delivered to
+                    // the postsynaptic conductance before this gate, exactly as
+                    // the event queue defines; the state is then held here.
+                    lastSynDrive[i] = synConductance[i]
+                    refractory[i] = (refractory[i] - dt).coerceAtLeast(0f)
+                    continue
+                }
+
+                fired[i] = false
+                val g0 = synConductance[i]
+                lastSynDrive[i] = g0
+                val x0 = v[i] - V_REST
+                v[i] = V_REST + x0 * a + g0 * coupling * (a - b)
+                synConductance[i] = g0 * b
+
+                if (v[i] > V_THRESHOLD) {
+                    fired[i] = true
+                    frameFired[i] = true
+                    stepSpikes++
+                    v[i] = V_RESET
+                    // Match the reference implementation exactly: a spike resets
+                    // both membrane potential and the alpha-synapse state of the
+                    // spiking neuron. Future presynaptic events rebuild g after the
+                    // published synaptic delay.
+                    synConductance[i] = 0f
+                    refractory[i] = REFRACTORY_SECONDS
+                    scheduleSpike(i)
+                }
             }
+
+            pendingSpikeCursor = (pendingSpikeCursor + 1) % pendingSpikeSources.size
             return stepSpikes
         }
 
@@ -1858,7 +1822,7 @@ class MainActivity : Activity() {
                 spikeWindowTime = 0f
             }
             // PHASE 2B visual correction: keep presentation memory at the original
-            // 20 ms cadence. `frameFired` latches spikes from all four 5 ms substeps,
+            // 20 ms cadence. `frameFired` latches spikes from all 40 internal 0.5 ms substeps,
             // then this legacy 0.88/0.22 update is applied exactly once per frame.
             for (i in 0 until N) {
                 visualActivity[i] = (visualActivity[i] * .88f +
@@ -1878,7 +1842,7 @@ class MainActivity : Activity() {
             val motorRateNow = populationRate(MOTOR_START, MOTOR_END)
             val drivePeak = if (SENSOR_END > 0) {
                 var peak = 0f
-                for (i in 0 until SENSOR_END) peak = max(peak, sensoryCurrent[i])
+                for (i in 0 until SENSOR_END) peak = max(peak, externalRateHz[i])
                 peak
             } else 0f
             val diagTau = 1f - exp((-dt / .10f).toDouble()).toFloat()
@@ -2114,32 +2078,32 @@ class MainActivity : Activity() {
         }
 
         // Cached proxy is updated from actual motor activity in driveBody.
+        // Activation states below are driven exclusively by measured VNC MN spikes.
         private var legActivityCache = 0f
         private var jumpActivityCacheValue = 0f
-        private fun legActivityProxy(): Float = legActivityCache
-        private fun jumpActivityCache(): Float = jumpActivityCacheValue
+        private var legActivationState = 0f
+        private var leftLegActivationState = 0f
+        private var rightLegActivationState = 0f
+        private var wingActivationState = 0f
+        private var neckActivationState = 0f
+        private var jumpActivationState = 0f
+        private var abdomenActivationState = 0f
+
+        private fun relaxMotorActivation(previous: Float, target: Float, dt: Float): Float {
+            val alpha = (1f - exp((-dt / MOTOR_ACTIVATION_TAU_SECONDS).toDouble()).toFloat()).coerceIn(0f, 1f)
+            return previous + (target - previous) * alpha
+        }
+
+        private fun legActivityProxy(): Float = legActivationState
+        private fun jumpActivityCache(): Float = jumpActivationState
 
         private fun learn(reward: Float, dt: Float) {
+            // Synapses are fixed connectome measurements in this release. The old
+            // reward-dependent weight update was disabled but still contained a
+            // dormant code path; keeping it out of the runtime removes any risk
+            // that motor weights diverge from FBD105 during an experiment.
             val r = reward.coerceIn(-1f, 1f)
             memoryTrace = (memoryTrace * exp((-dt * .035f).toDouble()).toFloat() + abs(r) * .03f).coerceIn(0f, 1f)
-
-            if (plasticityEnabled) {
-                for (target in MOTOR_START until MOTOR_END) {
-                    val sources = incoming[target]
-                    val weights = incomingW[target]
-                    val base = baseW[target]
-                    val e = eligibility[target]
-                    for (k in sources.indices) {
-                        val pre = if (prevFired[sources[k]]) 1f else 0f
-                        val post = if (fired[target]) 1f else 0f
-                        e[k] = (e[k] * .995f + pre * post * .08f).coerceIn(-1f, 1f)
-                        weights[k] += r * e[k] * dt * .18f
-                        val lo = min(base[k] * .55f, base[k] * 1.45f)
-                        val hi = max(base[k] * .55f, base[k] * 1.45f)
-                        weights[k] = weights[k].coerceIn(lo, hi)
-                    }
-                }
-            }
             lastReward = .94f * lastReward + .06f * r
         }
 
@@ -2163,6 +2127,17 @@ class MainActivity : Activity() {
             var leftLegActive = 0
             var rightLegActive = 0
             var unknownLegActive = 0
+            var legSpikeEvents = 0
+            var leftLegSpikeEvents = 0
+            var rightLegSpikeEvents = 0
+            var unknownLegSpikeEvents = 0
+            var wingSpikeEvents = 0
+            var neckSpikeEvents = 0
+            var jumpSpikeEvents = 0
+            var abdomenSpikeEvents = 0
+            var haltereSpikeEvents = 0
+            var motorOtherSpikeEvents = 0
+            var allMotorSpikeEvents = 0
             var wingActive = 0
             var neckActive = 0
             var jumpActive = 0
@@ -2201,29 +2176,28 @@ class MainActivity : Activity() {
                     GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereDriveSigned += drive
                     GeneratedConnectomeMeta.MOTOR_OTHER -> otherDriveSigned += drive
                 }
-                val motorFiredAny = motorSubstepSpikeCounts[i - MOTOR_START] > 0
-                if (!motorFiredAny) continue
-                // A motor neuron contributes once to the outer-frame activity if
-                // it fired in any internal substep. This preserves transient motor
-                // events that would otherwise disappear before the 20 ms readout.
-                allMotor += 1f
+                val motorSpikes = motorSubstepSpikeCounts[i - MOTOR_START]
+                if (motorSpikes <= 0) continue
+                allMotorSpikeEvents += motorSpikes
                 when (motorRole[i].toInt()) {
                     GeneratedConnectomeMeta.MOTOR_LEG -> {
                         legActive++
+                        legSpikeEvents += motorSpikes
                         when (nodeSide[i].toInt()) {
-                            -1 -> leftLegActive++
-                            1 -> rightLegActive++
-                            else -> unknownLegActive++
+                            -1 -> { leftLegActive++; leftLegSpikeEvents += motorSpikes }
+                            1 -> { rightLegActive++; rightLegSpikeEvents += motorSpikes }
+                            else -> { unknownLegActive++; unknownLegSpikeEvents += motorSpikes }
                         }
                     }
-                    GeneratedConnectomeMeta.MOTOR_WING -> wingActive++
-                    GeneratedConnectomeMeta.MOTOR_NECK -> neckActive++
-                    GeneratedConnectomeMeta.MOTOR_ABDOMEN -> abdomenActive++
-                    GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereActive++
-                    GeneratedConnectomeMeta.MOTOR_OTHER -> motorOtherActive++
+                    GeneratedConnectomeMeta.MOTOR_WING -> { wingActive++; wingSpikeEvents += motorSpikes }
+                    GeneratedConnectomeMeta.MOTOR_NECK -> { neckActive++; neckSpikeEvents += motorSpikes }
+                    GeneratedConnectomeMeta.MOTOR_ABDOMEN -> { abdomenActive++; abdomenSpikeEvents += motorSpikes }
+                    GeneratedConnectomeMeta.MOTOR_HALTERE -> { haltereActive++; haltereSpikeEvents += motorSpikes }
+                    GeneratedConnectomeMeta.MOTOR_OTHER -> { motorOtherActive++; motorOtherSpikeEvents += motorSpikes }
                 }
                 if (motorFunctionalTag[i].toInt() == GeneratedConnectomeMeta.MOTOR_FUNCTION_JUMP) {
                     jumpActive++
+                    jumpSpikeEvents += motorSpikes
                 }
             }
 
@@ -2232,17 +2206,52 @@ class MainActivity : Activity() {
             val neckTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_NECK]
             val abdomenTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_ABDOMEN]
             val haltereTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_HALTERE]
-            legActivity = if (legTotal == 0) 0f else legActive.toFloat() / legTotal.toFloat()
-            leftLeg = if (legLeftTotal == 0) 0f else leftLegActive.toFloat() / legLeftTotal.toFloat()
-            rightLeg = if (legRightTotal == 0) 0f else rightLegActive.toFloat() / legRightTotal.toFloat()
-            wingActivity = if (wingTotal == 0) 0f else wingActive.toFloat() / wingTotal.toFloat()
-            neckActivity = if (neckTotal == 0) 0f else neckActive.toFloat() / neckTotal.toFloat()
             val jumpTotal = jumpLeftTotal + jumpRightTotal
-            jumpActivity = if (jumpTotal == 0) 0f else jumpActive.toFloat() / jumpTotal.toFloat()
-            abdomenActivity = if (abdomenTotal == 0) 0f else abdomenActive.toFloat() / abdomenTotal.toFloat()
+            // Body readout is now based on mean spike rate across each anatomical
+            // motor population, not a boolean "fired at least once in 20 ms".
+            // One spike in a 20 ms frame corresponds to 50 Hz.
+            val invFrame = 1f / dt.coerceAtLeast(.001f)
+            val legRateHz = if (legTotal == 0) 0f else legSpikeEvents * invFrame / legTotal.toFloat()
+            val leftLegRateHz = if (legLeftTotal == 0) 0f else leftLegSpikeEvents * invFrame / legLeftTotal.toFloat()
+            val rightLegRateHz = if (legRightTotal == 0) 0f else rightLegSpikeEvents * invFrame / legRightTotal.toFloat()
+            val unknownLegRateHz = if (legUnknownSideTotal == 0) 0f else unknownLegSpikeEvents * invFrame / legUnknownSideTotal.toFloat()
+            val wingRateHz = if (wingTotal == 0) 0f else wingSpikeEvents * invFrame / wingTotal.toFloat()
+            val neckRateHz = if (neckTotal == 0) 0f else neckSpikeEvents * invFrame / neckTotal.toFloat()
+            val jumpRateHz = if (jumpTotal == 0) 0f else jumpSpikeEvents * invFrame / jumpTotal.toFloat()
+            val abdomenRateHz = if (abdomenTotal == 0) 0f else abdomenSpikeEvents * invFrame / abdomenTotal.toFloat()
+            val haltereRateHz = if (haltereTotal == 0) 0f else haltereSpikeEvents * invFrame / haltereTotal.toFloat()
+            val otherRateHz = if (motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER] == 0) 0f else motorOtherSpikeEvents * invFrame / motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER].toFloat()
+            // Raw firing rates are the neural readout. The actuator states are
+            // a short physical integration of that measured spike output, avoiding
+            // a single-spike = instantaneous-force discontinuity every 20 ms.
+            val rawLegActivity = (legRateHz / 50f).coerceIn(0f, 1f)
+            val rawLeftLeg = (leftLegRateHz / 50f).coerceIn(0f, 1f)
+            val rawRightLeg = (rightLegRateHz / 50f).coerceIn(0f, 1f)
+            val rawWingActivity = (wingRateHz / 50f).coerceIn(0f, 1f)
+            val rawNeckActivity = (neckRateHz / 50f).coerceIn(0f, 1f)
+            val rawJumpActivity = (jumpRateHz / 50f).coerceIn(0f, 1f)
+            val rawAbdomenActivity = (abdomenRateHz / 50f).coerceIn(0f, 1f)
+
+            legActivationState = relaxMotorActivation(legActivationState, rawLegActivity, dt)
+            leftLegActivationState = relaxMotorActivation(leftLegActivationState, rawLeftLeg, dt)
+            rightLegActivationState = relaxMotorActivation(rightLegActivationState, rawRightLeg, dt)
+            wingActivationState = relaxMotorActivation(wingActivationState, rawWingActivity, dt)
+            neckActivationState = relaxMotorActivation(neckActivationState, rawNeckActivity, dt)
+            jumpActivationState = relaxMotorActivation(jumpActivationState, rawJumpActivity, dt)
+            abdomenActivationState = relaxMotorActivation(abdomenActivationState, rawAbdomenActivity, dt)
+
+            // Public activity variables remain the measured, actuator-filtered
+            // outputs. The raw spike counters and top-neuron telemetry remain the
+            // neural evidence used for auditing.
+            legActivity = legActivationState
+            leftLeg = leftLegActivationState
+            rightLeg = rightLegActivationState
+            wingActivity = wingActivationState
+            neckActivity = neckActivationState
+            jumpActivity = jumpActivationState
+            abdomenActivity = abdomenActivationState
             abdomenActiveCache = abdomenActive
             haltereActiveCache = haltereActive
-            val haltereActivity = if (haltereTotal == 0) 0f else haltereActive.toFloat() / haltereTotal.toFloat()
             motorOtherActiveCache = motorOtherActive
             unresolvedMotorActiveCache = motorOtherActive
             val motorCountF = motorCount.toFloat().coerceAtLeast(1f)
@@ -2257,7 +2266,7 @@ class MainActivity : Activity() {
             otherMotorDriveSignedCache = if (motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER] == 0) 0f else otherDriveSigned / motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER].toFloat()
             leftLegDriveSignedCache = if (legLeftTotal == 0) 0f else leftLegDrive / legLeftTotal.toFloat()
             rightLegDriveSignedCache = if (legRightTotal == 0) 0f else rightLegDrive / legRightTotal.toFloat()
-            @Suppress("UNUSED_VARIABLE") val retainedHaltereActivity = haltereActivity
+            @Suppress("UNUSED_VARIABLE") val retainedUnknownLegRateHz = unknownLegRateHz
 
             legActiveCache = legActive
             leftLegActiveCache = leftLegActive
@@ -2313,7 +2322,9 @@ class MainActivity : Activity() {
             // measured VNC motor neurons. Leg MN activity supplies walking force;
             // wing/jump MN activity adds flight thrust. No stimulus or action score
             // writes position directly.
-            val recruitedLeg = sqrt(legActivity.coerceAtLeast(0f))
+            // Physical force comes only from measured VNC motor-neuron output after
+            // the actuator time constant. No food/sensory/action variable enters here.
+            val recruitedLeg = legActivity.coerceAtLeast(0f)
             val flightMotor = (wingActivity * .78f + jumpActivity * .22f).coerceIn(0f, 1f)
             flightFactor += (flightMotor - flightFactor) * (1f - exp((-dt / .10f).toDouble()).toFloat())
             val jumpImpulse = jumpActivity * .006f
@@ -2376,7 +2387,7 @@ class MainActivity : Activity() {
             val descendingRate = populationRate(DESC_START, DESC_END)
             val ascendingRate = populationRate(ASC_START, ASC_END)
             val centralRate = populationRate(OTHER_START, OTHER_END)
-            val motorRate = allMotor / motorCount.toFloat()
+            val motorRate = (allMotorSpikeEvents * invFrame / motorCount.toFloat()).coerceIn(0f, 260f)
 
             // UI diagnostics report measured firing, not stimulus intensity.
             visualRateDisplay = .82f * visualRateDisplay + .18f * visualRate
@@ -2460,7 +2471,7 @@ class MainActivity : Activity() {
             val frameDt = min(.030, max(.004, raw)).toFloat()
             lastNs = now
             fps = fps * .94f + (1f / frameDt) * .06f
-            // Public neural clock at 50 Hz, independent of display refresh rate; each public frame resolves 4 internal 5 ms substeps.
+            // Public neural clock at 50 Hz, independent of display refresh rate; each public frame resolves 40 internal 0.5 ms substeps.
             neuralAccumulator += frameDt
             var steps = 0
             while (neuralAccumulator >= NEURAL_FRAME_DT_SECONDS && steps < 5) {
@@ -2576,12 +2587,12 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.17.1 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.18.3 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(8.4f)
             paint.color = Color.rgb(171, 181, 187)
-            c.drawText("MaleCNS v1.0 · FBR-10-OLF1 · FBC103 + FBD104 + VNCSEM102", innerL, top + dp(36f), paint)
+            c.drawText("MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBC103 + FBD105 + VNCSEM102", innerL, top + dp(36f), paint)
 
             // Live status + model census, kept in one compact row.
             val statusX = innerR - dp(124f)

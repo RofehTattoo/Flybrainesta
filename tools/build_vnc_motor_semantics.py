@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build the V1.17.0 VNC motor semantics layer from official MaleCNS annotations.
+"""Build the V1.18.3 VNC motor semantics layer from official MaleCNS annotations.
 
-This script never rewrites FBC103. It reads the current release FBR-10-OLF1 binary
+This script never rewrites FBC103. It reads the current release FBR-10-OLF2-MOTORROUTE binary
 only to recover the retained bodyIds and previous FBC103 motor-role bytes for audit comparison.
 The official annotation Feather is the sole source of anatomical class/side/
 type/subclass/neuromere/exit-nerve data.
@@ -136,7 +136,7 @@ def main():
     with out.open('w',newline='',encoding='utf-8') as f:
         w=csv.DictWriter(f,fieldnames=list(rows[0]),delimiter='\t',lineterminator='\n'); w.writeheader(); w.writerows(rows)
     report={
-        'version':'1.17.0','status':'PASS','source':'MaleCNS v1.0 official body annotations',
+        'version':'1.18.3','status':'PASS','source':'MaleCNS v1.0 official body annotations',
         'annotation_sha256':ANN_SHA,'fbc103_sha256':actual_fbc_sha,'fbc103_modified':False,
         'neurons_fbr10':N,'vnc_motor_rows':len(rows),'counts':dict(counts),'sides':dict(sides),
         'functional_tags':dict(Counter(x['functionalTag'] for x in rows)),

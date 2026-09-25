@@ -7,7 +7,7 @@ BUILDER = (ROOT / 'tools/build_olfactory_input_map.py').read_text()
 FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
 
 assert 'olfactoryNeuronIndices' in MAIN
-assert 'injectMappedSensoryPopulation(mechanosensoryReceptorIndices, wallSignal * .055f)' in MAIN
+assert 'setMappedSensoryRate(mechanosensoryReceptorIndices, wallSignal * 80f)' in MAIN
 assert 'olfactoryPopulationRate()' in MAIN
 assert 'mechanosensoryPopulationRate()' in MAIN
 assert 'for (i in OLF_START until OLF_END)' not in MAIN
@@ -38,7 +38,7 @@ assert 'elif rs in (-1, 1):' in side_block
 assert 'code, source = 0, "unknown"' in side_block
 
 actual = hashlib.sha256(FBC.read_bytes()).hexdigest()
-assert 'FBR-10-OLF1' in BUILDER
+assert 'FBR-10-OLF2-MOTORROUTE' in BUILDER
 assert 'side_from_nerve' not in BUILDER
 print('OLF ANATOMICAL INPUT AUDIT: STATIC PASS')
 print('CURRENT FBC SHA-256:', actual)

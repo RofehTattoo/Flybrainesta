@@ -22,7 +22,7 @@ jobs:
       - name: Download and verify pinned MaleCNS v1.0 source
         run: python tools/prepare_malecns.py --download
 
-      - name: Build canonical FBR-10-OLF1
+      - name: Build canonical FBR-10-OLF2-MOTORROUTE
         run: python tools/build_connectome.py
 
       - name: Run structural/static validation
@@ -37,7 +37,11 @@ jobs:
           python tools/test_sensory_sample_hold.py
           python tools/test_sensory_input_purity.py
           python tools/test_vnc_motor_semantics_logic.py
-          python tools/validate_fbr10_olf1.py --fbc103 app/src/main/res/raw/malecns_reduced.bin --report app/src/main/res/raw/malecns_reduced_report.json
+          python tools/test_motor_role_semantics_consistency.py
+          python tools/test_motor_route_recruitment.py
+          python tools/test_nt_resolution.py
+          python tools/validate_fbr10_olf2.py --fbc103 app/src/main/res/raw/malecns_reduced.bin --report app/src/main/res/raw/malecns_reduced_report.json
+          python tools/test_release_provenance.py
           python tools/validate_generated_connectome.py
 
       - name: Generate runtime maps
@@ -61,12 +65,20 @@ jobs:
             --output app/src/main/assets/vnc_motor_semantics.tsv \
             --report build/VNC_MOTOR_SEMANTICS_REPORT.json
 
-      - name: Build FBD104
+      - name: Build FBD105
         run: |
-          python tools/build_fbr10_dynamics.py             --nt build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather             --expected-structural-sha 0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf
+          FBC_SHA=$(python -c 'import json; print(json.load(open("app/src/main/res/raw/malecns_reduced_report.json"))["sha256"])')
+          test -n "$FBC_SHA"
+          python tools/build_fbr10_dynamics.py \
+            --nt build/malecns_raw/body-neurotransmitters-male-cns-v1.0.feather \
+            --expected-structural-sha "$FBC_SHA" \
+            --output app/src/main/res/raw/malecns_fbr10_dynamics.bin
 
-      - name: Validate FBD104 provenance
+      - name: Validate FBD105 provenance
         run: python tools/validate_fbr10_dynamics.py
+
+      - name: Validate dynamic motor recruitment coverage
+        run: python tools/test_dynamic_motor_coverage.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -84,6 +96,7 @@ jobs:
           python tools/test_food_response_chain.py
           python tools/test_olfactory_sensor_model.py
           python tools/test_synchronous_neural_update.py
+          python tools/test_reference_lif_dynamics.py
           gradle --no-daemon :app:testDebugUnitTest
 
       - name: Assemble APK

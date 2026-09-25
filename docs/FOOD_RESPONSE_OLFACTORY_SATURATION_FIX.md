@@ -1,7 +1,7 @@
 # Food response audit — olfactory field and bilateral calibration
 
 ## Scope
-Only the environmental olfactory sensor interface and its unit tests changed. FBR-10-OLF1/FBC103/FBD104 artifacts, MaleCNS source data, neuron selection, synaptic weights, neural thresholds, and motor readout were not modified.
+Only the environmental olfactory sensor interface and its unit tests changed. FBR-10-OLF2-MOTORROUTE/FBC103/FBD105 artifacts, MaleCNS source data, neuron selection, synaptic weights, neural thresholds, and motor readout were not modified.
 
 ## Changes
 - Moved the antenna sampling geometry and Gaussian field into `OlfactorySensorModel`, a pure sensor-interface model with no motor/body access.

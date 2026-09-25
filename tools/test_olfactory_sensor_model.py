@@ -46,7 +46,8 @@ assert contrast(ll, lr) * contrast(rl, rr) < 0
 initial_l = sample(.24,.55,-.15,.76,.35,-1)
 initial_r = sample(.24,.55,-.15,.76,.35,1)
 assert abs(initial_l-initial_r) > 1e-4, (initial_l, initial_r)
-assert "foodDrive = bilateral.coerceIn(0f, 1f)" in MAIN
+assert "val center = (left + right) * .5f" in MAIN
+assert "foodDrive = center" in MAIN
 body = MAIN[MAIN.index("private fun driveBody"):MAIN.index("private fun runNeuralSimulation")]
 assert "foodDirectionalBias" not in body
 print(f"OLFACTORY SENSOR MODEL: PASS (sigma={SIGMA}, half-spacing={HALF_SPACING})")

@@ -1,4 +1,4 @@
-# Sensory sample-hold correction — FlyBrain 1.17.1
+# Sensory sample-hold correction — FlyBrain 1.18.0
 
 ## Observed failure
 
@@ -10,7 +10,7 @@ That made the sensory interface behave like a narrow impulse rather than a sampl
 
 The environmental sensory sample is now held for all four 5 ms substeps of the 20 ms public neural frame. The calibrated voltage dose is divided by four before each substep, so the total injected ΔV per public frame is preserved rather than quadrupled.
 
-This correction changes only temporal delivery of the already-computed sensory input. It does not modify FBC103, FBD104, the retained edges, ORN selection, motor semantics, or `approachAction`.
+This correction changes only temporal delivery of the already-computed sensory input. It does not modify FBC103, FBD105, the retained edges, ORN selection, motor semantics, or `approachAction`.
 
 ## Expected causal effect
 
