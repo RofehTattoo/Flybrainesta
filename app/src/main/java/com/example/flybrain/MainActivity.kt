@@ -167,8 +167,6 @@ class MainActivity : Activity() {
         private val rng = Random(9301)
         // Zero-mean, temporally correlated exploratory yaw perturbation. This is
         // an actuator-level stochastic term, not a directional preference.
-        private val locomotionRng = Random()
-        private var exploratoryTurn = 0f
 
         // V1.04: exactly 16,669 simulated neurons. The graph is generated at
         // build time from the public MaleCNS v1.0 tables: neurons are sampled
@@ -732,7 +730,6 @@ class MainActivity : Activity() {
             previousLightDrive = 0f
             previousDangerDrive = 0f
             baselineTurnBias = 0f
-            exploratoryTurn = 0f
             spikesLastStep = 0
             spikesPerSecond = 0f
             spikeWindowCount = 0
@@ -2417,25 +2414,22 @@ class MainActivity : Activity() {
             // Body mechanics are deliberately simple, but every locomotor command
             // originates from measured VNC motor activity. Left/right asymmetry in
             // leg and neck output changes heading; leg output supplies walking force.
-            val rawTurn = ((rightLeg - leftLeg) + (neckActivity * 0.22f)) * 1.55f
-            // Slow turn-bias normalization is based only on measured body state.
-            // Stimulus identity is deliberately absent, so no sensory condition can
-            // inject a direct turn bias into body mechanics.
+            // Yaw is driven only by the *difference* between side-resolved leg
+            // motor outputs. Aggregate neck activity has no left/right sign and
+            // therefore must not be added as a constant positive steering term.
+            // Do not inject random yaw here: turn direction must remain traceable
+            // to the measured VNC motor output for causal validation.
+            val rawTurn = (rightLeg - leftLeg) * 1.55f
+            // Estimate and remove only a slowly varying resting offset. This is
+            // active only when the body is physically quiescent; during locomotion
+            // the measured neural differential is preserved without random drive.
             val bodyQuiescent = physicalSpeed < .00035f && legActivity < .01f
             if (bodyQuiescent) {
                 baselineTurnBias += (rawTurn - baselineTurnBias) * (1f - exp((-dt / 2.5f).toDouble()).toFloat())
             } else {
                 baselineTurnBias *= exp((-dt / 5.0f).toDouble()).toFloat()
             }
-            val neuralTurn = rawTurn - baselineTurnBias * .72f
-            // Drosophila exploration is not a fixed rightward arc. Add a bounded,
-            // zero-mean Ornstein-Uhlenbeck-like yaw fluctuation while locomoting.
-            // It has no dependence on X, wall side, food position, or stimulus.
-            val movingGate = (legActivity / .025f).coerceIn(0f, 1f)
-            val turnNoiseTarget = (locomotionRng.nextFloat() * 2f - 1f) * .20f
-            val noiseAlpha = (dt / .42f).coerceIn(0f, 1f)
-            exploratoryTurn += (turnNoiseTarget - exploratoryTurn) * noiseAlpha
-            val turn = neuralTurn + exploratoryTurn * movingGate
+            val turn = rawTurn - baselineTurnBias * .72f
             // V1.06 movement: translation is still generated exclusively from
             // measured VNC motor neurons. Leg MN activity supplies walking force;
             // wing/jump MN activity adds flight thrust. No stimulus or action score
@@ -2716,7 +2710,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.18.4 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.18.5 · CAUSAL TURN", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)

@@ -30,7 +30,7 @@ def main(root: Path|None=None) -> None:
     meta_path=root/"app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
     data=bin_path.read_bytes(); report=json.loads(report_path.read_text(encoding="utf-8")); meta=meta_path.read_text(encoding="utf-8")
     assert report["dataset"]=="MaleCNS v1.0"
-    assert report["flybrain_version"]=="1.18.4"
+    assert report["flybrain_version"]=="1.18.5"
     assert report["reduction"]=="FBR-10-OLF2-MOTORROUTE"
     assert report["binary_format"]=="FBC103"
     assert parse_meta_int(meta,"NEURONS")==TARGET
