@@ -165,6 +165,10 @@ class MainActivity : Activity() {
     inner class FlyView : View(this) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val rng = Random(9301)
+        // Zero-mean, temporally correlated exploratory yaw perturbation. This is
+        // an actuator-level stochastic term, not a directional preference.
+        private val locomotionRng = Random()
+        private var exploratoryTurn = 0f
 
         // V1.04: exactly 16,669 simulated neurons. The graph is generated at
         // build time from the public MaleCNS v1.0 tables: neurons are sampled
@@ -728,6 +732,7 @@ class MainActivity : Activity() {
             previousLightDrive = 0f
             previousDangerDrive = 0f
             baselineTurnBias = 0f
+            exploratoryTurn = 0f
             spikesLastStep = 0
             spikesPerSecond = 0f
             spikeWindowCount = 0
@@ -2422,7 +2427,15 @@ class MainActivity : Activity() {
             } else {
                 baselineTurnBias *= exp((-dt / 5.0f).toDouble()).toFloat()
             }
-            val turn = rawTurn - baselineTurnBias * .72f
+            val neuralTurn = rawTurn - baselineTurnBias * .72f
+            // Drosophila exploration is not a fixed rightward arc. Add a bounded,
+            // zero-mean Ornstein-Uhlenbeck-like yaw fluctuation while locomoting.
+            // It has no dependence on X, wall side, food position, or stimulus.
+            val movingGate = (legActivity / .025f).coerceIn(0f, 1f)
+            val turnNoiseTarget = (locomotionRng.nextFloat() * 2f - 1f) * .20f
+            val noiseAlpha = (dt / .42f).coerceIn(0f, 1f)
+            exploratoryTurn += (turnNoiseTarget - exploratoryTurn) * noiseAlpha
+            val turn = neuralTurn + exploratoryTurn * movingGate
             // V1.06 movement: translation is still generated exclusively from
             // measured VNC motor neurons. Leg MN activity supplies walking force;
             // wing/jump MN activity adds flight thrust. No stimulus or action score
@@ -2688,25 +2701,25 @@ class MainActivity : Activity() {
             val sp = { v: Float -> v * ts }
             val ph = brainPanelHeight()
             val top = height - ph
-            val left = dp(8f)
-            val right = width - dp(8f)
+            val left = 0f
+            val right = width.toFloat()
             val innerL = dp(16f)
             val innerR = width - dp(16f)
             val panelW = right - left
 
             paint.style = Paint.Style.FILL
             paint.color = Color.rgb(18, 23, 27)
-            c.drawRoundRect(left, top, right, height.toFloat(), dp(14f), dp(14f), paint)
+            c.drawRect(left, top, right, height.toFloat(), paint)
 
             // Header
             paint.textAlign = Paint.Align.LEFT
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.18.3 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.18.4 · FOOD / OLFACTORY ROUTED", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
-            paint.textSize = sp(8.4f)
+            paint.textSize = sp(9.0f)
             paint.color = Color.rgb(171, 181, 187)
             c.drawText("MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBC103 + FBD105 + VNCSEM102", innerL, top + dp(36f), paint)
 
@@ -2716,7 +2729,7 @@ class MainActivity : Activity() {
             c.drawCircle(statusX, top + dp(33f), dp(3.2f), paint)
             paint.textAlign = Paint.Align.RIGHT
             paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = sp(7.8f)
+            paint.textSize = sp(8.4f)
             paint.color = Color.rgb(207, 216, 221)
             c.drawText(if (connectomeLoaded && dynamicsLoaded) "CONNECTOME + DYNAMICS OK" else "CONNECTOME / DYNAMICS ERROR", innerR, top + dp(36f), paint)
 
@@ -2736,7 +2749,7 @@ class MainActivity : Activity() {
                 paint.color = Color.rgb(31, 39, 44)
                 c.drawRoundRect(chipX, chipY, chipX + cw, chipY + dp(18f), dp(7f), dp(7f), paint)
                 paint.color = Color.rgb(196, 205, 210)
-                paint.textSize = sp(7.2f)
+                paint.textSize = sp(8.0f)
                 paint.typeface = Typeface.DEFAULT_BOLD
                 c.drawText(label, chipX + dp(7f), chipY + dp(12.5f), paint)
                 chipX += cw + dp(5f)
@@ -2786,14 +2799,14 @@ class MainActivity : Activity() {
                 paint.color = Color.rgb(25, 32, 37)
                 c.drawRoundRect(x, y, x + w, y + cardH, dp(9f), dp(9f), paint)
                 paint.color = Color.rgb(139, 151, 158)
-                paint.textSize = sp(7.4f)
+                paint.textSize = sp(8.2f)
                 paint.typeface = Typeface.DEFAULT_BOLD
                 c.drawText(title, x + dp(9f), y + dp(13f), paint)
             }
 
             metricCard(leftX, metricsTop, colW, "NEURAL PIPELINE")
             paint.color = Color.rgb(220, 226, 229)
-            paint.textSize = sp(7.5f)
+            paint.textSize = sp(8.5f)
             c.drawText("S ${(sensorySpikesDisplay * 100).toInt()}%   C ${(centralSpikesDisplay * 100).toInt()}%   DN ${(descendingSpikesDisplay * 100).toInt()}%   M ${(motorSpikesDisplay * 100).toInt()}%", leftX + dp(9f), metricsTop + dp(29f), paint)
             c.drawText("DN $dnSpikingCount/1314    MN $motorSpikingCount/708", leftX + dp(9f), metricsTop + dp(43f), paint)
             c.drawText("SPIKES/s ${spikesPerSecond.toInt()}    OLF ${(olfactoryRateDisplay * 100).toInt()}%    VIS ${(visualRateDisplay * 100).toInt()}%", leftX + dp(9f), metricsTop + dp(57f), paint)
