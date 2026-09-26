@@ -272,6 +272,17 @@ class MainActivity : Activity() {
         private var diagWindowElapsed = 0f
         private val dnWindowSpikes = IntArray(DESC_END - DESC_START)
         private val motorWindowSpikes = IntArray(MOTOR_END - MOTOR_START)
+        // Side-resolved spike telemetry over the same diagnostic window. These
+        // counters are read-only and never enter neural or body dynamics.
+        private var olfWindowSpikesLeft = 0
+        private var olfWindowSpikesRight = 0
+        private var olfWindowSpikesUnknown = 0
+        private var olfLeftHz = 0f
+        private var olfRightHz = 0f
+        private var dnLeftHz = 0f
+        private var dnRightHz = 0f
+        private var legLeftHz = 0f
+        private var legRightHz = 0f
         private val dnBaselineSpikes = IntArray(DESC_END - DESC_START)
         private val motorBaselineSpikes = IntArray(MOTOR_END - MOTOR_START)
 
@@ -551,7 +562,7 @@ class MainActivity : Activity() {
             val maxAction = max(approachAction, max(escapeAction, max(orientAction, max(exploreAction, brakeAction))))
             return when {
                 escapeAction > .16f && escapeAction >= maxAction - .015f -> "ESCAPE"
-                brakeAction > .16f && brakeAction >= maxAction - .015f -> "PAUSA / FRENADO"
+                brakeAction > .16f && brakeAction >= maxAction - .015f -> "FRENADO NEURAL"
                 approachAction > .16f && approachAction >= maxAction - .015f -> "APROXIMACIÓN"
                 orientAction > .12f && orientAction >= maxAction - .015f -> {
                     if (turnRightAction >= turnLeftAction) "ORIENTACIÓN DERECHA" else "ORIENTACIÓN IZQUIERDA"
@@ -755,6 +766,15 @@ class MainActivity : Activity() {
             diagWindowElapsed = 0f
             baselineCaptureSeconds = 0f
             baselineReady = false
+            olfWindowSpikesLeft = 0
+            olfWindowSpikesRight = 0
+            olfWindowSpikesUnknown = 0
+            olfLeftHz = 0f
+            olfRightHz = 0f
+            dnLeftHz = 0f
+            dnRightHz = 0f
+            legLeftHz = 0f
+            legRightHz = 0f
             for (slot in pendingSpikeCounts.indices) pendingSpikeCounts[slot] = 0
             pendingSpikeCursor = 0
             java.util.Arrays.fill(dnWindowSpikes, 0)
@@ -1731,6 +1751,17 @@ class MainActivity : Activity() {
         }
 
         private fun accumulateNeuralSubstepDiagnostics() {
+            // Count actual ORN spikes by annotated side. The sensory-input
+            // concentration is displayed separately; this is downstream neural
+            // output measured after the LIF update, not the injected rate.
+            for (i in olfactoryNeuronIndices) {
+                if (!fired[i]) continue
+                when (olfactorySide[i].toInt()) {
+                    -1 -> olfWindowSpikesLeft++
+                    1 -> olfWindowSpikesRight++
+                    else -> olfWindowSpikesUnknown++
+                }
+            }
             for (i in DESC_START until DESC_END) {
                 if (fired[i]) dnWindowSpikes[i - DESC_START]++
             }
@@ -1923,8 +1954,42 @@ class MainActivity : Activity() {
             java.util.Arrays.fill(topMotorVm, V_REST)
             java.util.Arrays.fill(topMotorWindowSpikes, 0)
 
-            val invWindow = 1f / max(0.001f, windowSeconds)
+            val safeWindow = max(0.001f, windowSeconds)
+            val invWindow = 1f / safeWindow
             val baselineInv = if (baselineReady && baselineCaptureSeconds > 0f) 1f / baselineCaptureSeconds else 0f
+
+            val olfLeftN = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == -1 }.coerceAtLeast(1)
+            val olfRightN = olfactoryNeuronIndices.count { olfactorySide[it].toInt() == 1 }.coerceAtLeast(1)
+            olfLeftHz = olfWindowSpikesLeft * invWindow / olfLeftN.toFloat()
+            olfRightHz = olfWindowSpikesRight * invWindow / olfRightN.toFloat()
+            olfWindowSpikesLeft = 0
+            olfWindowSpikesRight = 0
+            olfWindowSpikesUnknown = 0
+
+            var dnLeftCount = 0
+            var dnRightCount = 0
+            var dnLeftSpikes = 0
+            var dnRightSpikes = 0
+            for (i in DESC_START until DESC_END) {
+                when (nodeSide[i].toInt()) {
+                    -1 -> { dnLeftCount++; dnLeftSpikes += dnWindowSpikes[i - DESC_START] }
+                    1 -> { dnRightCount++; dnRightSpikes += dnWindowSpikes[i - DESC_START] }
+                }
+            }
+            dnLeftHz = if (dnLeftCount == 0) 0f else dnLeftSpikes * invWindow / dnLeftCount.toFloat()
+            dnRightHz = if (dnRightCount == 0) 0f else dnRightSpikes * invWindow / dnRightCount.toFloat()
+
+            var legLeftSpikes = 0
+            var legRightSpikes = 0
+            for (i in MOTOR_START until MOTOR_END) {
+                if (motorRole[i].toInt() != GeneratedConnectomeMeta.MOTOR_LEG) continue
+                when (nodeSide[i].toInt()) {
+                    -1 -> legLeftSpikes += motorWindowSpikes[i - MOTOR_START]
+                    1 -> legRightSpikes += motorWindowSpikes[i - MOTOR_START]
+                }
+            }
+            legLeftHz = if (legLeftTotal == 0) 0f else legLeftSpikes * invWindow / legLeftTotal.toFloat()
+            legRightHz = if (legRightTotal == 0) 0f else legRightSpikes * invWindow / legRightTotal.toFloat()
 
             fun offer(ids: IntArray, hz: FloatArray, delta: FloatArray, vm: FloatArray, spikes: IntArray, id: Int, currentHz: Float, baseHz: Float) {
                 if (currentHz <= 0f) return
@@ -2370,6 +2435,11 @@ class MainActivity : Activity() {
             val jumpImpulse = jumpActivity * .006f
             val cmdSpeed = (recruitedLeg * .012f + flightMotor * .010f + jumpImpulse).coerceIn(-.002f, .018f)
             heading += turn * dt * 3.6f
+            // Keep the internal angle bounded without changing its orientation.
+            // This avoids unbounded angle growth during long free-walking runs.
+            val twoPi = (Math.PI * 2.0).toFloat()
+            if (heading > Math.PI.toFloat()) heading -= twoPi
+            if (heading < -Math.PI.toFloat()) heading += twoPi
             val speedBlend = if (cmdSpeed < .00025f) .10f else .16f
             flySpeed = (1f - speedBlend) * flySpeed + speedBlend * cmdSpeed
             flyX += cos(heading) * flySpeed * dt * 60f
@@ -2731,11 +2801,13 @@ class MainActivity : Activity() {
             metricCard(rightX, metricsTop, colW, "MOTOR OUTPUT")
             c.drawText("LEG L ${"%.3f".format(leftLegDriveSignedCache)}   R ${"%.3f".format(rightLegDriveSignedCache)}   Δ ${"%.3f".format(rightLegDriveSignedCache - leftLegDriveSignedCache)}", rightX + dp(9f), metricsTop + dp(29f), paint)
             c.drawText("DRIVE ${"%.4f".format(motorDriveSignedCache)}   |${"%.4f".format(motorDriveAbsCache)}   peak ${"%.4f".format(motorDriveAbsPeakCache)}", rightX + dp(9f), metricsTop + dp(43f), paint)
-            c.drawText("WING ${"%.3f".format(wingDriveSignedCache)}   NECK ${"%.3f".format(neckDriveSignedCache)}   ABD ${"%.3f".format(abdomenDriveSignedCache)}", rightX + dp(9f), metricsTop + dp(57f), paint)
+            c.drawText("MN Hz L/R ${"%.2f".format(legLeftHz)}/${"%.2f".format(legRightHz)}  Δ ${"%+.2f".format(legRightHz - legLeftHz)}", rightX + dp(9f), metricsTop + dp(57f), paint)
 
             val bodyY = metricsTop + cardH + dp(7f)
             metricCard(leftX, bodyY, colW, "CUERPO")
-            val headingDeg = Math.toDegrees(heading.toDouble()).toFloat()
+            val headingDeg = Math.toDegrees(heading.toDouble()).toFloat().let { raw ->
+                ((raw + 180f) % 360f + 360f) % 360f - 180f
+            }
             val netDisplacement = hypot(flyX - .24f, flyY - .55f)
             c.drawText("V ${"%.4f".format(physicalSpeed)}   A ${"%.4f".format(physicalAcceleration)}   recorrido ${"%.3f".format(pathLength)}", leftX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("X ${"%.3f".format(flyX)}   Y ${"%.3f".format(flyY)}   rumbo ${"%.1f".format(headingDeg)}°", leftX + dp(9f), bodyY + dp(43f), paint)
@@ -2747,7 +2819,7 @@ class MainActivity : Activity() {
             c.drawText("TOP DN   $topDnText", rightX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("TOP MN  $topMotorText", rightX + dp(9f), bodyY + dp(43f), paint)
             c.drawText("OLF ORN L/C/R ${"%.2f".format(olfInputLeftCache)}/${"%.2f".format(olfInputCenterCache)}/${"%.2f".format(olfInputRightCache)}   bias ${"%+.3f".format(foodDirectionalBias)}", rightX + dp(9f), bodyY + dp(57f), paint)
-            c.drawText("WALL ${"%.3f".format(wallDistanceCache)} / ${"%.2f".format(wallSignalCache)}   MECH ${(mechanosensoryRateDisplay * 100).toInt()}%   OLF ANATOMICAL-MAPPED", rightX + dp(9f), bodyY + dp(71f), paint)
+            c.drawText("SPIKE Hz  ORN L/R ${"%.1f".format(olfLeftHz)}/${"%.1f".format(olfRightHz)}  DN L/R ${"%.1f".format(dnLeftHz)}/${"%.1f".format(dnRightHz)}", rightX + dp(9f), bodyY + dp(71f), paint)
 
             // Larger neural map: the visual center of the final interface.
             val mapTop = bodyY + cardH + dp(18f)
