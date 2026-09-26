@@ -362,7 +362,8 @@ class MainActivity : Activity() {
         // placement or RESET, keeping the stimulus environment deterministic.
         private var foodX = .76f
         private var foodY = .35f
-        private val FOOD_CONTACT_DISTANCE = .055f
+        private val FOOD_TARSAL_CONTACT_RADIUS = .055f
+        private val FOOD_GUSTATORY_SIGMA = .018f
         private val FOOD_CONTACT_GUSTATORY_MIN = .04f
         private var foodContactLatched = false
         private var draggingStimulus = false
@@ -1501,6 +1502,33 @@ class MainActivity : Activity() {
             return gaussian(d, sigma)
         }
 
+        /**
+         * Tarsal gustation is a contact sensor, not a second long-range odor
+         * field. The two virtual anterior tarsi are body-relative environmental
+         * sampling points. They only drive the retained gustatory sensory
+         * population when the food surface is physically close to a fore-tarsus.
+         *
+         * This is an environment/sensor interface, not a feeding command: no
+         * motor state, heading, reward or food position is written here.
+         */
+        private fun tarsalFoodContactIntensity(sx: Float, sy: Float): Float {
+            if (!foodOn) return 0f
+            val ca = cos(heading)
+            val sa = sin(heading)
+            val forward = .030f
+            val halfSpacing = .022f
+            var best = 0f
+            for (side in intArrayOf(-1, 1)) {
+                val tx = flyX + ca * forward - sa * (halfSpacing * side)
+                val ty = flyY + sa * forward + ca * (halfSpacing * side)
+                val d = hypot(sx - tx, sy - ty)
+                if (d <= FOOD_TARSAL_CONTACT_RADIUS) {
+                    best = max(best, gaussian(d, FOOD_GUSTATORY_SIGMA))
+                }
+            }
+            return best.coerceIn(0f, 1f)
+        }
+
         private fun setMappedSensoryRate(indices: IntArray, rateHz: Float) {
             if (indices.isEmpty() || rateHz <= 0f) return
             val bounded = rateHz.coerceIn(0f, 260f)
@@ -1560,7 +1588,11 @@ class MainActivity : Activity() {
             // They are converted to Poisson spike trains in stepBrainSubstep(),
             // matching the event-based external stimulation used by the reference LIF model.
             java.util.Arrays.fill(externalRateHz, 0f)
-            val foodGustatoryIntensity = stimulusIntensity(foodOn, foodX, foodY, .065f) * 2.35f * (1f - satiety * .35f)
+            // Gustation is contact-gated: long-range food attraction belongs to
+            // olfaction. The retained gustatory receptors are driven only when
+            // the food surface reaches the virtual anterior tarsi.
+            val foodGustatoryIntensity = tarsalFoodContactIntensity(foodX, foodY) *
+                2.35f * (1f - satiety * .35f)
             val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .48f) * 1.55f
             val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .48f) * 2.15f
 
@@ -2373,14 +2405,15 @@ class MainActivity : Activity() {
             }
 
             var reward = 0f
-            val foodDistance = hypot(foodX - flyX, foodY - flyY)
+            val tarsalContactNow = tarsalFoodContactIntensity(foodX, foodY)
             val gustatoryRateNow = populationRate(GUST_START, GUST_END)
             // Feeding/contact is a neural + body event. It may update internal
-            // state, but it MUST NOT mutate the environment position. The latch
-            // makes foodHits count contact episodes instead of counting every
-            // 20 ms simulation frame while the fly remains over the food.
+            // state, but it MUST NOT mutate the environment position. Contact is
+            // defined by the same anterior-tarsal sensor geometry that generated
+            // the gustatory input for this frame, then gated by measured gustatory
+            // neural activity. The latch counts contact episodes, not frames.
             val foodContact = foodOn &&
-                foodDistance < FOOD_CONTACT_DISTANCE &&
+                tarsalContactNow >= .04f &&
                 gustatoryRateNow > FOOD_CONTACT_GUSTATORY_MIN
             if (foodContact && !foodContactLatched) {
                 foodHits++
