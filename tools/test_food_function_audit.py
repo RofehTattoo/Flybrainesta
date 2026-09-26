@@ -47,8 +47,8 @@ assert 'if (foodContact && !foodContactLatched)' in _neural
 for token in ['cb_sensory', 'olfactory', 'ORN_', 'acetylcholine', 'entryNerve', 'EXPECTED_ORNS = 264', 'EXPECTED_ORN_TYPE_ENTRY_NERVE_PAIRS = 54', 'neurotransmitters']:
     assert token in BUILDER, token
 
-assert 'APP_VERSION = "1.18.3"' in META
-assert 'APP_VERSION_CODE = 136' in META
+assert 'APP_VERSION = "1.18.4"' in META
+assert 'APP_VERSION_CODE = 137' in META
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
 assert 'route_olfactory_forward' not in MAIN
 assert 'side_from_nerve' not in BUILDER
