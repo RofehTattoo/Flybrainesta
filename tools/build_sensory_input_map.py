@@ -181,6 +181,9 @@ def main():
         counts[modality] += 1
 
     out.sort(key=lambda x: (x["modality"], x["index"]))
+    tarsal_gust = [r for r in out if r["modality"] == "GUST" and r["subclass"].strip().lower() == "leg bristle"]
+    if not tarsal_gust:
+        raise SystemExit("no retained primary gustatory `leg bristle` receptors for tarsal contact")
     if len({r["index"] for r in out}) != len(out):
         raise SystemExit("duplicate retained sensory receptor index")
     if any(counts[k] == 0 for k in counts):
@@ -200,6 +203,16 @@ def main():
         "fbc103_sha256": sha256(fbc),
         "fbc103_neurons": len(nodes),
         "retained_receptor_counts": counts,
+        "retained_tarsal_gustatory_count": len(tarsal_gust),
+        "retained_tarsal_gustatory_by_side": {
+            "L": sum(1 for r in tarsal_gust if r["sideCode"] == -1),
+            "R": sum(1 for r in tarsal_gust if r["sideCode"] == 1),
+            "U": sum(1 for r in tarsal_gust if r["sideCode"] == 0),
+        },
+        "gustatory_subclass_counts": {
+            sub: sum(1 for r in out if r["modality"] == "GUST" and r["subclass"] == sub)
+            for sub in sorted({r["subclass"] for r in out if r["modality"] == "GUST"})
+        },
         "total_mapped": len(out),
         "candidate_counts": {
             "visual_class": visual_candidates,
@@ -214,7 +227,7 @@ def main():
         },
         "policy": {
             "VIS": "ol_sensory + visual + photoreceptor R1-6/R7/R8 only",
-            "GUST": "gustatory + primary sensory superclasses cb_sensory/vnc_sensory; sensory_ascending relays excluded",
+            "GUST": "gustatory + primary sensory superclasses cb_sensory/vnc_sensory; sensory_ascending relays excluded; tarsal contact runtime maps only subclass=leg bristle",
             "MECH": "mechanosensory_proprioceptive with a non-empty receptor-organ subclass",
             "runtime": "external current is injected only into these explicit retained receptor indices; no index-cyclic pattern or population-wide injection",
             "no_graph_mutation": True,

@@ -3,8 +3,7 @@
 ## Decision
 
 The food/banana position is **environment state**. Neural activity, gustatory
-contact, reward, satiety, and the legacy `foodHits` counter must not change its
-coordinates.
+contact, reward, satiety, and the `tasteContactEpisodes` / ingestion counters must not change its coordinates.
 
 ## Runtime contract
 
@@ -15,7 +14,7 @@ coordinates.
    same environment setter.
 
 The neural simulation only reads the coordinates to compute odor, gustatory
-contact, and distance. A feeding event can update `foodHits`, `satiety`, and
+contact, and distance. A measured ingestion event can update the ingestion counter, `satiety`, and
 `reward`, but it cannot respawn or teleport the banana.
 
 ## User interaction
@@ -27,7 +26,7 @@ creating a hidden feedback path from the brain back into the environment.
 
 ## Food-contact counting
 
-`foodContactLatched` converts the old per-frame proximity counter into a
+`tasteContactLatched` converts a measured neural taste episode into a
 contact-episode counter: the same physical contact is counted once until the
 fly leaves the contact condition. Manual food repositioning clears the latch,
 so placing food onto the fly can legitimately create a new contact event.

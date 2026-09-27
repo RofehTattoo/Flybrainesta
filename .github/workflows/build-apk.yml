@@ -29,6 +29,9 @@ jobs:
         run: |
           python tools/test_fbc103_reader.py
           python tools/test_food_function_audit.py
+          python tools/test_feeding_semantics_consistency.py
+          python tools/test_feeding_temporal_context.py
+          python tools/test_tarsal_gustation_contact.py
           python tools/test_frozen_connectome_validator.py
           python tools/test_neural_time_integration.py
           python tools/test_olfactory_input_map.py
@@ -64,6 +67,11 @@ jobs:
             --fbc103 app/src/main/res/raw/malecns_reduced.bin \
             --output app/src/main/assets/vnc_motor_semantics.tsv \
             --report build/VNC_MOTOR_SEMANTICS_REPORT.json
+          python tools/build_feeding_motor_semantics.py \
+            --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --output app/src/main/assets/feeding_motor_semantics.tsv \
+            --report build/FEEDING_MOTOR_SEMANTICS_REPORT.json
 
       - name: Build FBD105
         run: |
@@ -76,6 +84,11 @@ jobs:
 
       - name: Validate FBD105 provenance
         run: python tools/validate_fbr10_dynamics.py
+
+      - name: Audit retained gustatory-to-feeding topology
+        run: python tools/test_gustatory_feeding_path_audit.py \
+          --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+          --fbc103 app/src/main/res/raw/malecns_reduced.bin
 
       - name: Validate dynamic motor recruitment coverage
         run: python tools/test_dynamic_motor_coverage.py

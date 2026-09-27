@@ -35,7 +35,7 @@ sense_start = MAIN.index('private fun sense(dt: Float)')
 sense_end = MAIN.index('private fun populationRate', sense_start)
 sense = MAIN[sense_start:sense_end]
 assert 'setMappedSensoryRate(visualReceptorIndices' in sense
-assert 'setMappedSensoryRate(gustatoryReceptorIndices' in sense
+assert 'gustatoryTarsalReceptorIndices' in sense
 assert 'setMappedSensoryRate(mechanosensoryReceptorIndices' in sense
 assert 'dangerPattern' not in sense
 assert 'externalRateHz' in MAIN

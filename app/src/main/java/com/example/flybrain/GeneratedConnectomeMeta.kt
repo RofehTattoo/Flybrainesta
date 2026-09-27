@@ -1,11 +1,11 @@
 package com.example.flybrain
 
 object GeneratedConnectomeMeta {
-    const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102"
-    const val FLYBRAIN_VERSION = "1.18.5"
-    const val FLYBRAIN_VERSION_CODE = 138
-    const val APP_VERSION = "1.18.5"
-    const val APP_VERSION_CODE = 138
+    const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
+    const val FLYBRAIN_VERSION = "1.18.6"
+    const val FLYBRAIN_VERSION_CODE = 139
+    const val APP_VERSION = "1.18.6"
+    const val APP_VERSION_CODE = 139
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = 264
     // 54 distinct published (type, entryNerve) combinations; 53 unique
@@ -47,4 +47,15 @@ object GeneratedConnectomeMeta {
     const val MOTOR_OTHER = 6
     const val MOTOR_FUNCTION_NONE = 0
     const val MOTOR_FUNCTION_JUMP = 1
+
+    // FEEDSEM103: functional semantics for retained feeding motor neurons.
+    // These tags are read-outs of official MaleCNS motor-neuron types; they do
+    // not create edges or inject current into the connectome.
+    const val FEEDING_FUNCTION_NONE = 0
+    const val FEEDING_FUNCTION_PROBOSCIS_ROSTRUM = 1 // MN9
+    const val FEEDING_FUNCTION_PROBOSCIS_HAUSTELLUM = 2 // MN4a
+    const val FEEDING_FUNCTION_PROBOSCIS_LABELLUM = 3 // MN6
+    const val FEEDING_FUNCTION_PROBOSCIS_SPREAD = 4 // MN8
+    const val FEEDING_FUNCTION_INGESTION_PHARYNGEAL = 5 // MN11D / MN11V
+    const val FEEDING_FUNCTION_INGESTION_CROP_ENTRY = 6 // CEM
 }

@@ -28,7 +28,6 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.math.sin
-import java.util.Random
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -164,9 +163,6 @@ class MainActivity : Activity() {
 
     inner class FlyView : View(this) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val rng = Random(9301)
-        // Zero-mean, temporally correlated exploratory yaw perturbation. This is
-        // an actuator-level stochastic term, not a directional preference.
 
         // V1.04: exactly 16,669 simulated neurons. The graph is generated at
         // build time from the public MaleCNS v1.0 tables: neurons are sampled
@@ -186,7 +182,17 @@ class MainActivity : Activity() {
         private val FOOD_OLF_SIGMA = OlfactorySensorModel.ODOR_SIGMA
         private val EXPECTED_RETAINED_OLFACTORY_ORNS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORNS
         private val EXPECTED_RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = GeneratedConnectomeMeta.RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS
-        private val SENSORY_GUST_GAIN = 0.85f
+        // FEEDSEM103 runtime capacities/thresholds. These are compile-time constants
+        // declared before the arrays that use them, avoiding order-dependent field
+        // initialization on Android.
+        private const val MAX_FEEDING_MOTOR_NEURONS = 128
+        private const val FEEDING_PROBOSCIS_NEURON_SPIKE_MIN = 1
+        private const val FEEDING_INGESTION_NEURON_SPIKE_MIN = 1
+        private const val FEEDING_TASTE_NEURON_SPIKE_MIN = 1
+        // Read-only temporal association window for the measured feeding route.
+        // It allows delayed MN9/MN11/CEM spikes to be recognized as one neural
+        // feeding episode without issuing any motor command or changing the graph.
+        private const val FEEDING_CONTEXT_WINDOW_SECONDS = 0.50f
 
         // Reference-style neural dynamics (Shiu et al., Nature 2024):
         // v_rest = v_reset = -52 mV, threshold = -45 mV, tau_m = 20 ms,
@@ -244,6 +250,41 @@ class MainActivity : Activity() {
         // V1.15.2 anatomical VNC semantics are loaded from the official-annotation-derived asset.
         // The FBC103 role byte remains frozen and is retained only for provenance/audit.
         private val motorFunctionalTag = ByteArray(N)
+        // FEEDSEM103: retained brain feeding motor neurons are cb_motor, not
+        // VNC locomotor motors. Their semantics are loaded from an official
+        // annotation-derived asset and are used only as measured actuator/readout
+        // channels. No synthetic current or edge is introduced.
+        private val feedingFunctionalTag = ByteArray(N)
+        private val feedingMotorIndices = IntArray(MAX_FEEDING_MOTOR_NEURONS)
+        private var feedingMotorCount = 0
+        private val feedingFunctionTotals = IntArray(7)
+        private val feedingFunctionSpikeEvents = IntArray(7)
+        private var tarsalGustatorySpikeEventsFrame = 0
+        private var gustatorySpikeEventsFrame = 0
+        private var haltWalkOffSpikeEventsFrame = 0
+        private var haltBrakeSpikeEventsFrame = 0
+        private var foodTarsalContactFrame = 0f
+        private var foodTarsalLeftContactFrame = 0f
+        private var foodTarsalRightContactFrame = 0f
+        private var tasteContactLatched = false
+        private var proboscisEpisodeLatched = false
+        private var ingestionEpisodeLatched = false
+        private var tasteContactNeuralNow = false
+        private var proboscisNeuralNow = false
+        private var ingestionNeuralNow = false
+        private var haltDuringFoodContactNow = false
+        private var tasteContactEpisodes = 0
+        private var proboscisEpisodes = 0
+        private var ingestionEvents = 0
+        private var proboscisRostrumRateHz = 0f
+        private var proboscisRateHz = 0f
+        private var ingestionRateHz = 0f
+        private var proboscisExtension = 0f
+        private var tasteContextAgeSeconds = Float.POSITIVE_INFINITY
+        private var proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
+        private val feedingSemanticBodyIds = LongArray(128)
+        private val feedingSemanticTags = ByteArray(128)
+        private val feedingSemanticSides = ByteArray(128)
         private val descendingRole = ByteArray(N)
         // Real MaleCNS body IDs for the selected neurons. Presentation/diagnostic only.
         private val bodyId = LongArray(N)
@@ -253,6 +294,12 @@ class MainActivity : Activity() {
         private var visualReceptorIndices = IntArray(0)
         private var olfactoryNeuronIndices = IntArray(0)
         private var gustatoryReceptorIndices = IntArray(0)
+        // Only primary gustatory receptors annotated as `leg bristle` may receive
+        // the virtual tarsal contact input. Labellar, pharyngeal and other
+        // gustatory subtypes remain valid GUST neurons but are not silently
+        // substituted for a tarsal receptor.
+        private var gustatoryTarsalReceptorIndices = IntArray(0)
+        private val gustatorySide = ByteArray(N)
         private var mechanosensoryReceptorIndices = IntArray(0)
         // Official side evidence: -1=L, +1=R, 0=bilateral/unknown.
         // This is sensory-input metadata only, never a behavioral command.
@@ -377,8 +424,6 @@ class MainActivity : Activity() {
         private var foodY = .35f
         private val FOOD_TARSAL_CONTACT_RADIUS = .055f
         private val FOOD_GUSTATORY_SIGMA = .018f
-        private val FOOD_CONTACT_GUSTATORY_MIN = .04f
-        private var foodContactLatched = false
         private var draggingStimulus = false
         private var lightX = .72f
         private var lightY = .72f
@@ -391,7 +436,6 @@ class MainActivity : Activity() {
         private var neuralBacklogSeconds = 0f
         private var lastNs = System.nanoTime()
         private var fps = 60f
-        private var foodHits = 0
         private var escapeEvents = 0
         private var satiety = 0f
         private var memoryTrace = 0f
@@ -563,6 +607,9 @@ class MainActivity : Activity() {
         private fun behaviorLabel(): String {
             val maxAction = max(approachAction, max(escapeAction, max(orientAction, max(exploreAction, brakeAction))))
             return when {
+                ingestionNeuralNow && foodOn -> "INGESTIÓN"
+                proboscisNeuralNow && foodOn -> "EXTENSIÓN PROBÓSCIDE"
+                haltDuringFoodContactNow && foodOn && brakeAction <= .16f -> "HALT · GUSTACIÓN"
                 escapeAction > .16f && escapeAction >= maxAction - .015f -> "ESCAPE"
                 brakeAction > .16f && brakeAction >= maxAction - .015f -> "FRENADO NEURAL"
                 approachAction > .16f && approachAction >= maxAction - .015f -> "APROXIMACIÓN"
@@ -650,7 +697,7 @@ class MainActivity : Activity() {
             flightPhase = 0f
             jumpActivityCacheValue = 0f
             setFoodPosition(.76f, .35f)
-            foodContactLatched = false
+            tasteContactLatched = false
             draggingStimulus = false
             lightX = .72f
             lightY = .72f
@@ -660,11 +707,36 @@ class MainActivity : Activity() {
             neuralAccumulator = 0f
             neuralStepsLastFrame = 0
             neuralBacklogSeconds = 0f
-            foodHits = 0
+            tasteContactEpisodes = 0
             escapeEvents = 0
             satiety = 0f
             memoryTrace = 0f
             lastReward = 0f
+            proboscisExtension = 0f
+            proboscisRostrumRateHz = 0f
+            proboscisRateHz = 0f
+            ingestionRateHz = 0f
+            tasteContextAgeSeconds = Float.POSITIVE_INFINITY
+            proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
+            tarsalGustatorySpikeEventsFrame = 0
+            gustatorySpikeEventsFrame = 0
+            haltWalkOffSpikeEventsFrame = 0
+            haltBrakeSpikeEventsFrame = 0
+            foodTarsalContactFrame = 0f
+            foodTarsalLeftContactFrame = 0f
+            foodTarsalRightContactFrame = 0f
+            tasteContactLatched = false
+            proboscisEpisodeLatched = false
+            ingestionEpisodeLatched = false
+            tasteContactNeuralNow = false
+            proboscisNeuralNow = false
+            ingestionNeuralNow = false
+            haltDuringFoodContactNow = false
+            tasteContactEpisodes = 0
+            proboscisEpisodes = 0
+            ingestionEvents = 0
+            java.util.Arrays.fill(feedingFunctionSpikeEvents, 0)
+            proboscisRostrumRateHz = 0f
             lastDangerLevel = 0f
             stableLocomotion = 0f
             sensoryDisplay = 0f
@@ -945,6 +1017,7 @@ class MainActivity : Activity() {
                             throw IllegalStateException("SENSMAP GUST provenance invalida bodyId=$bid class=$clazz superclass=$superclass")
                         }
                         gustatory.add(idx)
+                        gustatorySide[idx] = side.toByte()
                     }
                     "MECH" -> {
                         if (idx !in MECH_START until MECH_END) {
@@ -968,6 +1041,18 @@ class MainActivity : Activity() {
 
             visualReceptorIndices = visual.toIntArray().also { it.sort() }
             gustatoryReceptorIndices = gustatory.toIntArray().also { it.sort() }
+            // Tarsal contact must map only to official gustatory `leg bristle`
+            // receptors. This is the key distinction between contact taste and
+            // labellar/pharyngeal gustatory populations.
+            gustatoryTarsalReceptorIndices = gustatory
+                .filter { idx -> parsed.any { line ->
+                    val c = line.split('\t')
+                    c[0].toInt() == idx && c[8].trim().equals("leg bristle", ignoreCase = true)
+                }}
+                .toIntArray().also { it.sort() }
+            if (gustatoryTarsalReceptorIndices.isEmpty()) {
+                throw IllegalStateException("SENSMAP sin gustación tarsal `leg bristle` retenida")
+            }
             mechanosensoryReceptorIndices = mechanosensory.toIntArray().also { it.sort() }
         }
 
@@ -1126,6 +1211,89 @@ class MainActivity : Activity() {
             }
         }
 
+        private fun loadFeedingMotorSemantics() {
+            val parsed = assets.open("feeding_motor_semantics.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
+                val header = reader.readLine() ?: throw IllegalStateException("FEEDSEM cabecera ausente")
+                val expectedHeader = "bodyId\ttype\tsuperclass\tsubclass\tsomaSide\tflywireType\tfunctionalTag\tfunctionalCode"
+                if (header != expectedHeader) throw IllegalStateException("FEEDSEM cabecera inesperada")
+                reader.readLines()
+            }
+            if (parsed.isEmpty()) throw IllegalStateException("FEEDSEM sin neuronas motoras de alimentación retenidas")
+            if (parsed.size > MAX_FEEDING_MOTOR_NEURONS) {
+                throw IllegalStateException("FEEDSEM demasiadas neuronas: ${parsed.size} > $MAX_FEEDING_MOTOR_NEURONS")
+            }
+
+            val seen = HashSet<Long>(parsed.size * 2)
+            java.util.Arrays.fill(feedingFunctionalTag, GeneratedConnectomeMeta.FEEDING_FUNCTION_NONE.toByte())
+            java.util.Arrays.fill(feedingFunctionTotals, 0)
+            feedingMotorCount = 0
+
+            for (line in parsed) {
+                val c = line.split('\t')
+                if (c.size != 8) throw IllegalStateException("FEEDSEM esquema inesperado: ${c.size} columnas")
+                val id = c[0].toLong()
+                val type = c[1]
+                val superclass = c[2]
+                val subclass = c[3]
+                val side = when (c[4]) {
+                    "L" -> -1
+                    "R" -> 1
+                    else -> throw IllegalStateException("FEEDSEM lado inválido bodyId=$id")
+                }
+                val tag = c[7].toInt()
+                if (!seen.add(id)) throw IllegalStateException("FEEDSEM bodyId duplicado=$id")
+                if (superclass != "cb_motor") {
+                    throw IllegalStateException("FEEDSEM superclass no cb_motor bodyId=$id: $superclass")
+                }
+                if (subclass != "pm") {
+                    throw IllegalStateException("FEEDSEM subclass no pm bodyId=$id: $subclass")
+                }
+                val expectedTag = when (type.lowercase()) {
+                    "mn9" -> GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_ROSTRUM
+                    "mn4a" -> GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_HAUSTELLUM
+                    "mn6" -> GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_LABELLUM
+                    "mn8" -> GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_SPREAD
+                    "mn11d", "mn11v" -> GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_PHARYNGEAL
+                    "cem" -> GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY
+                    else -> throw IllegalStateException("FEEDSEM tipo no soportado bodyId=$id type=$type")
+                }
+                if (tag != expectedTag) throw IllegalStateException("FEEDSEM tag/type mismatch bodyId=$id type=$type tag=$tag expected=$expectedTag")
+                if (feedingMotorCount >= feedingMotorIndices.size) throw IllegalStateException("FEEDSEM índice interno saturado")
+                var foundIndex = -1
+                for (i in 0 until N) {
+                    if (bodyId[i] == id) { foundIndex = i; break }
+                }
+                if (foundIndex < 0) throw IllegalStateException("FEEDSEM bodyId no retenido en FBC103=$id")
+                if (foundIndex < OTHER_START || foundIndex >= OTHER_END) {
+                    throw IllegalStateException("FEEDSEM esperado en bloque OTHER bodyId=$id idx=$foundIndex")
+                }
+                if (nodeSide[foundIndex].toInt() != side) {
+                    throw IllegalStateException("FEEDSEM side mismatch bodyId=$id FBC=${nodeSide[foundIndex]} asset=$side")
+                }
+                feedingSemanticBodyIds[feedingMotorCount] = id
+                feedingSemanticTags[feedingMotorCount] = tag.toByte()
+                feedingSemanticSides[feedingMotorCount] = side.toByte()
+                feedingMotorIndices[feedingMotorCount] = foundIndex
+                feedingFunctionalTag[foundIndex] = tag.toByte()
+                feedingFunctionTotals[tag]++
+                feedingMotorCount++
+            }
+
+            val requiredTags = intArrayOf(
+                GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_ROSTRUM,
+                GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_HAUSTELLUM,
+                GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_LABELLUM,
+                GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_SPREAD,
+                GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_PHARYNGEAL,
+                GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY,
+            )
+            for (tag in requiredTags) {
+                if (feedingFunctionTotals[tag] <= 0) {
+                    throw IllegalStateException("FEEDSEM falta representación retenida para functionalCode=$tag")
+                }
+            }
+        }
+
         private fun sha256Hex(bytes: ByteArray): String {
             val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
             val out = StringBuilder(digest.size * 2)
@@ -1195,6 +1363,7 @@ class MainActivity : Activity() {
                 loadSensoryInputMap()
                 loadOlfactoryInputMap()
                 loadVncMotorSemantics()
+                loadFeedingMotorSemantics()
 
                 // Build fixed VNC motor-role denominators from the official-annotation-derived VNC semantics layer.
 
@@ -1533,22 +1702,30 @@ class MainActivity : Activity() {
          * This is an environment/sensor interface, not a feeding command: no
          * motor state, heading, reward or food position is written here.
          */
-        private fun tarsalFoodContactIntensity(sx: Float, sy: Float): Float {
-            if (!foodOn) return 0f
+        private fun sampleTarsalFoodContact(sx: Float, sy: Float) {
+            foodTarsalLeftContactFrame = 0f
+            foodTarsalRightContactFrame = 0f
+            foodTarsalContactFrame = 0f
+            if (!foodOn) return
             val ca = cos(heading)
             val sa = sin(heading)
             val forward = .030f
             val halfSpacing = .022f
-            var best = 0f
             for (side in intArrayOf(-1, 1)) {
                 val tx = flyX + ca * forward - sa * (halfSpacing * side)
                 val ty = flyY + sa * forward + ca * (halfSpacing * side)
                 val d = hypot(sx - tx, sy - ty)
-                if (d <= FOOD_TARSAL_CONTACT_RADIUS) {
-                    best = max(best, gaussian(d, FOOD_GUSTATORY_SIGMA))
-                }
+                val contact = if (d <= FOOD_TARSAL_CONTACT_RADIUS) {
+                    gaussian(d, FOOD_GUSTATORY_SIGMA)
+                } else 0f
+                if (side < 0) foodTarsalLeftContactFrame = contact else foodTarsalRightContactFrame = contact
             }
-            return best.coerceIn(0f, 1f)
+            foodTarsalContactFrame = max(foodTarsalLeftContactFrame, foodTarsalRightContactFrame).coerceIn(0f, 1f)
+        }
+
+        private fun tarsalFoodContactIntensity(sx: Float, sy: Float): Float {
+            sampleTarsalFoodContact(sx, sy)
+            return foodTarsalContactFrame
         }
 
         private fun setMappedSensoryRate(indices: IntArray, rateHz: Float) {
@@ -1611,10 +1788,15 @@ class MainActivity : Activity() {
             // matching the event-based external stimulation used by the reference LIF model.
             java.util.Arrays.fill(externalRateHz, 0f)
             // Gustation is contact-gated: long-range food attraction belongs to
-            // olfaction. The retained gustatory receptors are driven only when
-            // the food surface reaches the virtual anterior tarsi.
-            val foodGustatoryIntensity = tarsalFoodContactIntensity(foodX, foodY) *
-                2.35f * (1f - satiety * .35f)
+            // olfaction. The two body-relative anterior tarsi are sampled once for
+            // the whole frame; this exact sample is then mapped only to retained
+            // primary gustatory `leg bristle` neurons. No other GUST subtype receives
+            // tarsal current.
+            sampleTarsalFoodContact(foodX, foodY)
+            val tasteState = (1f - satiety * .35f).coerceIn(0f, 1f)
+            val leftTasteRate = foodTarsalLeftContactFrame * 180f * tasteState
+            val rightTasteRate = foodTarsalRightContactFrame * 180f * tasteState
+            val centerTasteRate = ((foodTarsalLeftContactFrame + foodTarsalRightContactFrame) * .5f) * 180f * tasteState
             val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .48f) * 1.55f
             val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .48f) * 2.15f
 
@@ -1629,7 +1811,13 @@ class MainActivity : Activity() {
 
             setMappedSensoryRate(visualReceptorIndices, combinedVisualIntensity / 3.5f * SENSORY_VIS_MAX_HZ)
             injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_MAX_HZ)
-            setMappedSensoryRate(gustatoryReceptorIndices, foodGustatoryIntensity / 2.35f * 180f)
+            for (i in gustatoryTarsalReceptorIndices) {
+                externalRateHz[i] = when (gustatorySide[i].toInt()) {
+                    -1 -> leftTasteRate
+                    1 -> rightTasteRate
+                    else -> centerTasteRate
+                }.coerceIn(0f, 180f)
+            }
 
             val wall = min(min(flyX - .06f, .94f - flyX), min(flyY - .10f, .79f - flyY)).coerceIn(0f, .4f)
             val wallSignal = (1f - wall / .4f).coerceIn(0f, 1f)
@@ -1750,6 +1938,11 @@ class MainActivity : Activity() {
             java.util.Arrays.fill(motorSubstepSpikeCounts, 0)
             java.util.Arrays.fill(motorSynDriveSum, 0f)
             java.util.Arrays.fill(motorSynDrivePeak, 0f)
+            java.util.Arrays.fill(feedingFunctionSpikeEvents, 0)
+            tarsalGustatorySpikeEventsFrame = 0
+            gustatorySpikeEventsFrame = 0
+            haltWalkOffSpikeEventsFrame = 0
+            haltBrakeSpikeEventsFrame = 0
         }
 
         private fun accumulateNeuralSubstepDiagnostics() {
@@ -1762,6 +1955,33 @@ class MainActivity : Activity() {
                     -1 -> olfWindowSpikesLeft++
                     1 -> olfWindowSpikesRight++
                     else -> olfWindowSpikesUnknown++
+                }
+            }
+            // Count all primary GUST spikes over every internal substep, then
+            // separately count the tarsal subset used for the contact/taste gate.
+            for (i in GUST_START until GUST_END) if (fired[i]) gustatorySpikeEventsFrame++
+            for (i in gustatoryTarsalReceptorIndices) if (fired[i]) tarsalGustatorySpikeEventsFrame++
+
+            // Halt-role populations are also measured over every internal
+            // substep. This avoids treating only the final substep's `fired[]`
+            // state as if it represented the whole 20 ms neural frame.
+            for (i in 0 until N) {
+                if (!fired[i]) continue
+                when (haltRole[i].toInt()) {
+                    1, 2 -> haltWalkOffSpikeEventsFrame++
+                    3 -> haltBrakeSpikeEventsFrame++
+                }
+            }
+
+            // Feeding motor neurons are `cb_motor` and therefore live in OTHER,
+            // outside the legacy VNC motor block. Count their real spikes by the
+            // official functional semantics asset; these counters never write body
+            // position or neural state.
+            for (k in 0 until feedingMotorCount) {
+                val i = feedingMotorIndices[k]
+                if (fired[i]) {
+                    val tag = feedingFunctionalTag[i].toInt()
+                    if (tag in 1..FEEDING_FUNCTION_INGESTION_CROP_ENTRY) feedingFunctionSpikeEvents[tag]++
                 }
             }
             for (i in DESC_START until DESC_END) {
@@ -1808,29 +2028,21 @@ class MainActivity : Activity() {
             // V1.13: separate the experimentally described halt populations from
             // backward-walking DNs. In V1.11, role 3 mixed MDN/DNp09 with "halting";
             // that was anatomically incorrect. These readouts are diagnostics only.
-            var fg = 0f
-            var bb = 0f
-            var brk = 0f
-            for (i in 0 until N) {
-                if (!fired[i]) continue
-                when (haltRole[i].toInt()) {
-                    1 -> fg += 1f
-                    2 -> bb += 1f
-                    3 -> brk += 1f
-                }
-            }
-            var haltDen = 0
             var walkOffDen = 0
             var brakeDen = 0
             for (i in 0 until N) {
                 when (haltRole[i].toInt()) {
-                    1 -> walkOffDen++
-                    2 -> walkOffDen++
+                    1, 2 -> walkOffDen++
                     3 -> brakeDen++
                 }
             }
-            val walkOffNow = if (walkOffDen > 0) ((fg + bb) / walkOffDen).coerceIn(0f, 1f) else 0f
-            val brakeNow = if (brakeDen > 0) (brk / brakeDen).coerceIn(0f, 1f) else 0f
+            val frameSubsteps = NEURAL_SUBSTEPS_PER_FRAME.toFloat()
+            val walkOffNow = if (walkOffDen > 0) {
+                (haltWalkOffSpikeEventsFrame / (walkOffDen * frameSubsteps)).coerceIn(0f, 1f)
+            } else 0f
+            val brakeNow = if (brakeDen > 0) {
+                (haltBrakeSpikeEventsFrame / (brakeDen * frameSubsteps)).coerceIn(0f, 1f)
+            } else 0f
             val haltNow = max(walkOffNow, brakeNow)
             walkOffEvidenceDisplay += (walkOffNow - walkOffEvidenceDisplay) *
                 (1f - exp((-dt / .12f).toDouble()).toFloat())
@@ -2052,6 +2264,107 @@ class MainActivity : Activity() {
             var n = 0
             for (i in a until b) if (fired[i]) n++
             return n
+        }
+
+        private fun feedingFunctionRateHz(functionCode: Int, dt: Float): Float {
+            if (functionCode !in 1..FEEDING_FUNCTION_INGESTION_CROP_ENTRY) return 0f
+            val total = feedingFunctionTotals[functionCode]
+            if (total <= 0) return 0f
+            return feedingFunctionSpikeEvents[functionCode].toFloat() / dt.coerceAtLeast(.001f) / total.toFloat()
+        }
+
+        private fun updateFeedingNeuralReadout(dt: Float): Float {
+            val tasteRateHz = if (gustatoryTarsalReceptorIndices.isEmpty()) 0f else {
+                tarsalGustatorySpikeEventsFrame.toFloat() / dt.coerceAtLeast(.001f) / gustatoryTarsalReceptorIndices.size.toFloat()
+            }
+            proboscisRostrumRateHz = feedingFunctionRateHz(GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_ROSTRUM, dt)
+            val rostrumRate = proboscisRostrumRateHz
+            val haustellumRate = feedingFunctionRateHz(GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_HAUSTELLUM, dt)
+            val labellumRate = feedingFunctionRateHz(GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_LABELLUM, dt)
+            val spreadRate = feedingFunctionRateHz(GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_SPREAD, dt)
+            val pharyngealRate = feedingFunctionRateHz(GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_PHARYNGEAL, dt)
+            val cropRate = feedingFunctionRateHz(GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY, dt)
+            val proboscisTotal = feedingFunctionTotals[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_ROSTRUM] +
+                feedingFunctionTotals[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_HAUSTELLUM] +
+                feedingFunctionTotals[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_LABELLUM] +
+                feedingFunctionTotals[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_SPREAD]
+            val proboscisEvents = feedingFunctionSpikeEvents[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_ROSTRUM] +
+                feedingFunctionSpikeEvents[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_HAUSTELLUM] +
+                feedingFunctionSpikeEvents[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_LABELLUM] +
+                feedingFunctionSpikeEvents[GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_SPREAD]
+            val ingestionTotal = feedingFunctionTotals[GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_PHARYNGEAL] +
+                feedingFunctionTotals[GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY]
+            val ingestionEventsFrame = feedingFunctionSpikeEvents[GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_PHARYNGEAL] +
+                feedingFunctionSpikeEvents[GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY]
+            proboscisRateHz = if (proboscisTotal <= 0) 0f else proboscisEvents.toFloat() / dt.coerceAtLeast(.001f) / proboscisTotal.toFloat()
+            ingestionRateHz = if (ingestionTotal <= 0) 0f else ingestionEventsFrame.toFloat() / dt.coerceAtLeast(.001f) / ingestionTotal.toFloat()
+
+            // The visual proboscis is an actuator/readout of MN9 firing, not an
+            // independent animation. One 20 ms spike frame corresponds to 50 Hz,
+            // matching the VNC motor actuator convention used elsewhere.
+            val rostrumTarget = (rostrumRate / 50f).coerceIn(0f, 1f)
+            proboscisExtension = relaxMotorActivation(proboscisExtension, rostrumTarget, dt)
+
+            val tasteNeural = foodOn &&
+                foodTarsalContactFrame >= .04f &&
+                tarsalGustatorySpikeEventsFrame >= FEEDING_TASTE_NEURON_SPIKE_MIN
+
+            // The biological route is multilayered, so the motor-neuron outputs
+            // need not peak in the exact same 20 ms public frame as the first
+            // tarsal spikes. Keep a short read-only association window. This is
+            // bookkeeping of measured network events; it does not stop the body,
+            // inject spikes, or create a feeding state by itself.
+            if (foodOn) {
+                if (tasteNeural) tasteContextAgeSeconds = 0f
+                else if (tasteContextAgeSeconds.isFinite()) tasteContextAgeSeconds += dt
+            } else {
+                tasteContextAgeSeconds = Float.POSITIVE_INFINITY
+            }
+            val tasteContextActive = tasteContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS
+            val proboscisNeural = foodOn &&
+                tasteContextActive &&
+                proboscisEvents >= FEEDING_PROBOSCIS_NEURON_SPIKE_MIN
+            if (proboscisNeural) proboscisContextAgeSeconds = 0f
+            else if (proboscisContextAgeSeconds.isFinite()) proboscisContextAgeSeconds += dt
+            if (!foodOn) proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
+            val proboscisContextActive = proboscisContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS
+            val ingestionNeural = foodOn &&
+                tasteContextActive &&
+                proboscisContextActive &&
+                ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN
+
+            tasteContactNeuralNow = tasteNeural
+            proboscisNeuralNow = proboscisNeural
+            ingestionNeuralNow = ingestionNeural
+            haltDuringFoodContactNow = tasteNeural &&
+                (haltWalkOffSpikeEventsFrame + haltBrakeSpikeEventsFrame) > 0
+
+            if (tasteNeural && !tasteContactLatched) tasteContactEpisodes++
+            tasteContactLatched = tasteNeural
+
+            if (proboscisNeural && !proboscisEpisodeLatched) proboscisEpisodes++
+            proboscisEpisodeLatched = proboscisNeural
+
+            // Ingestion is acknowledged only when real ingestion-related motor
+            // neurons fire in the same food/taste context. This is bookkeeping of
+            // measured neural output; it does not command feeding or stop walking.
+            val newIngestionEpisode = ingestionNeural && !ingestionEpisodeLatched
+            if (newIngestionEpisode) {
+                ingestionEvents++
+                satiety = min(1f, satiety + .24f)
+            }
+            ingestionEpisodeLatched = ingestionNeural
+
+            // Homeostatic decay remains continuous; only real ingestion can raise
+            // satiety in this release.
+            satiety *= exp((-dt * .018f).toDouble()).toFloat()
+            @Suppress("UNUSED_VARIABLE") val _tasteRateHz = tasteRateHz
+            @Suppress("UNUSED_VARIABLE") val _haustellumRate = haustellumRate
+            @Suppress("UNUSED_VARIABLE") val _labellumRate = labellumRate
+            @Suppress("UNUSED_VARIABLE") val _spreadRate = spreadRate
+            @Suppress("UNUSED_VARIABLE") val _cropRate = cropRate
+            @Suppress("UNUSED_VARIABLE") val _pharyngealRate = pharyngealRate
+            return if (newIngestionEpisode) 1f else 0f
         }
 
         private fun populationRate(a: Int, b: Int): Float {
@@ -2481,25 +2794,12 @@ class MainActivity : Activity() {
                 flyY = flyY.coerceIn(.10f, .79f)
             }
 
-            var reward = 0f
-            val tarsalContactNow = tarsalFoodContactIntensity(foodX, foodY)
-            val gustatoryRateNow = populationRate(GUST_START, GUST_END)
-            // Feeding/contact is a neural + body event. It may update internal
-            // state, but it MUST NOT mutate the environment position. Contact is
-            // defined by the same anterior-tarsal sensor geometry that generated
-            // the gustatory input for this frame, then gated by measured gustatory
-            // neural activity. The latch counts contact episodes, not frames.
-            val foodContact = foodOn &&
-                tarsalContactNow >= .04f &&
-                gustatoryRateNow > FOOD_CONTACT_GUSTATORY_MIN
-            if (foodContact && !foodContactLatched) {
-                foodHits++
-                satiety = min(1f, satiety + .24f)
-                reward += 1f
-            }
-            foodContactLatched = foodContact
-
-            satiety *= exp((-dt * .018f).toDouble()).toFloat()
+            // Feeding is a measured neural readout. The body actuator above remains
+            // exclusively VNC-motor driven; this method never sets speed/heading
+            // from food, taste, pause or feeding state. `updateFeedingNeuralReadout`
+            // only records real retained cb_motor activity and updates the visual
+            // mouthpart actuator.
+            var reward = updateFeedingNeuralReadout(dt)
 
             val danger = if (dangerOn) gaussian(hypot(dangerX - flyX, dangerY - flyY), .36f) else 0f
 
@@ -2710,7 +3010,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.18.5 · CAUSAL TURN", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.18.6 · NEURAL FEEDING", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)
@@ -2818,7 +3118,7 @@ class MainActivity : Activity() {
             val netDisplacement = hypot(flyX - .24f, flyY - .55f)
             c.drawText("V ${"%.4f".format(physicalSpeed)}   A ${"%.4f".format(physicalAcceleration)}   recorrido ${"%.3f".format(pathLength)}", leftX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("X ${"%.3f".format(flyX)}   Y ${"%.3f".format(flyY)}   rumbo ${"%.1f".format(headingDeg)}°", leftX + dp(9f), bodyY + dp(43f), paint)
-            c.drawText("Δpos ${"%.3f".format(netDisplacement)}   pausa ${"%.1f".format(pauseTimer)}s   eventos $pauseCount", leftX + dp(9f), bodyY + dp(57f), paint)
+            c.drawText("Δpos ${"%.3f".format(netDisplacement)}   pausa ${"%.1f".format(pauseTimer)}s   pausas $pauseCount", leftX + dp(9f), bodyY + dp(57f), paint)
 
             metricCard(rightX, bodyY, colW, "ENTORNO / RUTA")
             val topDnText = if (topDnIds[0] >= 0) "${bodyId[topDnIds[0]]} ${dnRoleLabel(descendingRole[topDnIds[0]].toInt())} ${"%.1f".format(topDnHz[0])}Hz" else "—"
@@ -2826,7 +3126,7 @@ class MainActivity : Activity() {
             c.drawText("TOP DN   $topDnText", rightX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("TOP MN  $topMotorText", rightX + dp(9f), bodyY + dp(43f), paint)
             c.drawText("OLF ORN L/C/R ${"%.2f".format(olfInputLeftCache)}/${"%.2f".format(olfInputCenterCache)}/${"%.2f".format(olfInputRightCache)}   bias ${"%+.3f".format(foodDirectionalBias)}", rightX + dp(9f), bodyY + dp(57f), paint)
-            c.drawText("SPIKE Hz  ORN L/R ${"%.1f".format(olfLeftHz)}/${"%.1f".format(olfRightHz)}  DN L/R ${"%.1f".format(dnLeftHz)}/${"%.1f".format(dnRightHz)}", rightX + dp(9f), bodyY + dp(71f), paint)
+            c.drawText("FEED C/P/I $tasteContactEpisodes/$proboscisEpisodes/$ingestionEvents   PROB ${"%.1f".format(proboscisRateHz)}Hz  ING ${"%.1f".format(ingestionRateHz)}Hz", rightX + dp(9f), bodyY + dp(71f), paint)
 
             // Larger neural map: the visual center of the final interface.
             val mapTop = bodyY + cardH + dp(18f)
@@ -3220,12 +3520,23 @@ class MainActivity : Activity() {
             c.drawCircle(px - 47f, py - 109f, 2f, paint)
             c.drawCircle(px + 47f, py - 109f, 2f, paint)
 
-            // Proboscis/mouthparts.
+            // Proboscis/mouthparts: presentation is driven by the retained MN9
+            // (rostrum protractor) firing readout. No stimulus variable writes the
+            // extension state directly.
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 2f
+            paint.strokeWidth = 2.0f + 0.8f * proboscisExtension
             paint.color = Color.rgb(70, 48, 40)
-            c.drawLine(px - 8f, py - 29f, px - 15f, py - 20f, paint)
-            c.drawLine(px + 8f, py - 29f, px + 15f, py - 20f, paint)
+            val probBaseY = py - 29f
+            val probTipY = probBaseY - (8f + 34f * proboscisExtension)
+            val probSpread = 4f + 5f * proboscisExtension
+            c.drawLine(px - 7f, probBaseY, px - probSpread, probTipY, paint)
+            c.drawLine(px + 7f, probBaseY, px + probSpread, probTipY, paint)
+            if (proboscisExtension > .04f) {
+                paint.strokeWidth = 1.6f + 0.5f * proboscisExtension
+                c.drawLine(px, probBaseY, px, probTipY + 3f, paint)
+                paint.style = Paint.Style.FILL
+                c.drawOval(px - probSpread - 2f, probTipY - 2f, px + probSpread + 2f, probTipY + 3f, paint)
+            }
             c.restore()
         }
 
@@ -3259,10 +3570,14 @@ class MainActivity : Activity() {
         private fun setFoodPosition(x: Float, y: Float) {
             foodX = x.coerceIn(.06f, .94f)
             foodY = y.coerceIn(.10f, .82f)
-            // Repositioning the food is an environment event. Clear the contact
-            // latch so placing food onto the fly can legitimately create a new
-            // contact event on the next simulation tick.
-            foodContactLatched = false
+            // Repositioning the food is an environment event. Clear all active
+            // feeding latches so a newly placed source cannot inherit the prior
+            // source's neural episode context.
+            tasteContactLatched = false
+            proboscisEpisodeLatched = false
+            ingestionEpisodeLatched = false
+            tasteContextAgeSeconds = Float.POSITIVE_INFINITY
+            proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
             invalidate()
         }
 

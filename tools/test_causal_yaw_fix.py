@@ -15,6 +15,6 @@ assert "val turn = rawTurn - baselineTurnBias * .72f" in body
 
 META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.18.5"' in META
-assert "const val APP_VERSION_CODE = 138" in META
-print("V1.18.5 CAUSAL YAW / NO RANDOM STEERING AUDIT: PASS")
+assert 'const val APP_VERSION = "1.18.6"' in META
+assert "const val APP_VERSION_CODE = 139" in META
+print("V1.18.6 CAUSAL YAW / NO RANDOM STEERING AUDIT: PASS")

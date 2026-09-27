@@ -1,4 +1,4 @@
-# FlyBrain — V1.18.5 / FBR-10-OLF2-MOTORROUTE
+# FlyBrain — V1.18.6 / FBR-10-OLF2-MOTORROUTE
 
 FlyBrain is an Android simulation built from the published MaleCNS v1.0 connectome of the male *Drosophila* central nervous system.
 
@@ -38,6 +38,8 @@ External stimuli are mapped only to receptor populations derived from official M
 - GUST → retained primary gustatory receptors.
 - MECH → retained mechanosensory/proprioceptive receptors.
 
+For food contact, the runtime does **not** inject taste into every GUST neuron. The sensory map preserves the official `subclass`, and only retained `leg bristle` gustatory receptors receive the virtual tarsal contact signal. A separate `FEEDSEM103` asset exposes retained `cb_motor` feeding neurons (MN9, MN4a, MN6, MN8, MN11D/MN11V, CEM) as measured motor readouts. No FBC103 edge is created or rewritten.
+
 Sensory input is an environmental interface, not a graph mutation. The current olfactory interface models two virtual antenna sampling points and applies the measured left/right concentration to anatomically sided retained ORNs. MaleCNS v1.0 does not provide an odorant-specific food/receptor affinity table in this release, so the simulator does not invent one.
 
 Environmental receptor stimulation is represented as Poisson spike events; it does not inject direct motor current. The food odor field is spatially sampled at two virtual antenna points.
@@ -50,6 +52,13 @@ Environmental receptor stimulation is represented as Poisson spike events; it do
 - Membrane leak: analytical exact integration with `tau_mem = 20 ms`.
 - Refractory period: 2.2 ms on a 0.5 ms internal grid; threshold reset follows the reference model.
 - Plasticity: disabled by default.
+
+## Food/feeding boundary
+
+The feeding chain is measured rather than hard-coded as a body controller:
+`CONTACTO → GUSTACIÓN → circuit activity → feeding motor output`.
+
+`HALT` remains a readout of the retained halt-role neurons and/or physical pause; it does not directly zero locomotion. MN9 firing drives the visual proboscis extension actuator. Ingestion episodes are counted only when retained ingestion-related motor neurons fire in a concurrent food/taste context. Satiety is raised only by such measured ingestion events.
 
 ## Motor/body boundary
 
@@ -79,15 +88,15 @@ Historical reducers are not release entry points.
 Run:
 
 ```text
-py tools/test_test_fbc103_reader.py
-py tools/test_test_food_function_audit.py
-py tools/test_test_frozen_connectome_validator.py
-py tools/test_test_neural_time_integration.py
-py tools/test_test_olfactory_input_map.py
-py tools/test_test_olfactory_route_reduction.py
-py tools/test_test_phase2b_temporal_substepping.py
-py tools/test_test_sensory_input_purity.py
-py tools/test_test_vnc_motor_semantics_logic.py
+py tools/test_fbc103_reader.py
+py tools/test_food_function_audit.py
+py tools/test_frozen_connectome_validator.py
+py tools/test_neural_time_integration.py
+py tools/test_olfactory_input_map.py
+py tools/test_olfactory_route_reduction.py
+py tools/test_phase2b_temporal_substepping.py
+py tools/test_sensory_input_purity.py
+py tools/test_vnc_motor_semantics_logic.py
 ```
 
 Then:

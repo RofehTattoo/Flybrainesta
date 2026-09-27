@@ -1,539 +1,7 @@
 {
-  "dataset": "MaleCNS v1.0",
-  "flybrain_version": "1.17.1",
-  "reduction": "FBR-10-OLF1",
   "binary_format": "FBC103",
-  "sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf",
-  "node_record_bytes": 26,
-  "edge_record_bytes": 12,
-  "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), including explicit retention of the four official ORNs with NULL type (bodyIds 242812, 242908, 488209, 956041) without assigning synthetic labels; all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
-  "source": "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/",
-  "neurons_source": 166700,
-  "neurons_retained": 16669,
-  "edges_retained": 2483165,
-  "olfactory_orns_source": 2639,
-  "olfactory_orns_retained": 264,
-  "untyped_orn_body_ids_source": [
-    242812,
-    242908,
-    488209,
-    956041
-  ],
-  "untyped_orn_body_ids_retained": [
-    242812,
-    242908,
-    488209,
-    956041
-  ],
-  "olfactory_orn_types_source": 53,
-  "olfactory_orn_types_retained": 53,
-  "olfactory_orn_type_entry_nerve_pairs_source": [
-    {
-      "type": "ORN_D",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA4l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA4m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL2d",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL2v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM6",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DP1l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DP1m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_V",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA1d",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA1v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA4",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VA5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA6",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA7l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA7l",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VA7m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VC1",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VC2",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VC3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VC4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VC5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VL1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VL2a",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VL2p",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM5d",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM5v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM6l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM6m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM6v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM7d",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VM7v",
-      "entryNerve": "MXLBN"
-    }
-  ],
-  "olfactory_orn_type_entry_nerve_pairs_retained": [
-    {
-      "type": "ORN_D",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA4l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DA4m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DC4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL2d",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL2v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DL5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DM6",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DP1l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_DP1m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_V",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA1d",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA1v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA4",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VA5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA6",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA7l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VA7l",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VA7m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VC1",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VC2",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VC3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VC4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VC5",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VL1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VL2a",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VL2p",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM1",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM2",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM3",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM4",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM5d",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM5v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM6l",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM6m",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM6v",
-      "entryNerve": "AN"
-    },
-    {
-      "type": "ORN_VM7d",
-      "entryNerve": "MXLBN"
-    },
-    {
-      "type": "ORN_VM7v",
-      "entryNerve": "MXLBN"
-    }
-  ],
-  "olfactory_orn_target": 264,
-  "olfactory_route_forward_source_nonzero": 15,
-  "olfactory_route_forward_selected_nonzero": 15,
-  "olfactory_route_motor_source_nonzero": 9,
-  "olfactory_route_motor_selected_nonzero": 9,
   "candidate_edges_between_retained_neurons": 2483165,
-  "contacts_retained": 20992679,
-  "edge_weight_definition": "raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer",
-  "superclass_counts_source": {
-    "ENS": 50,
-    "ascending_neuron": 1846,
-    "cb_efferent": 4,
-    "cb_endocrine": 72,
-    "cb_intrinsic": 32164,
-    "cb_motor": 107,
-    "cb_sensory": 4868,
-    "cb_sensory_tbc": 14,
-    "descending_neuron": 1314,
-    "descending_neuron_tbc": 2,
-    "efferent_ascending": 8,
-    "efferent_descending": 4,
-    "ol_intrinsic": 89403,
-    "ol_sensory": 6098,
-    "sensory_ascending": 537,
-    "sensory_ascending_tbc": 2,
-    "sensory_descending": 12,
-    "visual_centrifugal": 563,
-    "visual_projection": 9201,
-    "visual_projection_tbc": 2,
-    "vnc_efferent": 94,
-    "vnc_endocrine": 22,
-    "vnc_intrinsic": 13161,
-    "vnc_motor": 708,
-    "vnc_sensory": 6370,
-    "vnc_sensory_tbc": 36,
-    "vnc_tbc": 38
-  },
-  "superclass_extra_quota": {
-    "ENS": 0,
-    "ascending_neuron": 0,
-    "cb_efferent": 0,
-    "cb_endocrine": 0,
-    "cb_intrinsic": 6,
-    "cb_motor": 0,
-    "cb_sensory": 1,
-    "cb_sensory_tbc": 0,
-    "descending_neuron_tbc": 0,
-    "efferent_ascending": 0,
-    "efferent_descending": 0,
-    "ol_intrinsic": 21,
-    "ol_sensory": 1,
-    "sensory_ascending": 0,
-    "sensory_descending": 0,
-    "visual_centrifugal": 0,
-    "visual_projection": 2,
-    "vnc_efferent": 0,
-    "vnc_endocrine": 0,
-    "vnc_intrinsic": 2,
-    "vnc_sensory": 1,
-    "vnc_sensory_tbc": 0,
-    "vnc_tbc": 0
-  },
   "channel_ranges": {
-    "visual": [
-      0,
-      977
-    ],
-    "olfactory": [
-      977,
-      1241
-    ],
     "gustatory": [
       1241,
       1303
@@ -542,52 +10,21 @@
       1303,
       1579
     ],
-    "other": [
-      1579,
-      16669
-    ]
-  },
-  "population_ranges": {
-    "visual": [
-      0,
-      977
-    ],
     "olfactory": [
       977,
       1241
     ],
-    "gustatory": [
-      1241,
-      1303
-    ],
-    "mechanosensory": [
-      1303,
-      1579
-    ],
-    "descending": [
-      1579,
-      2893
-    ],
-    "ascending": [
-      2893,
-      3767
-    ],
-    "motor": [
-      3767,
-      4475
-    ],
     "other": [
-      4475,
+      1579,
       16669
+    ],
+    "visual": [
+      0,
+      977
     ]
   },
-  "motor_role_counts": {
-    "0": 15961,
-    "1": 213,
-    "2": 26,
-    "6": 2,
-    "7": 467
-  },
+  "contacts_retained": 20992679,
+  "dataset": "MaleCNS v1.0",
   "descending_role_counts": {
     "0": 16629,
     "1": 8,
@@ -595,12 +32,7 @@
     "3": 10,
     "4": 2
   },
-  "halt_role_counts": {
-    "0": 16653,
-    "1": 2,
-    "2": 2,
-    "3": 12
-  },
+  "descending_role_definition": "published behavioural cell-type names plus conservative annotation keywords; descriptive metadata only and never a synthetic current source",
   "descending_role_source_counts": {
     "0": 1274,
     "1": 8,
@@ -685,7 +117,6 @@
     "DNg08|role0": 23,
     "DNg09_a|role0": 6,
     "DNg09_b|role0": 2,
-    "DNg10|role0": 12,
     "DNg100|role1": 2,
     "DNg101|role0": 2,
     "DNg102|role0": 4,
@@ -696,9 +127,10 @@
     "DNg107|role0": 2,
     "DNg108|role0": 2,
     "DNg109|role0": 2,
-    "DNg11|role0": 6,
+    "DNg10|role0": 12,
     "DNg110|role0": 6,
     "DNg111|role0": 2,
+    "DNg11|role0": 6,
     "DNg12_a|role0": 8,
     "DNg12_b|role0": 10,
     "DNg12_c|role0": 8,
@@ -966,11 +398,11 @@
     "DNp07|role3": 2,
     "DNp08|role0": 2,
     "DNp09|role3": 2,
-    "DNp10|role0": 2,
     "DNp101|role0": 2,
     "DNp102|role0": 2,
     "DNp103|role0": 2,
     "DNp104|role0": 2,
+    "DNp10|role0": 2,
     "DNp11|role0": 2,
     "DNp12|role0": 2,
     "DNp13|role0": 2,
@@ -1086,92 +518,119 @@
     "DNxl114|role0": 2,
     "MDN|role3": 4,
     "aSP22|role0": 2,
-    "pIP1|role0": 2,
     "pIP10|role0": 2,
+    "pIP1|role0": 2,
     "pMP2|role0": 2
   },
-  "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
+  "direct_desc_motor_full_graph_weight": [
+    [
+      0.0,
+      34949.0,
+      13132.0,
+      0.0,
+      0.0,
+      0.0,
+      94.0,
+      172273.0
+    ],
+    [
+      0.0,
+      749.0,
+      22.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      2258.0
+    ],
+    [
+      0.0,
+      223.0,
+      18.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      5112.0
+    ],
+    [
+      0.0,
+      227.0,
+      39.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      375.0
+    ],
+    [
+      0.0,
+      0.0,
+      4.0,
+      0.0,
+      0.0,
+      0.0,
+      90.0,
+      0.0
+    ]
+  ],
+  "direct_sensor_desc_full_graph_weight": [
+    [
+      274412.0,
+      3310.0,
+      11480.0,
+      10800.0,
+      11329.0
+    ],
+    [
+      520.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      30901.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      171977.0,
+      5.0,
+      48.0,
+      14.0,
+      709.0
+    ]
+  ],
+  "download": "https://male-cns.janelia.org/download/",
+  "edge_record_bytes": 12,
+  "edge_weight_definition": "raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer",
+  "edges_retained": 2483165,
+  "fbc103_sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf",
+  "flybrain_version": "1.18.6",
+  "halt_role_counts": {
+    "0": 16653,
+    "1": 2,
+    "2": 2,
+    "3": 12
+  },
   "halt_role_definition": "FG and BB are walk-OFF halt populations; BRK is the VNC brake population; roles are annotation metadata only and do not create edges",
-  "descending_role_definition": "published behavioural cell-type names plus conservative annotation keywords; descriptive metadata only and never a synthetic current source",
-  "route_score_definition": "route-family topology scores combine measured published edges; generic forward uses all sensory modalities, while explicit olfactory preservation uses real ORN->candidate->forward-DN and ORN->candidate->motor support; scores are selection/readout metadata only and never create edges",
-  "route_score_source_counts": {
-    "forward_nonzero": 4677,
-    "turn_nonzero": 8277,
-    "escape_nonzero": 1291,
-    "halt_nonzero": 2538
-  },
-  "route_score_selected_counts": {
-    "forward_nonzero": 2688,
-    "turn_nonzero": 4092,
-    "escape_nonzero": 1291,
-    "halt_nonzero": 16,
-    "escape_high": 53
-  },
   "halt_selected_nonzero": 16,
-  "route_quota_requested": {
-    "route_halt": 700,
-    "route_escape": 900,
-    "route_forward": 650,
-    "route_turn": 600,
-    "route_sensorimotor": 450,
-    "route_olfactory_forward": 700,
-    "route_olfactory_motor": 350
+  "license": "CC-BY-4.0",
+  "motor_role_counts": {
+    "0": 15961,
+    "1": 213,
+    "2": 26,
+    "6": 2,
+    "7": 467
   },
-  "olfactory_orn_type_counts_source": {
-    "ORN_D": 28,
-    "ORN_DA1": 204,
-    "ORN_DA2": 48,
-    "ORN_DA3": 34,
-    "ORN_DA4l": 33,
-    "ORN_DA4m": 35,
-    "ORN_DC1": 32,
-    "ORN_DC2": 22,
-    "ORN_DC3": 35,
-    "ORN_DC4": 23,
-    "ORN_DL1": 83,
-    "ORN_DL2d": 15,
-    "ORN_DL2v": 23,
-    "ORN_DL3": 103,
-    "ORN_DL4": 62,
-    "ORN_DL5": 43,
-    "ORN_DM1": 74,
-    "ORN_DM2": 54,
-    "ORN_DM3": 63,
-    "ORN_DM4": 32,
-    "ORN_DM5": 35,
-    "ORN_DM6": 58,
-    "ORN_DP1l": 33,
-    "ORN_DP1m": 31,
-    "ORN_V": 55,
-    "ORN_VA1d": 132,
-    "ORN_VA1v": 130,
-    "ORN_VA2": 83,
-    "ORN_VA3": 30,
-    "ORN_VA4": 34,
-    "ORN_VA5": 16,
-    "ORN_VA6": 63,
-    "ORN_VA7l": 29,
-    "ORN_VA7m": 24,
-    "ORN_VC1": 29,
-    "ORN_VC2": 32,
-    "ORN_VC3": 34,
-    "ORN_VC4": 38,
-    "ORN_VC5": 31,
-    "ORN_VL1": 82,
-    "ORN_VL2a": 98,
-    "ORN_VL2p": 45,
-    "ORN_VM1": 33,
-    "ORN_VM2": 41,
-    "ORN_VM3": 43,
-    "ORN_VM4": 78,
-    "ORN_VM5d": 84,
-    "ORN_VM5v": 34,
-    "ORN_VM6l": 14,
-    "ORN_VM6m": 25,
-    "ORN_VM6v": 34,
-    "ORN_VM7d": 36,
-    "ORN_VM7v": 25
-  },
+  "motor_role_definition": "derived from curated annotation text for vnc_motor cells; runtime movement is driven only by measured vnc_motor activity",
+  "neurons_retained": 16669,
+  "neurons_source": 166700,
+  "node_record_bytes": 26,
+  "olfactory_orn_target": 264,
   "olfactory_orn_type_counts_retained": {
     "": 4,
     "ORN_D": 4,
@@ -1228,13 +687,542 @@
     "ORN_VM7d": 4,
     "ORN_VM7v": 4
   },
-  "retained_sensor_to_desc_edges": 1330,
-  "retained_desc_to_motor_edges": 796,
-  "retained_sensor_to_desc_contacts": 25286,
-  "retained_desc_to_motor_contacts": 9117,
+  "olfactory_orn_type_counts_source": {
+    "ORN_D": 28,
+    "ORN_DA1": 204,
+    "ORN_DA2": 48,
+    "ORN_DA3": 34,
+    "ORN_DA4l": 33,
+    "ORN_DA4m": 35,
+    "ORN_DC1": 32,
+    "ORN_DC2": 22,
+    "ORN_DC3": 35,
+    "ORN_DC4": 23,
+    "ORN_DL1": 83,
+    "ORN_DL2d": 15,
+    "ORN_DL2v": 23,
+    "ORN_DL3": 103,
+    "ORN_DL4": 62,
+    "ORN_DL5": 43,
+    "ORN_DM1": 74,
+    "ORN_DM2": 54,
+    "ORN_DM3": 63,
+    "ORN_DM4": 32,
+    "ORN_DM5": 35,
+    "ORN_DM6": 58,
+    "ORN_DP1l": 33,
+    "ORN_DP1m": 31,
+    "ORN_V": 55,
+    "ORN_VA1d": 132,
+    "ORN_VA1v": 130,
+    "ORN_VA2": 83,
+    "ORN_VA3": 30,
+    "ORN_VA4": 34,
+    "ORN_VA5": 16,
+    "ORN_VA6": 63,
+    "ORN_VA7l": 29,
+    "ORN_VA7m": 24,
+    "ORN_VC1": 29,
+    "ORN_VC2": 32,
+    "ORN_VC3": 34,
+    "ORN_VC4": 38,
+    "ORN_VC5": 31,
+    "ORN_VL1": 82,
+    "ORN_VL2a": 98,
+    "ORN_VL2p": 45,
+    "ORN_VM1": 33,
+    "ORN_VM2": 41,
+    "ORN_VM3": 43,
+    "ORN_VM4": 78,
+    "ORN_VM5d": 84,
+    "ORN_VM5v": 34,
+    "ORN_VM6l": 14,
+    "ORN_VM6m": 25,
+    "ORN_VM6v": 34,
+    "ORN_VM7d": 36,
+    "ORN_VM7v": 25
+  },
+  "olfactory_orn_type_entry_nerve_pairs_retained": [
+    {
+      "entryNerve": "AN",
+      "type": "ORN_D"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA4l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA4m"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL2d"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL2v"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM6"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DP1l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DP1m"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_V"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA1d"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA1v"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA3"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VA4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA6"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA7l"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VA7l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA7m"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VC1"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VC2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VC3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VC4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VC5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VL1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VL2a"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VL2p"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM5d"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM5v"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM6l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM6m"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM6v"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VM7d"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VM7v"
+    }
+  ],
+  "olfactory_orn_type_entry_nerve_pairs_source": [
+    {
+      "entryNerve": "AN",
+      "type": "ORN_D"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA4l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DA4m"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DC4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL2d"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL2v"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DL5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DM6"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DP1l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_DP1m"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_V"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA1d"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA1v"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA3"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VA4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA6"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA7l"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VA7l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VA7m"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VC1"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VC2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VC3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VC4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VC5"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VL1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VL2a"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VL2p"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM1"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM2"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM3"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM4"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM5d"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM5v"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM6l"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM6m"
+    },
+    {
+      "entryNerve": "AN",
+      "type": "ORN_VM6v"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VM7d"
+    },
+    {
+      "entryNerve": "MXLBN",
+      "type": "ORN_VM7v"
+    }
+  ],
+  "olfactory_orn_types_retained": 53,
+  "olfactory_orn_types_source": 53,
+  "olfactory_orns_retained": 264,
+  "olfactory_orns_source": 2639,
+  "olfactory_route_forward_selected_nonzero": 15,
+  "olfactory_route_forward_source_nonzero": 15,
+  "olfactory_route_motor_selected_nonzero": 9,
+  "olfactory_route_motor_source_nonzero": 9,
+  "paper": "Berg et al., Cell 2026, DOI 10.1016/j.cell.2026.08.015",
+  "population_ranges": {
+    "ascending": [
+      2893,
+      3767
+    ],
+    "descending": [
+      1579,
+      2893
+    ],
+    "gustatory": [
+      1241,
+      1303
+    ],
+    "mechanosensory": [
+      1303,
+      1579
+    ],
+    "motor": [
+      3767,
+      4475
+    ],
+    "olfactory": [
+      977,
+      1241
+    ],
+    "other": [
+      4475,
+      16669
+    ],
+    "visual": [
+      0,
+      977
+    ]
+  },
+  "reduction": "FBR-10-OLF2-MOTORROUTE",
   "retained_desc_to_intermediate_edges": 14016,
-  "retained_intermediate_to_motor_edges": 81698,
-  "retained_desc_to_intermediate_to_motor_paths": 187528,
   "retained_desc_to_intermediate_to_motor_by_role_paths": [
     [
       0,
@@ -1287,36 +1275,7 @@
       3111
     ]
   ],
-  "retained_sensor_to_desc_by_channel_role_contacts": [
-    [
-      0,
-      2513,
-      7908,
-      2815,
-      11329
-    ],
-    [
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    [
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    [
-      0,
-      3,
-      2,
-      14,
-      702
-    ]
-  ],
+  "retained_desc_to_intermediate_to_motor_paths": 187528,
   "retained_desc_to_motor_by_role_contacts": [
     [
       0,
@@ -1369,96 +1328,137 @@
       0
     ]
   ],
-  "direct_sensor_desc_full_graph_weight": [
+  "retained_desc_to_motor_contacts": 9117,
+  "retained_desc_to_motor_edges": 796,
+  "retained_intermediate_to_motor_edges": 81698,
+  "retained_sensor_to_desc_by_channel_role_contacts": [
     [
-      274412.0,
-      3310.0,
-      11480.0,
-      10800.0,
-      11329.0
+      0,
+      2513,
+      7908,
+      2815,
+      11329
     ],
     [
-      520.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0
+      0,
+      0,
+      0,
+      0,
+      0
     ],
     [
-      30901.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0
+      0,
+      0,
+      0,
+      0,
+      0
     ],
     [
-      171977.0,
-      5.0,
-      48.0,
-      14.0,
-      709.0
+      0,
+      3,
+      2,
+      14,
+      702
     ]
   ],
-  "direct_desc_motor_full_graph_weight": [
-    [
-      0.0,
-      34949.0,
-      13132.0,
-      0.0,
-      0.0,
-      0.0,
-      94.0,
-      172273.0
-    ],
-    [
-      0.0,
-      749.0,
-      22.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      2258.0
-    ],
-    [
-      0.0,
-      223.0,
-      18.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      5112.0
-    ],
-    [
-      0.0,
-      227.0,
-      39.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      375.0
-    ],
-    [
-      0.0,
-      0.0,
-      4.0,
-      0.0,
-      0.0,
-      0.0,
-      90.0,
-      0.0
-    ]
-  ],
-  "license": "CC-BY-4.0",
-  "download": "https://male-cns.janelia.org/download/",
-  "paper": "Berg et al., Cell 2026, DOI 10.1016/j.cell.2026.08.015",
-  "status": "RELEASE_CANDIDATE",
+  "retained_sensor_to_desc_contacts": 25286,
+  "retained_sensor_to_desc_edges": 1330,
+  "route_quota_requested": {
+    "route_escape": 900,
+    "route_forward": 650,
+    "route_halt": 700,
+    "route_olfactory_forward": 700,
+    "route_olfactory_motor": 350,
+    "route_sensorimotor": 450,
+    "route_turn": 600
+  },
+  "route_score_definition": "route-family topology scores combine measured published edges; generic forward uses all sensory modalities, while explicit olfactory preservation uses real ORN->candidate->forward-DN and ORN->candidate->motor support; scores are selection/readout metadata only and never create edges",
+  "route_score_selected_counts": {
+    "escape_high": 53,
+    "escape_nonzero": 1291,
+    "forward_nonzero": 2688,
+    "halt_nonzero": 16,
+    "turn_nonzero": 4092
+  },
+  "route_score_source_counts": {
+    "escape_nonzero": 1291,
+    "forward_nonzero": 4677,
+    "halt_nonzero": 2538,
+    "turn_nonzero": 8277
+  },
+  "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), including explicit retention of the four official ORNs with NULL type (bodyIds 242812, 242908, 488209, 956041) without assigning synthetic labels; all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
+  "sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf",
+  "source": "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/",
   "source_hashes": {
     "annotations": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
     "neurotransmitters": "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621",
     "weights": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
   },
-  "fbc103_sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"
+  "status": "RELEASE_CANDIDATE",
+  "superclass_counts_source": {
+    "ENS": 50,
+    "ascending_neuron": 1846,
+    "cb_efferent": 4,
+    "cb_endocrine": 72,
+    "cb_intrinsic": 32164,
+    "cb_motor": 107,
+    "cb_sensory": 4868,
+    "cb_sensory_tbc": 14,
+    "descending_neuron": 1314,
+    "descending_neuron_tbc": 2,
+    "efferent_ascending": 8,
+    "efferent_descending": 4,
+    "ol_intrinsic": 89403,
+    "ol_sensory": 6098,
+    "sensory_ascending": 537,
+    "sensory_ascending_tbc": 2,
+    "sensory_descending": 12,
+    "visual_centrifugal": 563,
+    "visual_projection": 9201,
+    "visual_projection_tbc": 2,
+    "vnc_efferent": 94,
+    "vnc_endocrine": 22,
+    "vnc_intrinsic": 13161,
+    "vnc_motor": 708,
+    "vnc_sensory": 6370,
+    "vnc_sensory_tbc": 36,
+    "vnc_tbc": 38
+  },
+  "superclass_extra_quota": {
+    "ENS": 0,
+    "ascending_neuron": 0,
+    "cb_efferent": 0,
+    "cb_endocrine": 0,
+    "cb_intrinsic": 6,
+    "cb_motor": 0,
+    "cb_sensory": 1,
+    "cb_sensory_tbc": 0,
+    "descending_neuron_tbc": 0,
+    "efferent_ascending": 0,
+    "efferent_descending": 0,
+    "ol_intrinsic": 21,
+    "ol_sensory": 1,
+    "sensory_ascending": 0,
+    "sensory_descending": 0,
+    "visual_centrifugal": 0,
+    "visual_projection": 2,
+    "vnc_efferent": 0,
+    "vnc_endocrine": 0,
+    "vnc_intrinsic": 2,
+    "vnc_sensory": 1,
+    "vnc_sensory_tbc": 0,
+    "vnc_tbc": 0
+  },
+  "untyped_orn_body_ids_retained": [
+    242812,
+    242908,
+    488209,
+    956041
+  ],
+  "untyped_orn_body_ids_source": [
+    242812,
+    242908,
+    488209,
+    956041
+  ]
 }

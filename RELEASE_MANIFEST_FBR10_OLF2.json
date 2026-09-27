@@ -1,10 +1,15 @@
 {
-  "release": "FlyBrain V1.18.5 / FBR-10-OLF2-MOTORROUTE",
+  "release": "FlyBrain V1.18.6 / FBR-10-OLF2-MOTORROUTE",
   "status": "source-baseline-for-CI-rebuild",
   "male_cns": "v1.0",
   "target_neurons": 16669,
   "reduction_id": "FBR-10-OLF2-MOTORROUTE",
-  "formats": {"structural": "FBC103", "dynamics": "FBD105", "vnc_semantics": "VNCSEM102"},
+  "formats": {
+    "structural": "FBC103",
+    "dynamics": "FBD105",
+    "vnc_semantics": "VNCSEM102",
+    "feeding_semantics": "FEEDSEM103"
+  },
   "source_hashes": {
     "annotations": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
     "neurotransmitters": "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621",
@@ -18,6 +23,7 @@
     "No direct approachAction-to-position connection",
     "Body movement is read only from measured retained VNC motor activity",
     "No synthetic connectome edges",
-    "Olfactory input is restricted to retained real MaleCNS ORNs"
+    "Olfactory input is restricted to retained real MaleCNS ORNs",
+    "Tarsal gustatory input is restricted to retained official `leg bristle` gustatory receptors; feeding motor output is read from retained official cb_motor types and never synthesized."
   ]
 }
