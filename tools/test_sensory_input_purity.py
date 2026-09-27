@@ -36,11 +36,13 @@ sense_end = MAIN.index('private fun populationRate', sense_start)
 sense = MAIN[sense_start:sense_end]
 assert 'setMappedSensoryRate(visualReceptorIndices' in sense
 assert 'gustatoryTarsalReceptorIndices' in sense
-assert 'setMappedSensoryRate(mechanosensoryReceptorIndices' in sense
+assert 'mechanosensorySide[i].toInt()' in sense and 'legActuator.proprioceptionLeft' in sense
 assert 'dangerPattern' not in sense
 assert 'externalRateHz' in MAIN
 assert 'SENSORY_MECH_GAIN' not in MAIN
 assert 'SENSORY_OLF_GAIN' not in MAIN
+assert 'mechanosensorySide[idx] = side.toByte()' in MAIN
+assert 'legActuator.proprioceptionGlobal' in MAIN
 
 # The map builder must be source-derived and conservative.
 for token in [

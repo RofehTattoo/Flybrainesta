@@ -609,7 +609,7 @@
   "edge_weight_definition": "raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer",
   "edges_retained": 2483165,
   "fbc103_sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf",
-  "flybrain_version": "1.18.7",
+  "flybrain_version": "1.19.0",
   "halt_role_counts": {
     "0": 16653,
     "1": 2,
