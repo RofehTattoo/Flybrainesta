@@ -7,7 +7,14 @@ BUILDER = (ROOT / 'tools/build_olfactory_input_map.py').read_text()
 FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
 
 assert 'olfactoryNeuronIndices' in MAIN
-assert 'setMappedSensoryRate(mechanosensoryReceptorIndices, wallSignal * 80f)' in MAIN
+# V1.19 closed-loop mechanosensory input must combine the retained
+# wall-proximity signal with the actuator's delayed proprioceptive state.
+assert 'val mechLeft = legActuator.proprioceptionLeft' in MAIN
+assert 'val mechRight = legActuator.proprioceptionRight' in MAIN
+assert 'val mechGlobal = legActuator.proprioceptionGlobal' in MAIN
+assert 'val rate = (wallSignal * 26f + local * 92f + mechGlobal * 18f)' in MAIN
+assert 'externalRateHz[i] = rate' in MAIN
+assert 'setMappedSensoryRate(mechanosensoryReceptorIndices, wallSignal * 80f)' not in MAIN
 assert 'olfactoryPopulationRate()' in MAIN
 assert 'mechanosensoryPopulationRate()' in MAIN
 assert 'for (i in OLF_START until OLF_END)' not in MAIN
