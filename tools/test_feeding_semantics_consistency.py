@@ -23,8 +23,8 @@ for token in ['"mn9"', '"mn4a"', '"mn6"', '"mn8"', '"mn11d"', '"mn11v"', '"cem"'
               '"cb_motor"', '"pm"']:
     assert token in FEED, token
 
-assert 'if (tag in 1..FEEDING_FUNCTION_INGESTION_CROP_ENTRY)' in MAIN
-assert 'functionCode !in 1..FEEDING_FUNCTION_INGESTION_CROP_ENTRY' in MAIN
+assert 'if (tag in 1..GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY)' in MAIN
+assert 'functionCode !in 1..GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY' in MAIN
 assert 'val newIngestionEpisode = ingestionNeural && !ingestionEpisodeLatched' in MAIN
 assert 'return if (newIngestionEpisode) 1f else 0f' in MAIN
 assert MAIN.count('memoryTrace =') == 3, 'ingestion readout must not double-count memoryTrace; reward is applied by learn()'

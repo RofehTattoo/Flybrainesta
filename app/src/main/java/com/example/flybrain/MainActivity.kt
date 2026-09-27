@@ -185,14 +185,14 @@ class MainActivity : Activity() {
         // FEEDSEM103 runtime capacities/thresholds. These are compile-time constants
         // declared before the arrays that use them, avoiding order-dependent field
         // initialization on Android.
-        private const val MAX_FEEDING_MOTOR_NEURONS = 128
-        private const val FEEDING_PROBOSCIS_NEURON_SPIKE_MIN = 1
-        private const val FEEDING_INGESTION_NEURON_SPIKE_MIN = 1
-        private const val FEEDING_TASTE_NEURON_SPIKE_MIN = 1
+        private val MAX_FEEDING_MOTOR_NEURONS = 128
+        private val FEEDING_PROBOSCIS_NEURON_SPIKE_MIN = 1
+        private val FEEDING_INGESTION_NEURON_SPIKE_MIN = 1
+        private val FEEDING_TASTE_NEURON_SPIKE_MIN = 1
         // Read-only temporal association window for the measured feeding route.
         // It allows delayed MN9/MN11/CEM spikes to be recognized as one neural
         // feeding episode without issuing any motor command or changing the graph.
-        private const val FEEDING_CONTEXT_WINDOW_SECONDS = 0.50f
+        private val FEEDING_CONTEXT_WINDOW_SECONDS = 0.50f
 
         // Reference-style neural dynamics (Shiu et al., Nature 2024):
         // v_rest = v_reset = -52 mV, threshold = -45 mV, tau_m = 20 ms,
@@ -1981,7 +1981,7 @@ class MainActivity : Activity() {
                 val i = feedingMotorIndices[k]
                 if (fired[i]) {
                     val tag = feedingFunctionalTag[i].toInt()
-                    if (tag in 1..FEEDING_FUNCTION_INGESTION_CROP_ENTRY) feedingFunctionSpikeEvents[tag]++
+                    if (tag in 1..GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY) feedingFunctionSpikeEvents[tag]++
                 }
             }
             for (i in DESC_START until DESC_END) {
@@ -2267,7 +2267,7 @@ class MainActivity : Activity() {
         }
 
         private fun feedingFunctionRateHz(functionCode: Int, dt: Float): Float {
-            if (functionCode !in 1..FEEDING_FUNCTION_INGESTION_CROP_ENTRY) return 0f
+            if (functionCode !in 1..GeneratedConnectomeMeta.FEEDING_FUNCTION_INGESTION_CROP_ENTRY) return 0f
             val total = feedingFunctionTotals[functionCode]
             if (total <= 0) return 0f
             return feedingFunctionSpikeEvents[functionCode].toFloat() / dt.coerceAtLeast(.001f) / total.toFloat()
