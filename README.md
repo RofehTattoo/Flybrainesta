@@ -1,4 +1,4 @@
-# FlyBrain — V1.18.6 / FBR-10-OLF2-MOTORROUTE
+# FlyBrain — V1.18.7 / FBR-10-OLF2-MOTORROUTE
 
 FlyBrain is an Android simulation built from the published MaleCNS v1.0 connectome of the male *Drosophila* central nervous system.
 

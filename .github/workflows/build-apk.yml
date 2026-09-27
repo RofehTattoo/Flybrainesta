@@ -38,6 +38,8 @@ jobs:
           python tools/test_olfactory_route_reduction.py
           python tools/test_phase2b_temporal_substepping.py
           python tools/test_sensory_sample_hold.py
+          python tools/test_v1187_legged_actuator.py
+          python tools/test_v1187_feeding_walkoff_gate.py
           python tools/test_sensory_input_purity.py
           python tools/test_vnc_motor_semantics_logic.py
           python tools/test_motor_role_semantics_consistency.py

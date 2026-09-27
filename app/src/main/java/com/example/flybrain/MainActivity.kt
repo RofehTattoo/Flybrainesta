@@ -216,6 +216,23 @@ class MainActivity : Activity() {
         // This is an actuator filter, not a sensory or action shortcut.
         private val MOTOR_ACTIVATION_TAU_SECONDS = 0.040f
 
+        // V1.18.7: mechanical decoder for the retained six-leg VNC output.
+        // These are actuator/calibration parameters, not behavior selectors:
+        // gait phase advances only while measured leg motor activity is present.
+        // The fixed tripod phase relation reflects the adult Drosophila
+        // modified-tripod walking biomechanics and is not a sensory shortcut.
+        private val LEG_COUNT = 6
+        private val LEG_RATE_REFERENCE_HZ = 12f
+        private val GAIT_MIN_HZ = 3.0f
+        private val GAIT_MAX_HZ = 7.5f
+        private val LEG_STANCE_DUTY = 0.62f
+        private val LEG_WALK_THRESHOLD = 0.025f
+        private val WALKOFF_RATE_REFERENCE_HZ = 10f
+        private val BODY_FORWARD_SPEED_MAX = 0.018f
+        private val BODY_LATERAL_SPEED_MAX = 0.004f
+        private val BODY_SPEED_TAU_SECONDS = 0.075f
+        private val BODY_YAW_TAU_SECONDS = 0.090f
+
         private val VIS_START = GeneratedConnectomeMeta.VIS_START
         private val VIS_END = GeneratedConnectomeMeta.VIS_END
         private val OLF_START = GeneratedConnectomeMeta.OLF_START
@@ -367,6 +384,21 @@ class MainActivity : Activity() {
         // 1=FG walk-OFF, 2=BB walk-OFF, 3=BRK VNC brake.
         private val haltRole = ByteArray(N)
         private val nodeSide = ByteArray(N)
+        // V1.18.7: official VNC motor `subclass` decoded at runtime into the
+        // six anatomical leg groups. Values: 1=LF, 2=LM, 3=LH,
+        // 4=RF, 5=RM, 6=RH. The source remains the official semantics asset.
+        private val motorLegGroup = ByteArray(N)
+        private val legGroupTotals = IntArray(LEG_COUNT)
+        private val legGroupActivation = FloatArray(LEG_COUNT)
+        private val legGroupRateHz = FloatArray(LEG_COUNT)
+        private var haltWalkOffTotal = 0
+        private var haltBrakeTotal = 0
+        // Mechanical body state. Position/heading remain readouts of actuator
+        // output; no stimulus/action variable writes these values.
+        private var gaitPhase = 0f
+        private var bodyLateralSpeed = 0f
+        private var yawRate = 0f
+        private var walkOffActivationState = 0f
         // Connectome-derived two-hop route metadata: descriptive weights for
         // forward, turning and escape-related paths. These never create edges.
         private val routeForward = FloatArray(N)
@@ -695,6 +727,12 @@ class MainActivity : Activity() {
             flySpeed = 0f
             flightFactor = 0f
             flightPhase = 0f
+            gaitPhase = 0f
+            bodyLateralSpeed = 0f
+            yawRate = 0f
+            walkOffActivationState = 0f
+            java.util.Arrays.fill(legGroupActivation, 0f)
+            java.util.Arrays.fill(legGroupRateHz, 0f)
             jumpActivityCacheValue = 0f
             setFoodPosition(.76f, .35f)
             tasteContactLatched = false
@@ -1169,7 +1207,7 @@ class MainActivity : Activity() {
             if (rows.size != (MOTOR_END - MOTOR_START)) {
                 throw IllegalStateException("VNCSEM filas=${rows.size} esperado=${MOTOR_END - MOTOR_START}")
             }
-            val byBody = HashMap<Long, Triple<Int, Int, Int>>(rows.size * 2)
+            val byBody = HashMap<Long, IntArray>(rows.size * 2)
             for (line in rows) {
                 val c = line.split('\t')
                 if (c.size != 14) throw IllegalStateException("VNCSEM esquema inesperado: ${c.size} columnas")
@@ -1200,14 +1238,25 @@ class MainActivity : Activity() {
                 if (role !in GeneratedConnectomeMeta.MOTOR_LEG..GeneratedConnectomeMeta.MOTOR_OTHER) {
                     throw IllegalStateException("VNCSEM rol anatómico inválido=$role bodyId=$id")
                 }
-                byBody[id] = Triple(role, fn, side)
+                val legGroup = if (role == GeneratedConnectomeMeta.MOTOR_LEG) {
+                    when (c[3].trim().lowercase()) {
+                        "fl" -> if (side < 0) 1 else 4
+                        "ml" -> if (side < 0) 2 else 5
+                        "hl" -> if (side < 0) 3 else 6
+                        else -> throw IllegalStateException(
+                            "VNCSEM leg subclass inválido=${c[3]} bodyId=$id side=${c[4]}"
+                        )
+                    }
+                } else 0
+                byBody[id] = intArrayOf(role, fn, side, legGroup)
             }
             if (byBody.size != rows.size) throw IllegalStateException("VNCSEM bodyId duplicado")
             for (i in MOTOR_START until MOTOR_END) {
                 val pair = byBody[bodyId[i]] ?: throw IllegalStateException("VNCSEM falta bodyId=${bodyId[i]}")
-                motorRole[i] = pair.first.toByte()
-                motorFunctionalTag[i] = pair.second.toByte()
-                nodeSide[i] = pair.third.toByte()
+                motorRole[i] = pair[0].toByte()
+                motorFunctionalTag[i] = pair[1].toByte()
+                nodeSide[i] = pair[2].toByte()
+                motorLegGroup[i] = pair[3].toByte()
             }
         }
 
@@ -1360,6 +1409,16 @@ class MainActivity : Activity() {
                     }
                 }
 
+                haltWalkOffTotal = 0
+                haltBrakeTotal = 0
+                for (i in 0 until N) {
+                    when (haltRole[i].toInt()) {
+                        1, 2 -> haltWalkOffTotal++
+                        3 -> haltBrakeTotal++
+                    }
+                }
+                if (haltWalkOffTotal <= 0) throw IllegalStateException("no retained walk-OFF halt neurons")
+
                 loadSensoryInputMap()
                 loadOlfactoryInputMap()
                 loadVncMotorSemantics()
@@ -1370,6 +1429,7 @@ class MainActivity : Activity() {
                 // The runtime never invents a role: every neuron in VMOTOR is already
                 // a published/curated vnc_motor entry with one stored role code.
                 java.util.Arrays.fill(motorRoleTotals, 0)
+                java.util.Arrays.fill(legGroupTotals, 0)
                 legLeftTotal = 0
                 legRightTotal = 0
                 legUnknownSideTotal = 0
@@ -1384,10 +1444,17 @@ class MainActivity : Activity() {
                     }
                     motorRoleTotals[role]++
                     when (role) {
-                        GeneratedConnectomeMeta.MOTOR_LEG -> when (nodeSide[i].toInt()) {
-                            -1 -> legLeftTotal++
-                            1 -> legRightTotal++
-                            else -> legUnknownSideTotal++
+                        GeneratedConnectomeMeta.MOTOR_LEG -> {
+                            when (nodeSide[i].toInt()) {
+                                -1 -> legLeftTotal++
+                                1 -> legRightTotal++
+                                else -> legUnknownSideTotal++
+                            }
+                            val group = motorLegGroup[i].toInt()
+                            if (group !in 1..LEG_COUNT) {
+                                throw IllegalStateException("grupo de pierna invalido en nodo=$i bodyId=${bodyId[i]}")
+                            }
+                            legGroupTotals[group - 1]++
                         }
                         GeneratedConnectomeMeta.MOTOR_WING -> when (nodeSide[i].toInt()) {
                             -1 -> wingLeftTotal++
@@ -1404,6 +1471,11 @@ class MainActivity : Activity() {
                 if (motorRoleTotals.sum() != (MOTOR_END - MOTOR_START)) {
                     throw IllegalStateException(
                         "censo VNC motor inconsistente: ${motorRoleTotals.sum()} != ${MOTOR_END - MOTOR_START}"
+                    )
+                }
+                if (legGroupTotals.sum() != legLeftTotal + legRightTotal) {
+                    throw IllegalStateException(
+                        "censo grupos de pierna inconsistente: ${legGroupTotals.sum()} != ${legLeftTotal + legRightTotal}"
                     )
                 }
 
@@ -2337,7 +2409,7 @@ class MainActivity : Activity() {
             proboscisNeuralNow = proboscisNeural
             ingestionNeuralNow = ingestionNeural
             haltDuringFoodContactNow = tasteNeural &&
-                (haltWalkOffSpikeEventsFrame + haltBrakeSpikeEventsFrame) > 0
+                haltWalkOffSpikeEventsFrame > 0
 
             if (tasteNeural && !tasteContactLatched) tasteContactEpisodes++
             tasteContactLatched = tasteNeural
@@ -2532,9 +2604,8 @@ class MainActivity : Activity() {
             if (motorCount <= 0) return
 
             // Motor output is read from the curated VNC motor neurons only.
-            // The role (leg/wing/haltere/neck/abdomen/jump) comes from the
-            // published motor annotations generated by build_connectome.py;
-            // neuron indices are never used to invent a motor function.
+            // The anatomical role and six leg groups come from official MaleCNS
+            // semantics; no neuron index is used to invent a motor function.
             var leftLeg = 0f
             var rightLeg = 0f
             var legActivity = 0f
@@ -2547,7 +2618,6 @@ class MainActivity : Activity() {
             var leftLegActive = 0
             var rightLegActive = 0
             var unknownLegActive = 0
-            var legSpikeEvents = 0
             var leftLegSpikeEvents = 0
             var rightLegSpikeEvents = 0
             var unknownLegSpikeEvents = 0
@@ -2575,6 +2645,7 @@ class MainActivity : Activity() {
             var otherDriveSigned = 0f
             var leftLegDrive = 0f
             var rightLegDrive = 0f
+            val legGroupSpikeEvents = IntArray(LEG_COUNT)
 
             for (i in MOTOR_START until MOTOR_END) {
                 val mi = i - MOTOR_START
@@ -2596,18 +2667,19 @@ class MainActivity : Activity() {
                     GeneratedConnectomeMeta.MOTOR_HALTERE -> haltereDriveSigned += drive
                     GeneratedConnectomeMeta.MOTOR_OTHER -> otherDriveSigned += drive
                 }
-                val motorSpikes = motorSubstepSpikeCounts[i - MOTOR_START]
+                val motorSpikes = motorSubstepSpikeCounts[mi]
                 if (motorSpikes <= 0) continue
                 allMotorSpikeEvents += motorSpikes
                 when (motorRole[i].toInt()) {
                     GeneratedConnectomeMeta.MOTOR_LEG -> {
                         legActive++
-                        legSpikeEvents += motorSpikes
                         when (nodeSide[i].toInt()) {
                             -1 -> { leftLegActive++; leftLegSpikeEvents += motorSpikes }
                             1 -> { rightLegActive++; rightLegSpikeEvents += motorSpikes }
                             else -> { unknownLegActive++; unknownLegSpikeEvents += motorSpikes }
                         }
+                        val group = motorLegGroup[i].toInt()
+                        if (group in 1..LEG_COUNT) legGroupSpikeEvents[group - 1] += motorSpikes
                     }
                     GeneratedConnectomeMeta.MOTOR_WING -> { wingActive++; wingSpikeEvents += motorSpikes }
                     GeneratedConnectomeMeta.MOTOR_NECK -> { neckActive++; neckSpikeEvents += motorSpikes }
@@ -2627,11 +2699,8 @@ class MainActivity : Activity() {
             val abdomenTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_ABDOMEN]
             val haltereTotal = motorRoleTotals[GeneratedConnectomeMeta.MOTOR_HALTERE]
             val jumpTotal = jumpLeftTotal + jumpRightTotal
-            // Body readout is now based on mean spike rate across each anatomical
-            // motor population, not a boolean "fired at least once in 20 ms".
-            // One spike in a 20 ms frame corresponds to 50 Hz.
             val invFrame = 1f / dt.coerceAtLeast(.001f)
-            val legRateHz = if (legTotal == 0) 0f else legSpikeEvents * invFrame / legTotal.toFloat()
+            val legRateHz = if (legTotal == 0) 0f else (leftLegSpikeEvents + rightLegSpikeEvents + unknownLegSpikeEvents) * invFrame / legTotal.toFloat()
             val leftLegRateHz = if (legLeftTotal == 0) 0f else leftLegSpikeEvents * invFrame / legLeftTotal.toFloat()
             val rightLegRateHz = if (legRightTotal == 0) 0f else rightLegSpikeEvents * invFrame / legRightTotal.toFloat()
             val unknownLegRateHz = if (legUnknownSideTotal == 0) 0f else unknownLegSpikeEvents * invFrame / legUnknownSideTotal.toFloat()
@@ -2641,12 +2710,14 @@ class MainActivity : Activity() {
             val abdomenRateHz = if (abdomenTotal == 0) 0f else abdomenSpikeEvents * invFrame / abdomenTotal.toFloat()
             val haltereRateHz = if (haltereTotal == 0) 0f else haltereSpikeEvents * invFrame / haltereTotal.toFloat()
             val otherRateHz = if (motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER] == 0) 0f else motorOtherSpikeEvents * invFrame / motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER].toFloat()
-            // Raw firing rates are the neural readout. The actuator states are
-            // a short physical integration of that measured spike output, avoiding
-            // a single-spike = instantaneous-force discontinuity every 20 ms.
-            val rawLegActivity = (legRateHz / 50f).coerceIn(0f, 1f)
-            val rawLeftLeg = (leftLegRateHz / 50f).coerceIn(0f, 1f)
-            val rawRightLeg = (rightLegRateHz / 50f).coerceIn(0f, 1f)
+
+            // Retain the public aggregate motor readouts for diagnostics/action
+            // selection, but do not use a whole-leg population mean as the body
+            // kinematics. The body receives six anatomically grouped actuator
+            // signals below.
+            val rawLegActivity = (legRateHz / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
+            val rawLeftLeg = (leftLegRateHz / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
+            val rawRightLeg = (rightLegRateHz / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
             val rawWingActivity = (wingRateHz / 50f).coerceIn(0f, 1f)
             val rawNeckActivity = (neckRateHz / 50f).coerceIn(0f, 1f)
             val rawJumpActivity = (jumpRateHz / 50f).coerceIn(0f, 1f)
@@ -2660,9 +2731,25 @@ class MainActivity : Activity() {
             jumpActivationState = relaxMotorActivation(jumpActivationState, rawJumpActivity, dt)
             abdomenActivationState = relaxMotorActivation(abdomenActivationState, rawAbdomenActivity, dt)
 
-            // Public activity variables remain the measured, actuator-filtered
-            // outputs. The raw spike counters and top-neuron telemetry remain the
-            // neural evidence used for auditing.
+            for (g in 0 until LEG_COUNT) {
+                val total = legGroupTotals[g]
+                val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
+                legGroupRateHz[g] = rate
+                val target = (rate / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
+                legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
+            }
+
+            // Walk-OFF is a measured neural actuator gate. It is based only on
+            // actual spikes of the retained FG/BB populations; taste/food is not
+            // consulted here. This is the mechanical consequence of a real
+            // inhibitory halting output, not `if (food) speed = 0`.
+            val walkOffRateHz = if (haltWalkOffTotal <= 0) 0f else {
+                haltWalkOffSpikeEventsFrame * invFrame / haltWalkOffTotal.toFloat()
+            }
+            val walkOffTarget = (walkOffRateHz / WALKOFF_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
+            walkOffActivationState = relaxMotorActivation(walkOffActivationState, walkOffTarget, dt)
+            val walkOffGate = (1f - .94f * walkOffActivationState).coerceIn(0f, 1f)
+
             legActivity = legActivationState
             leftLeg = leftLegActivationState
             rightLeg = rightLegActivationState
@@ -2686,7 +2773,6 @@ class MainActivity : Activity() {
             otherMotorDriveSignedCache = if (motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER] == 0) 0f else otherDriveSigned / motorRoleTotals[GeneratedConnectomeMeta.MOTOR_OTHER].toFloat()
             leftLegDriveSignedCache = if (legLeftTotal == 0) 0f else leftLegDrive / legLeftTotal.toFloat()
             rightLegDriveSignedCache = if (legRightTotal == 0) 0f else rightLegDrive / legRightTotal.toFloat()
-            @Suppress("UNUSED_VARIABLE") val retainedUnknownLegRateHz = unknownLegRateHz
 
             legActiveCache = legActive
             leftLegActiveCache = leftLegActive
@@ -2696,74 +2782,76 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.13: behavioural pause/sleep evidence is derived from actual VNC
-            // motor output. No random timer declares a pause. A pause starts only
-            // after the body has genuinely become nearly immobile.
-            // V1.13: locomotion is a physical readout. Neural leg activity is kept
-            // as a diagnostic but cannot by itself declare that the body moved.
-            // Pause/homeostasis evidence is based on the measured body state, not
-            // on a count of firing leg neurons.
-            val bodySpeed = physicalSpeed
-            val wasActuallyMoving = physicalMovementMemory > .02f
-            if (bodySpeed <= 0.00035f) {
-                inactivityContinuous += dt
-            } else {
-                if (pauseDetected) lastPauseDuration = inactivityContinuous
-                inactivityContinuous = 0f
+            // V1.18.7: gait phase is a motor-triggered mechanical integration.
+            // It cannot advance in the absence of retained leg motor output,
+            // which removes the previous continuous point-mass glide.
+            var effectiveLegSum = 0f
+            var stanceSum = 0f
+            var leftStance = 0f
+            var rightStance = 0f
+            for (g in 0 until LEG_COUNT) {
+                val a = (legGroupActivation[g] * walkOffGate).coerceIn(0f, 1f)
+                effectiveLegSum += a
+                val cycle = ((gaitPhase / (Math.PI * 2.0).toFloat()) + if ((g and 1) == 0) 0f else .5f).let {
+                    var x = it % 1f
+                    if (x < 0f) x += 1f
+                    x
+                }
+                val stance = if (cycle < LEG_STANCE_DUTY) {
+                    // Strongest force at early stance, fading toward lift-off.
+                    (0.35f + 0.65f * (1f - cycle / LEG_STANCE_DUTY)).coerceIn(0f, 1f)
+                } else 0.03f
+                val support = a * stance
+                stanceSum += support
+                if (g < 3) leftStance += support else rightStance += support
             }
-            val wasPause = pauseDetected
-            val wasStop = stopDetected
-            // 250 ms is the operational stopping-bout threshold used in recent
-            // connectome-informed halting experiments; >1 s is also widely used
-            // as a pause criterion in free-walking assays.
-            pauseDetected = inactivityContinuous >= .25f && wasActuallyMoving
-            stopDetected = inactivityContinuous >= 1.0f && wasActuallyMoving
-            pauseTimer = if (pauseDetected) inactivityContinuous else 0f
-            if (!wasPause && pauseDetected) pauseCount++
-            if (!wasStop && stopDetected) {
-                // A stop is a behavioral event; it is not a neural command.
+            val gaitDrive = (effectiveLegSum / LEG_COUNT.toFloat()).coerceIn(0f, 1f)
+            if (gaitDrive > LEG_WALK_THRESHOLD) {
+                val gaitHz = (GAIT_MIN_HZ + (GAIT_MAX_HZ - GAIT_MIN_HZ) * gaitDrive).coerceIn(GAIT_MIN_HZ, GAIT_MAX_HZ)
+                gaitPhase += (Math.PI * 2.0).toFloat() * gaitHz * dt
+                val twoPi = (Math.PI * 2.0).toFloat()
+                while (gaitPhase >= twoPi) gaitPhase -= twoPi
             }
 
-            // Body mechanics are deliberately simple, but every locomotor command
-            // originates from measured VNC motor activity. Left/right asymmetry in
-            // leg and neck output changes heading; leg output supplies walking force.
-            // Yaw is driven only by the *difference* between side-resolved leg
-            // motor outputs. Aggregate neck activity has no left/right sign and
-            // therefore must not be added as a constant positive steering term.
-            // Do not inject random yaw here: turn direction must remain traceable
-            // to the measured VNC motor output for causal validation.
+            val supportDrive = (stanceSum / 3f).coerceIn(0f, 1f)
+            val supportBalance = ((rightStance - leftStance) / (stanceSum + .001f)).coerceIn(-1f, 1f)
+            val targetForwardSpeed = (BODY_FORWARD_SPEED_MAX * supportDrive).coerceIn(0f, BODY_FORWARD_SPEED_MAX)
+            val targetLateralSpeed = (BODY_LATERAL_SPEED_MAX * supportBalance).coerceIn(-BODY_LATERAL_SPEED_MAX, BODY_LATERAL_SPEED_MAX)
+            val speedAlpha = (1f - exp((-dt / BODY_SPEED_TAU_SECONDS).toDouble()).toFloat()).coerceIn(0f, 1f)
+            flySpeed += (targetForwardSpeed - flySpeed) * speedAlpha
+            bodyLateralSpeed += (targetLateralSpeed - bodyLateralSpeed) * speedAlpha
+
+            // Steering remains strictly causal: only left-right leg motor
+            // imbalance drives yaw. The previous random exploratory turn is gone.
             val rawTurn = (rightLeg - leftLeg) * 1.55f
-            // Estimate and remove only a slowly varying resting offset. This is
-            // active only when the body is physically quiescent; during locomotion
-            // the measured neural differential is preserved without random drive.
-            val bodyQuiescent = physicalSpeed < .00035f && legActivity < .01f
+            val bodyQuiescent = flySpeed < .00035f && gaitDrive < .01f
             if (bodyQuiescent) {
                 baselineTurnBias += (rawTurn - baselineTurnBias) * (1f - exp((-dt / 2.5f).toDouble()).toFloat())
             } else {
                 baselineTurnBias *= exp((-dt / 5.0f).toDouble()).toFloat()
             }
             val turn = rawTurn - baselineTurnBias * .72f
-            // V1.06 movement: translation is still generated exclusively from
-            // measured VNC motor neurons. Leg MN activity supplies walking force;
-            // wing/jump MN activity adds flight thrust. No stimulus or action score
-            // writes position directly.
-            // Physical force comes only from measured VNC motor-neuron output after
-            // the actuator time constant. No food/sensory/action variable enters here.
-            val recruitedLeg = legActivity.coerceAtLeast(0f)
-            val flightMotor = (wingActivity * .78f + jumpActivity * .22f).coerceIn(0f, 1f)
-            flightFactor += (flightMotor - flightFactor) * (1f - exp((-dt / .10f).toDouble()).toFloat())
-            val jumpImpulse = jumpActivity * .006f
-            val cmdSpeed = (recruitedLeg * .012f + flightMotor * .010f + jumpImpulse).coerceIn(-.002f, .018f)
-            heading += turn * dt * 3.6f
-            // Keep the internal angle bounded without changing its orientation.
-            // This avoids unbounded angle growth during long free-walking runs.
+            val yawAlpha = (1f - exp((-dt / BODY_YAW_TAU_SECONDS).toDouble()).toFloat()).coerceIn(0f, 1f)
+            yawRate += (turn * 3.6f - yawRate) * yawAlpha
+            heading += yawRate * dt
             val twoPi = (Math.PI * 2.0).toFloat()
             if (heading > Math.PI.toFloat()) heading -= twoPi
             if (heading < -Math.PI.toFloat()) heading += twoPi
-            val speedBlend = if (cmdSpeed < .00025f) .10f else .16f
-            flySpeed = (1f - speedBlend) * flySpeed + speedBlend * cmdSpeed
-            flyX += cos(heading) * flySpeed * dt * 60f
-            flyY += sin(heading) * flySpeed * dt * 60f
+
+            // Convert body-frame velocity to world velocity. Wings no longer add
+            // ground translation; they remain an independent mechanical output.
+            var worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
+            var worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
+
+            // Environmental wall contact is a physical constraint, not a bounced
+            // heading command. Project the blocked velocity onto the wall tangent.
+            if (flyX <= .055f && worldVx < 0f) worldVx = 0f
+            if (flyX >= .945f && worldVx > 0f) worldVx = 0f
+            if (flyY <= .10f && worldVy < 0f) worldVy = 0f
+            if (flyY >= .79f && worldVy > 0f) worldVy = 0f
+
+            flyX = (flyX + worldVx * dt * 60f).coerceIn(.055f, .945f)
+            flyY = (flyY + worldVy * dt * 60f).coerceIn(.10f, .79f)
 
             val dxPhysical = flyX - lastMotionX
             val dyPhysical = flyY - lastMotionY
@@ -2777,23 +2865,11 @@ class MainActivity : Activity() {
             lastMotionX = flyX
             lastMotionY = flyY
 
-            // Wing-driven flight adds only a small vertical lift/bob. It is gated
-            // by measured wing/jump motor activity, so ordinary walking does not
-            // magically become flight.
-            flightPhase += dt * (10f + 22f * flightFactor)
-            if (flightFactor > .05f) {
-                flyY += sin(flightPhase * (Math.PI.toFloat() * 2f)) * .00065f * flightFactor * dt * 60f
-            }
-
-            if (flyX < .055f || flyX > .945f) {
-                heading = Math.PI.toFloat() - heading
-                flyX = flyX.coerceIn(.055f, .945f)
-            }
-            if (flyY < .10f || flyY > .79f) {
-                heading = -heading
-                flyY = flyY.coerceIn(.10f, .79f)
-            }
-
+            // Feeding/spatial actions do not directly command motion. Wing phase is
+            // likewise driven only by measured wing/jump motor output.
+            val flightTarget = (wingActivity * .65f + jumpActivity * .35f).coerceIn(0f, 1f)
+            flightFactor += (flightTarget - flightFactor) * (1f - exp((-dt / .10f).toDouble()).toFloat())
+            flightPhase += dt * (8f + 22f * flightFactor)
             // Feeding is a measured neural readout. The body actuator above remains
             // exclusively VNC-motor driven; this method never sets speed/heading
             // from food, taste, pause or feeding state. `updateFeedingNeuralReadout`
@@ -3010,7 +3086,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.18.6 · NEURAL FEEDING", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.18.7 · LEGGED LOCOMOTION", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)
@@ -3393,7 +3469,7 @@ class MainActivity : Activity() {
 
             // Transparent wings, posterior to the thorax, with real-looking veins.
             val wingVisual = max(wingActivityCache, jumpActivityCache())
-            val wingBeat = sin(wingBeatPhase) * (2.5f + 9f * wingVisual)
+            val wingBeat = sin(wingBeatPhase) * (10f * wingVisual)
             val wingAlpha = (62f + 38f * wingVisual).toInt().coerceIn(55, 105)
             val wingColor = Color.argb(wingAlpha, 175, 202, 218)
             val wingStroke = Color.argb(175, 92, 117, 132)
@@ -3425,23 +3501,42 @@ class MainActivity : Activity() {
             drawWing(-1f)
             drawWing(1f)
 
-            // Six legs: coxa, femur, tibia and a small tarsus tip.
+            // Six articulated legs. The phase is the motor-triggered mechanical
+            // tripod decoder; per-leg amplitude is measured from the corresponding
+            // official VNC motor subgroup. No independent animation clock drives it.
             paint.style = Paint.Style.STROKE
             paint.strokeCap = Paint.Cap.ROUND
-            paint.strokeWidth = 3.0f
-            paint.color = dark
-            val legData = arrayOf(
-                floatArrayOf(-20f, -18f, -46f, -38f, -68f, -54f),
-                floatArrayOf(-23f, 2f, -53f, 4f, -80f, -4f),
-                floatArrayOf(-19f, 23f, -43f, 46f, -68f, 57f),
-                floatArrayOf(20f, -18f, 46f, -38f, 68f, -54f),
-                floatArrayOf(23f, 2f, 53f, 4f, 80f, -4f),
-                floatArrayOf(19f, 23f, 43f, 46f, 68f, 57f)
+            val legBase = arrayOf(
+                floatArrayOf(-20f, -18f), floatArrayOf(-23f, 2f), floatArrayOf(-19f, 23f),
+                floatArrayOf(20f, -18f), floatArrayOf(23f, 2f), floatArrayOf(19f, 23f)
             )
-            for (v in legData) {
-                c.drawLine(px + v[0], py + v[1], px + v[2], py + v[3], paint)
-                c.drawLine(px + v[2], py + v[3], px + v[4], py + v[5], paint)
-                c.drawLine(px + v[4], py + v[5], px + v[4] + if (v[4] < 0f) -8f else 8f, py + v[5] + 2f, paint)
+            for (g in 0 until LEG_COUNT) {
+                val side = if (g < 3) -1f else 1f
+                val row = g % 3
+                var cycle = (gaitPhase / (Math.PI * 2.0).toFloat()) + if ((g and 1) == 0) 0f else .5f
+                cycle %= 1f
+                if (cycle < 0f) cycle += 1f
+                val swing = ((cycle - LEG_STANCE_DUTY) / (1f - LEG_STANCE_DUTY)).coerceIn(0f, 1f)
+                val stance = (1f - (cycle / LEG_STANCE_DUTY).coerceIn(0f, 1f)).coerceIn(0f, 1f)
+                val active = legGroupActivation[g] * (1f - .94f * walkOffActivationState)
+                val stride = if (swing > 0f) {
+                    -13f + 26f * swing
+                } else {
+                    13f - 26f * stance
+                }
+                val lift = if (swing > 0f) sin(Math.PI.toFloat() * swing) * 17f * active else 0f
+                val baseX = legBase[g][0]
+                val baseY = legBase[g][1]
+                val kneeX = baseX + side * (20f + 4f * active)
+                val kneeY = baseY + when (row) { 0 -> -17f; 1 -> 3f; else -> 20f } + (stride * .20f)
+                val footX = side * (66f + 8f * active)
+                val footY = when (row) { 0 -> -52f; 1 -> -2f; else -> 53f } + stride
+                val footYVisual = footY - lift
+                paint.strokeWidth = 2.3f + 1.0f * active
+                paint.color = if (active > LEG_WALK_THRESHOLD) dark else Color.rgb(76, 61, 52)
+                c.drawLine(px + baseX, py + baseY, px + kneeX, py + kneeY, paint)
+                c.drawLine(px + kneeX, py + kneeY, px + footX, py + footYVisual, paint)
+                c.drawLine(px + footX, py + footYVisual, px + footX + side * 8f, py + footYVisual + 2f, paint)
             }
 
             // Halteres behind the thorax.
