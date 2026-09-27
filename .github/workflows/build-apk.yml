@@ -86,9 +86,10 @@ jobs:
         run: python tools/validate_fbr10_dynamics.py
 
       - name: Audit retained gustatory-to-feeding topology
-        run: python tools/test_gustatory_feeding_path_audit.py \
-          --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
-          --fbc103 app/src/main/res/raw/malecns_reduced.bin
+        run: |
+          python tools/test_gustatory_feeding_path_audit.py \
+            --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin
 
       - name: Validate dynamic motor recruitment coverage
         run: python tools/test_dynamic_motor_coverage.py
