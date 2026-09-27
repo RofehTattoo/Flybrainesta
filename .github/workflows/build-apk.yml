@@ -39,6 +39,7 @@ jobs:
           python tools/test_phase2b_temporal_substepping.py
           python tools/test_sensory_sample_hold.py
           python tools/test_v119_sensorimotor_closed_loop.py
+          python tools/test_v120_neuromuscular_embodiment.py
           python tools/test_v119_feeding_walkoff_gate.py
           python tools/test_sensory_input_purity.py
           python tools/test_vnc_motor_semantics_logic.py

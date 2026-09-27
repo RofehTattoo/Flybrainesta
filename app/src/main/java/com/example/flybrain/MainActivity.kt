@@ -216,7 +216,7 @@ class MainActivity : Activity() {
         // This is an actuator filter, not a sensory or action shortcut.
         private val MOTOR_ACTIVATION_TAU_SECONDS = 0.040f
 
-        // V1.19: six-leg motor output is decoded into the closed-loop mechanical actuator.
+        // V1.20: six leg-group firing rates drive a phase-free mechanical actuator.
         // These are actuator/calibration parameters, not behavior selectors:
         // gait phase advances only while measured leg motor activity is present.
         // The fixed tripod phase relation reflects the adult Drosophila
@@ -225,8 +225,7 @@ class MainActivity : Activity() {
         private val LEG_RATE_REFERENCE_HZ = 12f
         private val GAIT_MIN_HZ = 3.0f
         private val GAIT_MAX_HZ = 7.5f
-        private val LEG_STANCE_DUTY = 0.62f
-        private val LEG_WALK_THRESHOLD = 0.025f
+                private val LEG_WALK_THRESHOLD = 0.025f
         private val WALKOFF_RATE_REFERENCE_HZ = 10f
         private val BODY_FORWARD_SPEED_MAX = 0.018f
         private val BODY_LATERAL_SPEED_MAX = 0.004f
@@ -267,7 +266,7 @@ class MainActivity : Activity() {
         // V1.15.2 anatomical VNC semantics are loaded from the official-annotation-derived asset.
         // The FBC103 role byte remains frozen and is retained only for provenance/audit.
         private val motorFunctionalTag = ByteArray(N)
-        // V1.19: closed-loop six-leg sensorimotor actuator. It consumes only
+        // V1.20: phase-free six-leg sensorimotor actuator. It consumes only
         // measured LEG motor output + measured walk-OFF and returns mechanical
         // state for the next neural frame. It has no access to food/light/danger.
         private val legActuator = LeggedSensorimotorActuator()
@@ -398,16 +397,13 @@ class MainActivity : Activity() {
         // 1=FG walk-OFF, 2=BB walk-OFF, 3=BRK VNC brake.
         private val haltRole = ByteArray(N)
         private val nodeSide = ByteArray(N)
-        // V1.19: official VNC motor `subclass` is decoded at runtime into the
+        // V1.20: official VNC motor `subclass` is decoded at runtime into the
         // six anatomical leg groups. Values: 1=LF, 2=LM, 3=LH,
         // 4=RF, 5=RM, 6=RH. The source remains the official semantics asset.
         private val motorLegGroup = ByteArray(N)
         private val legGroupTotals = IntArray(LEG_COUNT)
-        private val legGroupActivation = FloatArray(LEG_COUNT)
+        // Per-frame neural output is passed through without baseline subtraction.
         private val legGroupRateHz = FloatArray(LEG_COUNT)
-        private val legBaselineRateHz = FloatArray(LEG_COUNT)
-        private val legPreviousRateHz = FloatArray(LEG_COUNT)
-        private var legBaselineReady = false
         private var haltWalkOffTotal = 0
         private var haltBrakeTotal = 0
         // Mechanical body state. Position/heading remain readouts of actuator
@@ -760,11 +756,7 @@ class MainActivity : Activity() {
             yawRate = 0f
             legActuator.reset()
             walkOffActivationState = 0f
-            java.util.Arrays.fill(legGroupActivation, 0f)
             java.util.Arrays.fill(legGroupRateHz, 0f)
-            java.util.Arrays.fill(legBaselineRateHz, 0f)
-            java.util.Arrays.fill(legPreviousRateHz, 0f)
-            legBaselineReady = false
             jumpActivityCacheValue = 0f
             setFoodPosition(.76f, .35f)
             tasteContactLatched = false
@@ -2848,35 +2840,13 @@ class MainActivity : Activity() {
             jumpActivationState = relaxMotorActivation(jumpActivationState, rawJumpActivity, dt)
             abdomenActivationState = relaxMotorActivation(abdomenActivationState, rawAbdomenActivity, dt)
 
-            // V1.19.1: separate tonic motor baseline from phasic locomotor output.
-            // A stable ~5-6 Hz rate is treated as motor tone; propulsion requires
-            // measured rate excess/rise above each leg's own recent baseline.
-            if (!legBaselineReady) {
-                for (g in 0 until LEG_COUNT) {
-                    val total = legGroupTotals[g]
-                    val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
-                    legBaselineRateHz[g] = rate
-                    legPreviousRateHz[g] = rate
-                    legGroupRateHz[g] = rate
-                    legGroupActivation[g] = 0f
-                }
-                legBaselineReady = true
-            } else {
-                for (g in 0 until LEG_COUNT) {
-                    val total = legGroupTotals[g]
-                    val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
-                    legGroupRateHz[g] = rate
-                    val baseline = legBaselineRateHz[g]
-                    val excess = (rate - baseline - 0.90f).coerceAtLeast(0f)
-                    val rise = (rate - legPreviousRateHz[g]).coerceAtLeast(0f)
-                    val burst = (excess / 5.0f * .82f + rise / 4.0f * .18f).coerceIn(0f, 1f)
-                    val target = burst
-                    legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
-                    val baseTau = if (burst < .18f) 4.5f else 14f
-                    val baseAlpha = (1f - exp((-dt / baseTau).toDouble()).toFloat()).coerceIn(0f, 1f)
-                    legBaselineRateHz[g] += (rate - legBaselineRateHz[g]) * baseAlpha
-                    legPreviousRateHz[g] = rate
-                }
+            // V1.20: preserve each anatomical leg group's measured firing rate
+            // at the neural-frame cadence. No adaptive baseline subtraction,
+            // burst detector, or synthetic gait frequency is inserted here.
+            for (g in 0 until LEG_COUNT) {
+                val total = legGroupTotals[g]
+                legGroupRateHz[g] = if (total <= 0) 0f
+                    else legGroupSpikeEvents[g] * invFrame / total.toFloat()
             }
 
             // Walk-OFF is a measured neural actuator gate. It is based only on
@@ -2922,15 +2892,15 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19: closed-loop sensorimotor body mechanics. The actuator sees
-            // only the six measured leg-MN subgroup activations and the measured
+            // V1.20: closed-loop sensorimotor body mechanics. The actuator sees
+            // only the six measured leg-MN subgroup firing rates and the measured
             // walk-OFF output. No sensory stimulus or action/goal variable enters.
-            legActuator.step(legGroupActivation, walkOffActivationState, dt)
+            legActuator.step(legGroupRateHz, walkOffActivationState, dt)
             flySpeed = legActuator.forwardVelocity
             bodyLateralSpeed = legActuator.lateralVelocity
             yawRate = legActuator.yawRate
 
-            // V1.19: yaw is part of the mechanical body state. Integrate the
+            // V1.20: yaw is part of the mechanical body state. Integrate the
             // actuator-produced angular velocity before resolving body velocity
             // into world coordinates. No stimulus/action variable writes heading.
             heading += yawRate * dt
@@ -3232,7 +3202,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.1 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.20.0 · NEUROMUSCULAR EMBODIMENT", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)

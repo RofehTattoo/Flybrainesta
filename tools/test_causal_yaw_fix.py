@@ -6,7 +6,7 @@ body_start = MAIN.index("private fun driveBody")
 body_end = MAIN.index("private fun runNeuralSimulation", body_start)
 body = MAIN[body_start:body_end]
 
-assert 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in body
+assert 'legActuator.step(legGroupRateHz, walkOffActivationState, dt)' in body
 assert 'legActuator.yawRate' in body
 assert 'supportBalance' in (ROOT / "app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt").read_text(encoding="utf-8")
 assert "neckActivity *" not in body
@@ -18,6 +18,6 @@ assert "heading = -heading" not in body
 
 META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.19.1"' in META
-assert "const val APP_VERSION_CODE = 142" in META
-print("V1.19.1 CAUSAL YAW / NO RANDOM STEERING AUDIT: PASS")
+assert 'const val APP_VERSION = "1.20.0"' in META
+assert "const val APP_VERSION_CODE = 143" in META
+print("V1.20.0 CAUSAL YAW / NO RANDOM STEERING AUDIT: PASS")
