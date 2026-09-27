@@ -287,6 +287,10 @@ class MainActivity : Activity() {
         private var foodTarsalContactFrame = 0f
         private var foodTarsalLeftContactFrame = 0f
         private var foodTarsalRightContactFrame = 0f
+        private var foodLabellarContactFrame = 0f
+        private var foodPharyngealContactFrame = 0f
+        private var foodAmount = 1f
+        private var lastFoodAmountRendered = 1f
         private var tasteContactLatched = false
         private var proboscisEpisodeLatched = false
         private var ingestionEpisodeLatched = false
@@ -320,6 +324,9 @@ class MainActivity : Activity() {
         // gustatory subtypes remain valid GUST neurons but are not silently
         // substituted for a tarsal receptor.
         private var gustatoryTarsalReceptorIndices = IntArray(0)
+        private var gustatoryLabellarReceptorIndices = IntArray(0)
+        private var gustatoryPharyngealReceptorIndices = IntArray(0)
+        private val gustatorySite = ByteArray(N) // 1=tarsal, 2=labellar, 3=pharyngeal, 0=other
         private val gustatorySide = ByteArray(N)
         private var mechanosensoryReceptorIndices = IntArray(0)
         // Official side evidence for retained mechanosensory/proprioceptive
@@ -398,6 +405,9 @@ class MainActivity : Activity() {
         private val legGroupTotals = IntArray(LEG_COUNT)
         private val legGroupActivation = FloatArray(LEG_COUNT)
         private val legGroupRateHz = FloatArray(LEG_COUNT)
+        private val legBaselineRateHz = FloatArray(LEG_COUNT)
+        private val legPreviousRateHz = FloatArray(LEG_COUNT)
+        private var legBaselineReady = false
         private var haltWalkOffTotal = 0
         private var haltBrakeTotal = 0
         // Mechanical body state. Position/heading remain readouts of actuator
@@ -462,6 +472,14 @@ class MainActivity : Activity() {
         private var foodY = .35f
         private val FOOD_TARSAL_CONTACT_RADIUS = .055f
         private val FOOD_GUSTATORY_SIGMA = .018f
+        private val FOOD_LABELLAR_CONTACT_RADIUS = .060f
+        private val FOOD_PHARYNGEAL_CONTACT_RADIUS = .038f
+        private val FOOD_INITIAL_AMOUNT = 1f
+        private val FOOD_INGESTION_STEP = .10f
+        private val BODY_MIN_X = .12f
+        private val BODY_MAX_X = .88f
+        private val BODY_MIN_Y = .16f
+        private val BODY_MAX_Y = .84f
         private var draggingStimulus = false
         private var lightX = .72f
         private var lightY = .72f
@@ -617,6 +635,7 @@ class MainActivity : Activity() {
         private var lastMotionX = .24f
         private var lastMotionY = .55f
         private var runtimeFault = ""
+        private var wallContactNow = false
 
         init {
             setBackgroundColor(Color.rgb(250, 250, 250))
@@ -645,6 +664,7 @@ class MainActivity : Activity() {
         private fun behaviorLabel(): String {
             val maxAction = max(approachAction, max(escapeAction, max(orientAction, max(exploreAction, brakeAction))))
             return when {
+                pauseDetected && !wallContactNow -> "PAUSA ESPONTÁNEA"
                 ingestionNeuralNow && foodOn -> "INGESTIÓN"
                 proboscisNeuralNow && foodOn -> "EXTENSIÓN PROBÓSCIDE"
                 haltDuringFoodContactNow && foodOn && brakeAction <= .16f -> "HALT · GUSTACIÓN"
@@ -665,7 +685,10 @@ class MainActivity : Activity() {
         fun selectAndToggle(s: Int) {
             if (selectedStimulus == s) {
                 when (s) {
-                    0 -> foodOn = !foodOn
+                    0 -> {
+                        foodOn = !foodOn
+                        if (foodOn && foodAmount <= 0f) foodAmount = FOOD_INITIAL_AMOUNT
+                    }
                     1 -> lightOn = !lightOn
                     else -> dangerOn = !dangerOn
                 }
@@ -739,6 +762,9 @@ class MainActivity : Activity() {
             walkOffActivationState = 0f
             java.util.Arrays.fill(legGroupActivation, 0f)
             java.util.Arrays.fill(legGroupRateHz, 0f)
+            java.util.Arrays.fill(legBaselineRateHz, 0f)
+            java.util.Arrays.fill(legPreviousRateHz, 0f)
+            legBaselineReady = false
             jumpActivityCacheValue = 0f
             setFoodPosition(.76f, .35f)
             tasteContactLatched = false
@@ -769,6 +795,10 @@ class MainActivity : Activity() {
             foodTarsalContactFrame = 0f
             foodTarsalLeftContactFrame = 0f
             foodTarsalRightContactFrame = 0f
+            foodLabellarContactFrame = 0f
+            foodPharyngealContactFrame = 0f
+            foodAmount = FOOD_INITIAL_AMOUNT
+            lastFoodAmountRendered = FOOD_INITIAL_AMOUNT
             tasteContactLatched = false
             proboscisEpisodeLatched = false
             ingestionEpisodeLatched = false
@@ -1006,7 +1036,7 @@ class MainActivity : Activity() {
         private fun loadSensoryInputMap() {
             val parsed = assets.open("sensory_input_map.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
                 val header = reader.readLine() ?: throw IllegalStateException("SENSMAP cabecera ausente")
-                val expectedHeader = "index\tbodyId\tmodality\tsideCode\tsideSource\ttype\tclass\tsuperclass\tsubclass\treceptorType\tflywireType"
+                val expectedHeader = "index\tbodyId\tmodality\tsideCode\tsideSource\ttype\tclass\tsuperclass\tsubclass\treceptorType\tflywireType\tgustSite"
                 if (header != expectedHeader) throw IllegalStateException("SENSMAP cabecera inesperada")
                 reader.readLines()
             }
@@ -1019,7 +1049,7 @@ class MainActivity : Activity() {
 
             for (line in parsed) {
                 val c = line.split('\t')
-                if (c.size != 11) throw IllegalStateException("SENSMAP esquema inesperado: ${c.size} columnas")
+                if (c.size != 12) throw IllegalStateException("SENSMAP esquema inesperado: ${c.size} columnas")
                 val idx = c[0].toInt()
                 val bid = c[1].toLong()
                 val modality = c[2]
@@ -1031,6 +1061,7 @@ class MainActivity : Activity() {
                 val subtype = c[8]
                 val receptorType = c[9]
                 val flywireType = c[10]
+                val gustSite = c[11].trim().uppercase()
 
                 if (idx !in 0 until N) throw IllegalStateException("SENSMAP index fuera de FBC103: $idx")
                 if (bodyId[idx] != bid) {
@@ -1062,6 +1093,13 @@ class MainActivity : Activity() {
                         }
                         gustatory.add(idx)
                         gustatorySide[idx] = side.toByte()
+                        gustatorySite[idx] = when (gustSite) {
+                            "TARSAL" -> 1
+                            "LABELLAR" -> 2
+                            "PHARYNGEAL" -> 3
+                            "OTHER" -> 0
+                            else -> throw IllegalStateException("SENSMAP GUST gustSite inválido bodyId=$bid site=$gustSite")
+                        }
                     }
                     "MECH" -> {
                         if (idx !in MECH_START until MECH_END) {
@@ -1089,15 +1127,12 @@ class MainActivity : Activity() {
             // Tarsal contact must map only to official gustatory `leg bristle`
             // receptors. This is the key distinction between contact taste and
             // labellar/pharyngeal gustatory populations.
-            gustatoryTarsalReceptorIndices = gustatory
-                .filter { idx -> parsed.any { line ->
-                    val c = line.split('\t')
-                    c[0].toInt() == idx && c[8].trim().equals("leg bristle", ignoreCase = true)
-                }}
-                .toIntArray().also { it.sort() }
-            if (gustatoryTarsalReceptorIndices.isEmpty()) {
-                throw IllegalStateException("SENSMAP sin gustación tarsal `leg bristle` retenida")
-            }
+            gustatoryTarsalReceptorIndices = gustatory.filter { gustatorySite[it].toInt() == 1 }.toIntArray().also { it.sort() }
+            gustatoryLabellarReceptorIndices = gustatory.filter { gustatorySite[it].toInt() == 2 }.toIntArray().also { it.sort() }
+            gustatoryPharyngealReceptorIndices = gustatory.filter { gustatorySite[it].toInt() == 3 }.toIntArray().also { it.sort() }
+            if (gustatoryTarsalReceptorIndices.isEmpty()) throw IllegalStateException("SENSMAP sin gustación tarsal retenida")
+            if (gustatoryLabellarReceptorIndices.isEmpty()) throw IllegalStateException("SENSMAP sin gustación labellar retenida")
+            if (gustatoryPharyngealReceptorIndices.isEmpty()) throw IllegalStateException("SENSMAP sin gustación pharyngeal retenida")
             mechanosensoryReceptorIndices = mechanosensory.toIntArray().also { it.sort() }
         }
 
@@ -1785,21 +1820,40 @@ class MainActivity : Activity() {
             foodTarsalLeftContactFrame = 0f
             foodTarsalRightContactFrame = 0f
             foodTarsalContactFrame = 0f
-            if (!foodOn) return
+            foodLabellarContactFrame = 0f
+            foodPharyngealContactFrame = 0f
+            if (!foodOn || foodAmount <= 0f) return
+
             val ca = cos(heading)
             val sa = sin(heading)
-            val forward = .030f
-            val halfSpacing = .022f
-            for (side in intArrayOf(-1, 1)) {
-                val tx = flyX + ca * forward - sa * (halfSpacing * side)
-                val ty = flyY + sa * forward + ca * (halfSpacing * side)
+            for (g in 0 until LeggedSensorimotorActuator.LEG_COUNT) {
+                val tx = flyX + ca * legActuator.footForward[g] - sa * legActuator.footLateral[g]
+                val ty = flyY + sa * legActuator.footForward[g] + ca * legActuator.footLateral[g]
                 val d = hypot(sx - tx, sy - ty)
-                val contact = if (d <= FOOD_TARSAL_CONTACT_RADIUS) {
-                    gaussian(d, FOOD_GUSTATORY_SIGMA)
-                } else 0f
-                if (side < 0) foodTarsalLeftContactFrame = contact else foodTarsalRightContactFrame = contact
+                if (d <= FOOD_TARSAL_CONTACT_RADIUS) {
+                    val q = gaussian(d, FOOD_GUSTATORY_SIGMA)
+                    if (g < 3) foodTarsalLeftContactFrame = max(foodTarsalLeftContactFrame, q)
+                    else foodTarsalRightContactFrame = max(foodTarsalRightContactFrame, q)
+                }
             }
             foodTarsalContactFrame = max(foodTarsalLeftContactFrame, foodTarsalRightContactFrame).coerceIn(0f, 1f)
+
+            // Distal labellum and internal pharynx samples are separate sensor
+            // interfaces. They do not command the proboscis or ingest food.
+            val mouthForward = .068f + .045f * proboscisExtension
+            val mouthX = flyX + ca * mouthForward
+            val mouthY = flyY + sa * mouthForward
+            val mouthD = hypot(sx - mouthX, sy - mouthY)
+            foodLabellarContactFrame = if (mouthD <= FOOD_LABELLAR_CONTACT_RADIUS) {
+                gaussian(mouthD, FOOD_GUSTATORY_SIGMA)
+            } else 0f
+            val pharynxForward = .040f + .028f * proboscisExtension
+            val pharynxX = flyX + ca * pharynxForward
+            val pharynxY = flyY + sa * pharynxForward
+            val pharynxD = hypot(sx - pharynxX, sy - pharynxY)
+            foodPharyngealContactFrame = if (pharynxD <= FOOD_PHARYNGEAL_CONTACT_RADIUS) {
+                gaussian(pharynxD, FOOD_GUSTATORY_SIGMA)
+            } else 0f
         }
 
         private fun tarsalFoodContactIntensity(sx: Float, sy: Float): Float {
@@ -1867,10 +1921,9 @@ class MainActivity : Activity() {
             // matching the event-based external stimulation used by the reference LIF model.
             java.util.Arrays.fill(externalRateHz, 0f)
             // Gustation is contact-gated: long-range food attraction belongs to
-            // olfaction. The two body-relative anterior tarsi are sampled once for
-            // the whole frame; this exact sample is then mapped only to retained
-            // primary gustatory `leg bristle` neurons. No other GUST subtype receives
-            // tarsal current.
+            // olfaction. The six actual foot tips plus labellar/pharyngeal mouth
+            // sensors are sampled once per neural frame and mapped only to their
+            // official retained gustatory site populations.
             sampleTarsalFoodContact(foodX, foodY)
             val tasteState = (1f - satiety * .35f).coerceIn(0f, 1f)
             val leftTasteRate = foodTarsalLeftContactFrame * 180f * tasteState
@@ -1897,29 +1950,64 @@ class MainActivity : Activity() {
                     else -> centerTasteRate
                 }.coerceIn(0f, 180f)
             }
+            val labellarRate = (foodLabellarContactFrame * 180f * tasteState).coerceIn(0f, 180f)
+            val pharyngealRate = (foodPharyngealContactFrame * 150f * tasteState).coerceIn(0f, 150f)
+            setMappedSensoryRate(gustatoryLabellarReceptorIndices, labellarRate)
+            setMappedSensoryRate(gustatoryPharyngealReceptorIndices, pharyngealRate)
 
-            val wall = min(min(flyX - .06f, .94f - flyX), min(flyY - .10f, .79f - flyY)).coerceIn(0f, .4f)
-            val wallSignal = (1f - wall / .4f).coerceIn(0f, 1f)
+            val dLeft = (flyX - BODY_MIN_X).coerceAtLeast(0f)
+            val dRight = (BODY_MAX_X - flyX).coerceAtLeast(0f)
+            val dTop = (flyY - BODY_MIN_Y).coerceAtLeast(0f)
+            val dBottom = (BODY_MAX_Y - flyY).coerceAtLeast(0f)
+            val range = .12f
+            val wallLeft = (1f - dLeft / range).coerceIn(0f, 1f)
+            val wallRight = (1f - dRight / range).coerceIn(0f, 1f)
+            val wallTop = (1f - dTop / range).coerceIn(0f, 1f)
+            val wallBottom = (1f - dBottom / range).coerceIn(0f, 1f)
+            val wall = min(min(dLeft, dRight), min(dTop, dBottom)).coerceIn(0f, range)
+            val wallSignal = max(max(wallLeft, wallRight), max(wallTop, wallBottom))
             wallDistanceCache = wall
             wallSignalCache = wallSignal
 
-            // V1.19 closed sensorimotor loop: the retained MECH population
-            // receives a one-frame-delayed encoding of the actual mechanical
-            // state produced by the six LEG motor groups. Wall proximity is kept
-            // as a smaller environmental mechanosensory component. This path
-            // never reads food/light/danger and never writes motor state.
+            // Resolve wall pressure in the fly's body frame instead of mapping
+            // screen-top pressure onto one biological side and screen-bottom onto
+            // the other.  This keeps left/right mechanosensory asymmetry tied to the
+            // animal's instantaneous orientation and avoids artificial oscillations
+            // at horizontal/vertical boundaries. The normals point from each wall
+            // into the arena; their dot-products with the body axes tell us whether
+            // a wall lies on the fly's left/right/front/rear side.
+            val fwdX = cos(heading)
+            val fwdY = sin(heading)
+            val rightX = -sin(heading)
+            val rightY = cos(heading)
+            var wallPressureLeft = 0f
+            var wallPressureRight = 0f
+            var wallPressureFront = 0f
+            var wallPressureRear = 0f
+            fun accumulateWallPressure(value: Float, nx: Float, ny: Float) {
+                if (value <= 0f) return
+                val rightProjection = nx * rightX + ny * rightY
+                val forwardProjection = nx * fwdX + ny * fwdY
+                wallPressureLeft = max(wallPressureLeft, value * rightProjection.coerceAtLeast(0f))
+                wallPressureRight = max(wallPressureRight, value * (-rightProjection).coerceAtLeast(0f))
+                wallPressureFront = max(wallPressureFront, value * forwardProjection.coerceAtLeast(0f))
+                wallPressureRear = max(wallPressureRear, value * (-forwardProjection).coerceAtLeast(0f))
+            }
+            accumulateWallPressure(wallLeft, 1f, 0f)
+            accumulateWallPressure(wallRight, -1f, 0f)
+            accumulateWallPressure(wallTop, 0f, 1f)
+            accumulateWallPressure(wallBottom, 0f, -1f)
+
             val mechLeft = legActuator.proprioceptionLeft
             val mechRight = legActuator.proprioceptionRight
             val mechGlobal = legActuator.proprioceptionGlobal
             for (i in mechanosensoryReceptorIndices) {
                 val local = when (mechanosensorySide[i].toInt()) {
-                    -1 -> mechLeft
-                    1 -> mechRight
-                    else -> mechGlobal
+                    -1 -> max(mechLeft, wallPressureLeft)
+                    1 -> max(mechRight, wallPressureRight)
+                    else -> max(mechGlobal, max(wallPressureFront, wallPressureRear))
                 }
-                val rate = (wallSignal * 26f + local * 92f + mechGlobal * 18f)
-                    .coerceIn(0f, 150f)
-                externalRateHz[i] = rate
+                externalRateHz[i] = (local * 110f + mechGlobal * 15f).coerceIn(0f, 150f)
             }
 
             lightDrive = lightIntensity.coerceIn(0f, 1f)
@@ -2371,8 +2459,8 @@ class MainActivity : Activity() {
         }
 
         private fun updateFeedingNeuralReadout(dt: Float): Float {
-            val tasteRateHz = if (gustatoryTarsalReceptorIndices.isEmpty()) 0f else {
-                tarsalGustatorySpikeEventsFrame.toFloat() / dt.coerceAtLeast(.001f) / gustatoryTarsalReceptorIndices.size.toFloat()
+            val tasteRateHz = if (gustatoryReceptorIndices.isEmpty()) 0f else {
+                gustatorySpikeEventsFrame.toFloat() / dt.coerceAtLeast(.001f) / gustatoryReceptorIndices.size.toFloat()
             }
             proboscisRostrumRateHz = feedingFunctionRateHz(GeneratedConnectomeMeta.FEEDING_FUNCTION_PROBOSCIS_ROSTRUM, dt)
             val rostrumRate = proboscisRostrumRateHz
@@ -2402,9 +2490,10 @@ class MainActivity : Activity() {
             val rostrumTarget = (rostrumRate / 50f).coerceIn(0f, 1f)
             proboscisExtension = relaxMotorActivation(proboscisExtension, rostrumTarget, dt)
 
-            val tasteNeural = foodOn &&
-                foodTarsalContactFrame >= .04f &&
-                tarsalGustatorySpikeEventsFrame >= FEEDING_TASTE_NEURON_SPIKE_MIN
+            val tasteContactPresent = foodOn &&
+                max(foodTarsalContactFrame, max(foodLabellarContactFrame, foodPharyngealContactFrame)) >= .04f
+            val tasteNeural = tasteContactPresent &&
+                gustatorySpikeEventsFrame >= FEEDING_TASTE_NEURON_SPIKE_MIN
 
             // The biological route is multilayered, so the motor-neuron outputs
             // need not peak in the exact same 20 ms public frame as the first
@@ -2426,6 +2515,8 @@ class MainActivity : Activity() {
             if (!foodOn) proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
             val proboscisContextActive = proboscisContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS
             val ingestionNeural = foodOn &&
+                foodPharyngealContactFrame >= .04f &&
+                gustatorySpikeEventsFrame >= FEEDING_TASTE_NEURON_SPIKE_MIN &&
                 tasteContextActive &&
                 proboscisContextActive &&
                 ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN
@@ -2449,6 +2540,7 @@ class MainActivity : Activity() {
             if (newIngestionEpisode) {
                 ingestionEvents++
                 satiety = min(1f, satiety + .24f)
+                foodAmount = (foodAmount - FOOD_INGESTION_STEP).coerceAtLeast(0f)
             }
             ingestionEpisodeLatched = ingestionNeural
 
@@ -2756,12 +2848,35 @@ class MainActivity : Activity() {
             jumpActivationState = relaxMotorActivation(jumpActivationState, rawJumpActivity, dt)
             abdomenActivationState = relaxMotorActivation(abdomenActivationState, rawAbdomenActivity, dt)
 
-            for (g in 0 until LEG_COUNT) {
-                val total = legGroupTotals[g]
-                val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
-                legGroupRateHz[g] = rate
-                val target = (rate / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
-                legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
+            // V1.19.1: separate tonic motor baseline from phasic locomotor output.
+            // A stable ~5-6 Hz rate is treated as motor tone; propulsion requires
+            // measured rate excess/rise above each leg's own recent baseline.
+            if (!legBaselineReady) {
+                for (g in 0 until LEG_COUNT) {
+                    val total = legGroupTotals[g]
+                    val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
+                    legBaselineRateHz[g] = rate
+                    legPreviousRateHz[g] = rate
+                    legGroupRateHz[g] = rate
+                    legGroupActivation[g] = 0f
+                }
+                legBaselineReady = true
+            } else {
+                for (g in 0 until LEG_COUNT) {
+                    val total = legGroupTotals[g]
+                    val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
+                    legGroupRateHz[g] = rate
+                    val baseline = legBaselineRateHz[g]
+                    val excess = (rate - baseline - 0.90f).coerceAtLeast(0f)
+                    val rise = (rate - legPreviousRateHz[g]).coerceAtLeast(0f)
+                    val burst = (excess / 5.0f * .82f + rise / 4.0f * .18f).coerceIn(0f, 1f)
+                    val target = burst
+                    legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
+                    val baseTau = if (burst < .18f) 4.5f else 14f
+                    val baseAlpha = (1f - exp((-dt / baseTau).toDouble()).toFloat()).coerceIn(0f, 1f)
+                    legBaselineRateHz[g] += (rate - legBaselineRateHz[g]) * baseAlpha
+                    legPreviousRateHz[g] = rate
+                }
             }
 
             // Walk-OFF is a measured neural actuator gate. It is based only on
@@ -2826,21 +2941,40 @@ class MainActivity : Activity() {
             var worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
             var worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
 
-            // Environmental wall contact is a physical constraint, not a bounced
-            // heading command. Project the blocked body velocity onto the wall.
-            if (flyX <= .055f && worldVx < 0f) worldVx = 0f
-            if (flyX >= .945f && worldVx > 0f) worldVx = 0f
-            if (flyY <= .10f && worldVy < 0f) worldVy = 0f
-            if (flyY >= .79f && worldVy > 0f) worldVy = 0f
-
-            // flySpeed/bodyLateralSpeed are normalised arena units per second in
-            // V1.19. Do not multiply by display FPS or screen refresh rate.
-            flyX = (flyX + worldVx * dt).coerceIn(.055f, .945f)
-            flyY = (flyY + worldVy * dt).coerceIn(.10f, .79f)
+            // Physical wall envelope. The constraint feeds back into the actuator;
+            // there is no heading reflection/bounce.
+            wallContactNow = false
+            var wallNx = 0f
+            var wallNy = 0f
+            val predictedX = flyX + worldVx * dt
+            val predictedY = flyY + worldVy * dt
+            if (predictedX < BODY_MIN_X && worldVx < 0f) { wallContactNow = true; wallNx += 1f }
+            if (predictedX > BODY_MAX_X && worldVx > 0f) { wallContactNow = true; wallNx -= 1f }
+            if (predictedY < BODY_MIN_Y && worldVy < 0f) { wallContactNow = true; wallNy += 1f }
+            if (predictedY > BODY_MAX_Y && worldVy > 0f) { wallContactNow = true; wallNy -= 1f }
+            if (flyX <= BODY_MIN_X + .006f) { wallContactNow = true; wallNx += 1f }
+            if (flyX >= BODY_MAX_X - .006f) { wallContactNow = true; wallNx -= 1f }
+            if (flyY <= BODY_MIN_Y + .006f) { wallContactNow = true; wallNy += 1f }
+            if (flyY >= BODY_MAX_Y - .006f) { wallContactNow = true; wallNy -= 1f }
+            if (wallContactNow) {
+                legActuator.applyWallConstraint(heading, wallNx, wallNy, dt)
+                flySpeed = legActuator.forwardVelocity
+                bodyLateralSpeed = legActuator.lateralVelocity
+                yawRate = legActuator.yawRate
+                worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
+                worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
+            }
+            flyX = (flyX + worldVx * dt).coerceIn(BODY_MIN_X, BODY_MAX_X)
+            flyY = (flyY + worldVy * dt).coerceIn(BODY_MIN_Y, BODY_MAX_Y)
 
             val dxPhysical = flyX - lastMotionX
             val dyPhysical = flyY - lastMotionY
             physicalSpeed = hypot(dxPhysical, dyPhysical) / dt.coerceAtLeast(.001f)
+            // Pause detection must consume the speed measured from the just-finished
+            // physical frame. Calling this before physicalSpeed was updated made the
+            // UI one frame late and, more importantly, could prevent a true arrest
+            // from ever reaching the pause timer at low-speed boundaries.
+            updateMeasuredPauseState(dt, wallContactNow)
             physicalAcceleration = (physicalSpeed - previousPhysicalSpeed) / dt.coerceAtLeast(.001f)
             previousPhysicalSpeed = physicalSpeed
             displacementPerSecond = physicalSpeed
@@ -2922,6 +3056,34 @@ class MainActivity : Activity() {
             updateBuzzSound()
         }
 
+        private fun updateMeasuredPauseState(dt: Float, wallContact: Boolean) {
+            val stillThreshold = .0075f
+            val stopThreshold = .0035f
+            val wasPaused = pauseDetected
+            if (!wallContact && physicalSpeed < stillThreshold) {
+                inactivityContinuous += dt
+                pauseTimer += dt
+                if (!wasPaused && pauseTimer >= .16f) {
+                    // Count an observed pause on entry, while retaining the elapsed
+                    // duration for the exit update below. Nothing here commands the
+                    // body or fabricates a rest event.
+                    pauseDetected = true
+                    pauseCount++
+                }
+            } else {
+                if (wasPaused) lastPauseDuration = pauseTimer
+                pauseDetected = false
+                pauseTimer = 0f
+                inactivityContinuous = 0f
+            }
+            stopDetected = !wallContact && physicalSpeed < stopThreshold
+            recentMovementMemory = .94f * recentMovementMemory +
+                .06f * (physicalSpeed / .18f).coerceIn(0f, 1f)
+            restState = !wallContact && inactivityContinuous >= .25f
+            restStateBlend += ((if (restState) 1f else 0f) - restStateBlend) *
+                (1f - exp((-dt / .18f).toDouble()).toFloat())
+        }
+
         private fun runNeuralSimulation(dt: Float) {
             if (!connectomeLoaded) return
             require(abs(dt - NEURAL_FRAME_DT_SECONDS) < 0.000001f) {
@@ -2937,8 +3099,7 @@ class MainActivity : Activity() {
                 totalSpikes += stepBrainSubstep(
                     NEURAL_SUBSTEP_DT_SECONDS,
                     // The sensory sample is a zero-order-held environmental signal.
-                    // Keep it active for every internal substep; stepBrainSubstep
-                    // divides the calibrated frame dose across the four substeps.
+                    // Keep it active for every internal substep of the 40-step frame.
                     applySensoryKick = true
                 )
                 accumulateNeuralSubstepDiagnostics()
@@ -2986,7 +3147,7 @@ class MainActivity : Activity() {
             c.drawRect(8f, 8f, width - 8f, bottom - 6f, paint)
             paint.style = Paint.Style.FILL
 
-            if (foodOn) {
+            if (foodOn && foodAmount > 0f) {
                 drawBanana(c, foodX * width, foodY * bottom)
             }
 
@@ -3022,7 +3183,7 @@ class MainActivity : Activity() {
             val scale = (min(width.toFloat(), sceneBottom()) / 520f).coerceIn(.82f, 1.18f)
             c.translate(px, py)
             c.rotate(-18f)
-            c.scale(scale, scale)
+            c.scale(scale * (.72f + .28f * foodAmount.coerceIn(0f, 1f)), scale * (.72f + .28f * foodAmount.coerceIn(0f, 1f)))
             val path = android.graphics.Path().apply {
                 moveTo(-25f, 8f)
                 cubicTo(-12f, 35f, 24f, 38f, 42f, 15f)
@@ -3071,7 +3232,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.0 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.19.1 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)
@@ -3180,7 +3341,7 @@ class MainActivity : Activity() {
             c.drawText("V ${"%.4f".format(physicalSpeed)}   A ${"%.4f".format(physicalAcceleration)}   recorrido ${"%.3f".format(pathLength)}", leftX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("X ${"%.3f".format(flyX)}   Y ${"%.3f".format(flyY)}   rumbo ${"%.1f".format(headingDeg)}°", leftX + dp(9f), bodyY + dp(43f), paint)
             c.drawText("Δpos ${"%.3f".format(netDisplacement)}   pausa ${"%.1f".format(pauseTimer)}s   pausas $pauseCount", leftX + dp(9f), bodyY + dp(57f), paint)
-            c.drawText("LOOP MECH L/R ${"%.2f".format(legActuator.proprioceptionLeft)}/${"%.2f".format(legActuator.proprioceptionRight)}   SUP ${"%.2f".format(legActuator.supportMean)}   YAW ${"%+.2f".format(legActuator.yawRate)}", leftX + dp(9f), bodyY + dp(71f), paint)
+            c.drawText("LOOP MECH L/R ${"%.2f".format(legActuator.proprioceptionLeft)}/${"%.2f".format(legActuator.proprioceptionRight)}   SUP ${"%.2f".format(legActuator.supportMean)}   WALL ${"%.2f".format(legActuator.wallPressure)}", leftX + dp(9f), bodyY + dp(71f), paint)
 
             metricCard(rightX, bodyY, colW, "ENTORNO / RUTA")
             val topDnText = if (topDnIds[0] >= 0) "${bodyId[topDnIds[0]]} ${dnRoleLabel(descendingRole[topDnIds[0]].toInt())} ${"%.1f".format(topDnHz[0])}Hz" else "—"
@@ -3188,7 +3349,7 @@ class MainActivity : Activity() {
             c.drawText("TOP DN   $topDnText", rightX + dp(9f), bodyY + dp(29f), paint)
             c.drawText("TOP MN  $topMotorText", rightX + dp(9f), bodyY + dp(43f), paint)
             c.drawText("OLF ORN L/C/R ${"%.2f".format(olfInputLeftCache)}/${"%.2f".format(olfInputCenterCache)}/${"%.2f".format(olfInputRightCache)}   bias ${"%+.3f".format(foodDirectionalBias)}", rightX + dp(9f), bodyY + dp(57f), paint)
-            c.drawText("FEED C/P/I $tasteContactEpisodes/$proboscisEpisodes/$ingestionEvents   PROB ${"%.1f".format(proboscisRateHz)}Hz  ING ${"%.1f".format(ingestionRateHz)}Hz", rightX + dp(9f), bodyY + dp(71f), paint)
+            c.drawText("FEED C/P/I $tasteContactEpisodes/$proboscisEpisodes/$ingestionEvents   GUST T/L/P ${"%.1f".format(foodTarsalContactFrame)}/${"%.1f".format(foodLabellarContactFrame)}/${"%.1f".format(foodPharyngealContactFrame)}   FOOD ${"%.0f".format(foodAmount*100f)}%", rightX + dp(9f), bodyY + dp(71f), paint)
 
             // Larger neural map: the visual center of the final interface.
             val mapTop = bodyY + cardH + dp(18f)
@@ -3653,6 +3814,7 @@ class MainActivity : Activity() {
         private fun setFoodPosition(x: Float, y: Float) {
             foodX = x.coerceIn(.06f, .94f)
             foodY = y.coerceIn(.10f, .82f)
+            if (foodAmount <= 0f) foodAmount = FOOD_INITIAL_AMOUNT
             // Repositioning the food is an environment event. Clear all active
             // feeding latches so a newly placed source cannot inherit the prior
             // source's neural episode context.

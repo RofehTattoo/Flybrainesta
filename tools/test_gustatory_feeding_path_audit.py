@@ -42,7 +42,15 @@ def main():
         if sc=="cb_motor" and sub=="pm" and typ in FEEDING_TYPES:
             feeding.append(i)
     assert gust, "no retained GUST"
+    labellar=[]; pharyngeal=[]
+    for i in gust:
+        r=by_ann.get(int(nodes[i]["bodyId"]))
+        sub=clean(r["subclass"]).lower(); typ=clean(r["type"]).lower()
+        if "labellar" in sub or "labellum" in sub or "labial" in sub or "taste peg" in sub: labellar.append(i)
+        if "pharyngeal" in sub or "pharynx" in sub: pharyngeal.append(i)
     assert tarsal, "no retained tarsal gustatory receptors"
+    assert labellar, "no retained labellar gustatory receptors"
+    assert pharyngeal, "no retained pharyngeal gustatory receptors"
     assert feeding, "no retained feeding motor neurons"
     feed_set=set(feeding)
     # Verify edge table and build compact source CSR.
@@ -87,7 +95,7 @@ def main():
     assert gust_feed_hits==feed_set, f"not every retained feeding target is reachable from all GUST <=4 hops: missing={sorted(feed_set-gust_feed_hits)}"
     report={
         'fbc103_sha256':sha256(fbc),'neurons':N,'edges':e,
-        'retained_gustatory':len(gust),'retained_tarsal_gustatory':len(tarsal),'retained_feeding_motor':len(feeding),
+        'retained_gustatory':len(gust),'retained_tarsal_gustatory':len(tarsal),'retained_labellar_gustatory':len(labellar),'retained_pharyngeal_gustatory':len(pharyngeal),'retained_feeding_motor':len(feeding),
         'feeding_targets_reached_from_tarsal_le4':len(tarsal_feed_hits),
         'feeding_targets_reached_from_all_gust_le4':len(gust_feed_hits),
         'tarsal_halt_hits_by_depth':{str(k):len(v) for k,v in tarsal_halt_hits.items()},

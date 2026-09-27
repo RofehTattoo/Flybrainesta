@@ -66,6 +66,18 @@ def gustatory_receptor(row) -> bool:
     return cl == "gustatory" and sc in {"cb_sensory", "vnc_sensory"}
 
 
+def gust_site(row) -> str:
+    sub = clean(row.get("subclass")).lower()
+    typ = clean(row.get("type")).lower()
+    if sub == "leg bristle" or "leg bristle" in typ:
+        return "TARSAL"
+    if "labellar" in sub or "labellum" in sub or "labial" in sub or "taste peg" in sub:
+        return "LABELLAR"
+    if "pharyngeal" in sub or "pharynx" in sub:
+        return "PHARYNGEAL"
+    return "OTHER"
+
+
 def mechanosensory_receptor(row) -> bool:
     return clean(row.get("class")).lower() == "mechanosensory_proprioceptive" and bool(clean(row.get("subclass")))
 
@@ -177,13 +189,20 @@ def main():
             "subclass": clean(r.get("subclass")),
             "receptorType": clean(r.get("receptorType")),
             "flywireType": clean(r.get("flywireType")),
+            "gustSite": gust_site(r) if modality == "GUST" else "OTHER",
         })
         counts[modality] += 1
 
     out.sort(key=lambda x: (x["modality"], x["index"]))
-    tarsal_gust = [r for r in out if r["modality"] == "GUST" and r["subclass"].strip().lower() == "leg bristle"]
+    tarsal_gust = [r for r in out if r["modality"] == "GUST" and r["gustSite"] == "TARSAL"]
+    labellar_gust = [r for r in out if r["modality"] == "GUST" and r["gustSite"] == "LABELLAR"]
+    pharyngeal_gust = [r for r in out if r["modality"] == "GUST" and r["gustSite"] == "PHARYNGEAL"]
     if not tarsal_gust:
-        raise SystemExit("no retained primary gustatory `leg bristle` receptors for tarsal contact")
+        raise SystemExit("no retained primary gustatory tarsal receptors for contact")
+    if not labellar_gust:
+        raise SystemExit("no retained labellar gustatory receptors")
+    if not pharyngeal_gust:
+        raise SystemExit("no retained pharyngeal gustatory receptors")
     if len({r["index"] for r in out}) != len(out):
         raise SystemExit("duplicate retained sensory receptor index")
     if any(counts[k] == 0 for k in counts):
@@ -204,6 +223,8 @@ def main():
         "fbc103_neurons": len(nodes),
         "retained_receptor_counts": counts,
         "retained_tarsal_gustatory_count": len(tarsal_gust),
+        "retained_labellar_gustatory_count": len(labellar_gust),
+        "retained_pharyngeal_gustatory_count": len(pharyngeal_gust),
         "retained_tarsal_gustatory_by_side": {
             "L": sum(1 for r in tarsal_gust if r["sideCode"] == -1),
             "R": sum(1 for r in tarsal_gust if r["sideCode"] == 1),
@@ -225,9 +246,15 @@ def main():
             name: {"start": start, "end": end, "channel": channel}
             for name, (start, end, channel) in ranges.items()
         },
+        "gustatory_site_counts": {
+            "TARSAL": len(tarsal_gust),
+            "LABELLAR": len(labellar_gust),
+            "PHARYNGEAL": len(pharyngeal_gust),
+            "OTHER": sum(1 for r in out if r["modality"] == "GUST" and r["gustSite"] == "OTHER"),
+        },
         "policy": {
             "VIS": "ol_sensory + visual + photoreceptor R1-6/R7/R8 only",
-            "GUST": "gustatory + primary sensory superclasses cb_sensory/vnc_sensory; sensory_ascending relays excluded; tarsal contact runtime maps only subclass=leg bristle",
+            "GUST": "gustatory + primary sensory superclasses cb_sensory/vnc_sensory; sensory_ascending relays excluded; runtime site classes are derived from official subclass/type annotations",
             "MECH": "mechanosensory_proprioceptive with a non-empty receptor-organ subclass",
             "runtime": "external current is injected only into these explicit retained receptor indices; no index-cyclic pattern or population-wide injection",
             "no_graph_mutation": True,
