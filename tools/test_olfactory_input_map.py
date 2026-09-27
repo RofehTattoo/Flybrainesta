@@ -7,13 +7,18 @@ BUILDER = (ROOT / 'tools/build_olfactory_input_map.py').read_text()
 FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
 
 assert 'olfactoryNeuronIndices' in MAIN
-# V1.19 closed-loop mechanosensory input must combine the retained
-# wall-proximity signal with the actuator's delayed proprioceptive state.
+# V1.19.1 closed-loop mechanosensory input maps wall pressure into the
+# fly's body frame, combines it with side-resolved proprioception, and writes
+# a bounded rate to each retained mechanosensory receptor.
 assert 'val mechLeft = legActuator.proprioceptionLeft' in MAIN
 assert 'val mechRight = legActuator.proprioceptionRight' in MAIN
 assert 'val mechGlobal = legActuator.proprioceptionGlobal' in MAIN
-assert 'val rate = (wallSignal * 26f + local * 92f + mechGlobal * 18f)' in MAIN
-assert 'externalRateHz[i] = rate' in MAIN
+assert 'val rightProjection = nx * rightX + ny * rightY' in MAIN
+assert 'val forwardProjection = nx * fwdX + ny * fwdY' in MAIN
+assert 'wallPressureLeft = max(wallPressureLeft, value * rightProjection.coerceAtLeast(0f))' in MAIN
+assert 'wallPressureRight = max(wallPressureRight, value * (-rightProjection).coerceAtLeast(0f))' in MAIN
+assert 'val local = when (mechanosensorySide[i].toInt())' in MAIN
+assert 'externalRateHz[i] = (local * 110f + mechGlobal * 15f).coerceIn(0f, 150f)' in MAIN
 assert 'setMappedSensoryRate(mechanosensoryReceptorIndices, wallSignal * 80f)' not in MAIN
 assert 'olfactoryPopulationRate()' in MAIN
 assert 'mechanosensoryPopulationRate()' in MAIN
