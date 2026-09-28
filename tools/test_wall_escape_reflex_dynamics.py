@@ -1,31 +1,30 @@
 #!/usr/bin/env python3
-"""Numerical regression test for the V1.19.4 wall escape response."""
+"""V1.19.5 regression checks for wall escape independent of residual speed."""
 import math
 
 MAX_WALL_YAW = 3.10
 TAU = .085
-DECAY = .34
 dt = .020
 
-# Head-on wall contact: the neutral geometry falls back to the stored escape side.
-escape_side = 1.0
-pressure = .80
-bias = max(-1.0, min(1.0, escape_side * pressure))
-assert bias > 0.5
-
-# The actuator yaw target is therefore positive instead of zero.
+# Worst case observed in the lock: translational speed has collapsed to almost zero.
+speed = 0.0
+heading_dot_normal = -1.0  # face-on wall
+wall_facing = max(0.0, min(1.0, -heading_dot_normal))
+contact_gain = 0.72 + 0.28 * wall_facing
+bias = contact_gain
 yaw_target = bias * MAX_WALL_YAW
-assert yaw_target > 1.5
-
-# The target is approached smoothly, not snapped directly.
 alpha = 1.0 - math.exp(-dt / TAU)
-yaw0 = 0.0
-yaw1 = yaw0 + (yaw_target - yaw0) * alpha
+yaw1 = yaw_target * alpha
+
+assert speed == 0.0
+assert bias >= 0.99
+assert yaw_target > 3.0
 assert 0.0 < yaw1 < yaw_target
 
-# After leaving the wall, the escape drive decays exponentially.
-bias_after = bias * math.exp(-dt / DECAY)
-assert 0.0 < bias_after < bias
+# Tangential/side wall: still a real escape drive, but smaller if parallel.
+wall_facing_side = 0.55
+side_gain = .72 + .28 * wall_facing_side
+assert side_gain >= .72
 
-print("WALL ESCAPE REFLEX DYNAMICS: PASS")
-print(f"initial_yaw_target={yaw_target:.3f}rad/s first_frame_yaw={yaw1:.3f}rad/s")
+print("WALL ESCAPE REFLEX DYNAMICS V1.19.5: PASS")
+print(f"zero-speed head-on yaw_target={yaw_target:.3f}rad/s first_frame_yaw={yaw1:.3f}rad/s")

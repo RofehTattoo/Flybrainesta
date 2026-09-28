@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.4 embodied sensorimotor actuator.
+ * V1.19.5 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -97,6 +97,9 @@ class LeggedSensorimotorActuator {
     var wallEscapeBias = 0f
         private set
     private var wallEscapeDirection = 1f
+    private var wallContactLatched = false
+    private var lastWallNx = 0f
+    private var lastWallNy = 0f
 
     private val previousStride = FloatArray(LEG_COUNT)
     private var initializedStride = false
@@ -118,6 +121,9 @@ class LeggedSensorimotorActuator {
         mechanicalActivity = 0f; wallPressure = 0f
         wallEscapeBias = 0f
         wallEscapeDirection = 1f
+        wallContactLatched = false
+        lastWallNx = 0f
+        lastWallNy = 0f
     }
 
     /**
@@ -231,98 +237,136 @@ class LeggedSensorimotorActuator {
         mechanicalActivity = ((totalContact / LEG_COUNT) * .60f +
             (forwardVelocity / MAX_FORWARD_SPEED) * .40f).coerceIn(0f, 1f)
         wallPressure = (wallPressure * exp((-dt / .14f).toDouble()).toFloat()).coerceIn(0f, 1f)
-        wallEscapeBias = (wallEscapeBias *
-            exp((-dt / WALL_ESCAPE_DECAY_TAU).toDouble()).toFloat()).coerceIn(-1f, 1f)
+        if (!wallContactLatched) {
+            wallEscapeBias = (wallEscapeBias *
+                exp((-dt / WALL_ESCAPE_DECAY_TAU).toDouble()).toFloat())
+                .coerceIn(-1f, 1f)
+        }
     }
 
     /**
-     * Feed physical wall contact back into the actuator.
+     * Physical wall response. This is a local mechanosensory reflex, not an
+     * external "go around the wall" command:
      *
-     * A collision is not treated as a bounce. The outward velocity is removed,
-     * while a short-lived, deterministic reorientation drive is generated from
-     * the wall normal. If the fly hits obliquely, it turns toward the available
-     * tangential escape direction. If it hits head-on, the side is selected from
-     * the current leg imbalance; only when that is neutral do we alternate the
-     * contact side. This prevents the "motor keeps pushing into the wall" lock.
+     * 1) remove the velocity component directed into the wall;
+     * 2) detect whether the body is actually facing the wall;
+     * 3) on contact onset choose one escape side from geometry / bilateral leg
+     *    imbalance and latch it for that contact episode;
+     * 4) immediately drive the existing actuator yaw state toward that escape
+     *    side, with a short time constant;
+     * 5) let the drive decay once contact ends.
      *
-     * The result is an actuator-level embodiment of the mechanosensory escape
-     * reflex: it changes yaw only through the existing mechanical yaw state.
+     * Crucially, the escape drive is NOT normalized by current forward speed.
+     * A fly that has already slowed to nearly zero at the wall must still turn.
      */
-    fun applyWallConstraint(heading: Float, normalX: Float, normalY: Float, dtRaw: Float) {
+    fun applyWallConstraint(
+        heading: Float,
+        normalX: Float,
+        normalY: Float,
+        dtRaw: Float,
+        contactActive: Boolean
+    ) {
         val dt = dtRaw.coerceAtLeast(LINEAR_RESPONSE_MIN_DT)
-        val c = kotlin.math.cos(heading)
-        val s = kotlin.math.sin(heading)
-        var vx = c * forwardVelocity - s * lateralVelocity
-        var vy = s * forwardVelocity + c * lateralVelocity
+
+        if (!contactActive) {
+            wallContactLatched = false
+            return
+        }
+
         val nLen = sqrt(normalX * normalX + normalY * normalY)
         if (nLen <= .00001f) return
 
         val nx = normalX / nLen
         val ny = normalY / nLen
+        lastWallNx = nx
+        lastWallNy = ny
+
+        val c = kotlin.math.cos(heading)
+        val s = kotlin.math.sin(heading)
+        var vx = c * forwardVelocity - s * lateralVelocity
+        var vy = s * forwardVelocity + c * lateralVelocity
+
         val outward = vx * nx + vy * ny
         val forwardIntoWall = (-outward / MAX_FORWARD_SPEED).coerceIn(0f, 1f)
-        val rightX = -s
-        val rightY = c
-        val tangentialAlignment = vx * (-ny) + vy * nx
+
+        // Geometry-based "facing the wall" signal. 1 = face-on, 0 = parallel/away.
+        val headingDotNormal = (c * nx + s * ny)
+        val wallFacing = (-headingDotNormal).coerceIn(0f, 1f)
 
         if (outward < 0f) {
-            // Remove only the velocity component that would penetrate the wall.
+            // Remove only the penetrating component and preserve tangential slip.
             vx -= outward * nx
             vy -= outward * ny
-            wallPressure = max(wallPressure, forwardIntoWall)
-
-            // Preserve a little tangential motion so the fly can slide along a wall
-            // while the reorientation reflex is taking effect.
+            wallPressure = max(wallPressure, max(forwardIntoWall, .10f * wallFacing))
             vx *= WALL_TANGENTIAL_FRICTION
             vy *= WALL_TANGENTIAL_FRICTION
-
-            // Select a turn direction from actual geometry and existing bilateral
-            // leg imbalance. For a perfectly head-on impact (no tangent component),
-            // alternate sides between separate contact episodes to avoid corner locks.
-            val sideByMotion = tangentialAlignment.signOrZero()
-            val sideByLegs = ((rightSupport - leftSupport) / 
-                (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
-            var escapeSide = when {
-                abs(sideByMotion) > .08f -> sideByMotion
-                abs(sideByLegs) > .10f -> -sideByLegs
-                else -> wallEscapeDirection
-            }
-
-            // The wall normal tells whether the boundary lies in front, left or right.
-            // If it is already predominantly lateral, turn away from that lateral wall.
-            val wallRightProjection = nx * rightX + ny * rightY
-            if (abs(wallRightProjection) > .35f) {
-                escapeSide = -wallRightProjection.signOrZero()
-            }
-
-            if (wallPressure < WALL_ESCAPE_MIN_PRESSURE) {
-                wallEscapeDirection = -wallEscapeDirection
-            } else if (abs(sideByMotion) <= .08f && abs(sideByLegs) <= .10f) {
-                // Do not toggle continuously while the body remains in contact.
-                escapeSide = wallEscapeDirection
-            }
-
-            wallEscapeBias = (
-                wallEscapeBias + (escapeSide * forwardIntoWall).coerceIn(-1f, 1f)
-            ).coerceIn(-1f, 1f)
-
-            // A near head-on hit also unloads propulsion briefly; this stops the
-            // actuator from fighting the boundary during the first turn segment.
-            if (forwardIntoWall > .35f) {
-                forwardVelocity *= (1f - .38f * forwardIntoWall)
-            }
+        } else {
+            // A fly can remain at the boundary after penetration velocity was
+            // already removed. Keep the reflex alive from geometry/contact.
+            wallPressure = max(wallPressure, .08f * wallFacing)
         }
 
-        forwardVelocity = (vx * c + vy * s).coerceAtLeast(0f).coerceIn(0f, MAX_FORWARD_SPEED)
-        lateralVelocity = (-vx * s + vy * c).coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
+        if (!wallContactLatched) {
+            // Choose one direction once per contact episode.
+            val rightX = -s
+            val rightY = c
+            val wallRightProjection = nx * rightX + ny * rightY
 
-        // Nudge the gait phase asymmetry itself, so the turn has a visible leg
-        // consequence rather than behaving like a teleport/heading write.
-        if (wallEscapeBias != 0f && forwardIntoWall > .05f) {
-            val phaseKick = (0.045f * wallEscapeBias * forwardIntoWall).coerceIn(-.045f, .045f)
+            val sideByLegs = ((rightSupport - leftSupport) /
+                (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
+
+            val escapeSide = when {
+                abs(wallRightProjection) > .45f ->
+                    -wallRightProjection.signOrZero()
+                abs(sideByLegs) > .10f ->
+                    -sideByLegs.signOrZero()
+                else ->
+                    if (wallEscapeDirection == 0f) 1f else wallEscapeDirection
+            }
+
+            wallEscapeDirection = if (escapeSide == 0f) 1f else escapeSide
+            wallContactLatched = true
+        }
+
+        // Contact onset gets a strong enough impulse even when translational speed
+        // has already collapsed to ~0 at the wall. Face-on impact receives more drive.
+        val contactGain = (0.72f + 0.28f * wallFacing).coerceIn(.72f, 1f)
+        val episodeDrive = wallEscapeDirection * contactGain
+        wallEscapeBias = if (wallContactLatched) {
+            episodeDrive
+        } else {
+            0f
+        }
+
+        // Immediate actuator response removes the one-frame delay between detecting
+        // the wall and applying the turn. This still filters the yaw through a
+        // first-order time constant; MainActivity continues to integrate heading.
+        val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
+        val yawAlpha = (1f - exp(
+            (-dt / WALL_ESCAPE_RESPONSE_TAU).toDouble()
+        ).toFloat()).coerceIn(0f, 1f)
+        yawRate += (wallYawTarget - yawRate) * yawAlpha
+        yawRate = yawRate.coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
+
+        // Head-on contact briefly unloads propulsion, but never freezes the body.
+        if (wallFacing > .55f) {
+            val unload = (.22f + .24f * wallFacing).coerceIn(.22f, .46f)
+            forwardVelocity *= (1f - unload)
+        }
+
+        forwardVelocity = (vx * c + vy * s).coerceAtLeast(0f)
+            .coerceIn(0f, MAX_FORWARD_SPEED)
+        lateralVelocity = (-vx * s + vy * c)
+            .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
+
+        // Small bilateral gait phase offset makes the escape visible in the same
+        // six-leg mechanics instead of looking like a direct heading command.
+        if (wallFacing > .35f) {
+            val phaseKick = (0.028f * wallEscapeDirection * wallFacing)
+                .coerceIn(-.028f, .028f)
             for (g in 0 until LEG_COUNT) {
-                phase[g] = (phase[g] + if (g < 3) -phaseKick else phaseKick)
-                    .mod(TWO_PI)
+                phase[g] = (phase[g] +
+                    if (g < 3) -phaseKick else phaseKick).mod(TWO_PI)
             }
         }
     }

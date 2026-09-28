@@ -2959,12 +2959,14 @@ class MainActivity : Activity() {
             if (predictedX > BODY_MAX_X && worldVx > 0f) { wallContactNow = true; wallNx -= 1f }
             if (predictedY < BODY_MIN_Y && worldVy < 0f) { wallContactNow = true; wallNy += 1f }
             if (predictedY > BODY_MAX_Y && worldVy > 0f) { wallContactNow = true; wallNy -= 1f }
-            if (flyX <= BODY_MIN_X + .006f) { wallContactNow = true; wallNx += 1f }
-            if (flyX >= BODY_MAX_X - .006f) { wallContactNow = true; wallNx -= 1f }
-            if (flyY <= BODY_MIN_Y + .006f) { wallContactNow = true; wallNy += 1f }
-            if (flyY >= BODY_MAX_Y - .006f) { wallContactNow = true; wallNy -= 1f }
+            if (flyX <= BODY_MIN_X + .014f) { wallContactNow = true; wallNx += 1f }
+            if (flyX >= BODY_MAX_X - .014f) { wallContactNow = true; wallNx -= 1f }
+            if (flyY <= BODY_MIN_Y + .014f) { wallContactNow = true; wallNy += 1f }
+            if (flyY >= BODY_MAX_Y - .014f) { wallContactNow = true; wallNy -= 1f }
+            legActuator.applyWallConstraint(
+                heading, wallNx, wallNy, dt, wallContactNow
+            )
             if (wallContactNow) {
-                legActuator.applyWallConstraint(heading, wallNx, wallNy, dt)
                 flySpeed = legActuator.forwardVelocity
                 bodyLateralSpeed = legActuator.lateralVelocity
                 yawRate = legActuator.yawRate
@@ -3239,7 +3241,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.3 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.19.5 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)
