@@ -7,7 +7,7 @@ assert "TURN_PROPULSION_FULL_SCALE" in ACT
 assert "turnDrive" in ACT and "pauseYawGate" in ACT
 assert "WindowInsets.Type.systemBars()" in MAIN
 assert "WindowInsets.Type.displayCutout()" in MAIN
-assert "WindowInsets.CONSUMED" in MAIN
-assert "FLYBRAIN V1.19.9 · SENSORIMOTOR CLOSED LOOP" in MAIN
+assert "view.setPadding(safe.left, safe.top, safe.right, safe.bottom + 8.dp())" in MAIN
+assert "FLYBRAIN V1.19.11 · SENSORIMOTOR CLOSED LOOP" in MAIN
 assert "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE" in MAIN
-print("V1.19.9 YAW / EDGE-TO-EDGE / HEADER COLLISION AUDIT: PASS")
+print("V1.19.11 YAW / EDGE-TO-EDGE / HEADER COLLISION AUDIT: PASS")

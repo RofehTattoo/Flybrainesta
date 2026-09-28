@@ -40,6 +40,11 @@ class MainActivity : Activity() {
 
         window.statusBarColor = Color.rgb(11, 16, 20)
         window.navigationBarColor = Color.rgb(11, 16, 20)
+        // Prefer decor fitting where supported; explicit insets below remain the
+        // fallback for Android 15 edge-to-edge enforcement.
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(true)
+        }
         if (Build.VERSION.SDK_INT >= 29) {
             window.isStatusBarContrastEnforced = false
             window.isNavigationBarContrastEnforced = false
@@ -49,20 +54,21 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(247, 248, 249))
             clipToPadding = true
+            clipChildren = true
         }
 
         // UI-only identity header. It does not participate in the simulation.
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(10.dp(), 6.dp(), 12.dp(), 6.dp())
+            setPadding(8.dp(), 3.dp(), 10.dp(), 3.dp())
             setBackgroundColor(Color.rgb(11, 18, 22))
         }
         val icon = ImageView(this).apply {
             setImageResource(R.drawable.flybrain_official)
             scaleType = ImageView.ScaleType.CENTER_CROP
         }
-        identity.addView(icon, LinearLayout.LayoutParams(48.dp(), 48.dp()))
+        identity.addView(icon, LinearLayout.LayoutParams(34.dp(), 34.dp()))
 
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -74,13 +80,13 @@ class MainActivity : Activity() {
         }
         val flyText = TextView(this).apply {
             text = "FLY"
-            textSize = 18f
+            textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(245, 247, 248))
         }
         val brainText = TextView(this).apply {
             text = "BRAIN"
-            textSize = 18f
+            textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(105, 188, 241))
         }
@@ -89,17 +95,17 @@ class MainActivity : Activity() {
         brand.addView(wordmark)
         brand.addView(TextView(this).apply {
             text = "EXPLORE A TINY MIND"
-            textSize = 7.5f
-            letterSpacing = .28f
+            textSize = 6.2f
+            letterSpacing = .20f
             setTextColor(Color.rgb(190, 198, 202))
         })
         identity.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
         identity.addView(TextView(this).apply {
             text = "MaleCNS v1.0"
-            textSize = 8.5f
+            textSize = 8.0f
             setTextColor(Color.rgb(139, 151, 158))
         })
-        root.addView(identity, LinearLayout.LayoutParams(-1, 62.dp()))
+        root.addView(identity, LinearLayout.LayoutParams(-1, 44.dp()))
 
         root.setOnApplyWindowInsetsListener { view, insets ->
             // Android 15 (targetSdk 35) lays app content edge-to-edge by default.
@@ -110,27 +116,30 @@ class MainActivity : Activity() {
                 val insetTypes = android.view.WindowInsets.Type.systemBars() or
                     android.view.WindowInsets.Type.displayCutout()
                 val safe = insets.getInsets(insetTypes)
-                view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
-                android.view.WindowInsets.CONSUMED
+                // Keep the nav-bar inset in the measured content area. The extra
+                // 8dp protects the lowest custom-drawn brain nodes from gesture /
+                // three-button navigation overlays on OEM Android builds.
+                view.setPadding(safe.left, safe.top, safe.right, safe.bottom + 8.dp())
+                insets
             } else {
                 val left = insets.systemWindowInsetLeft
                 val top = insets.systemWindowInsetTop
                 val right = insets.systemWindowInsetRight
                 val bottom = insets.systemWindowInsetBottom
-                view.setPadding(left, top, right, bottom)
-                insets.consumeSystemWindowInsets()
+                view.setPadding(left, top, right, bottom + 8.dp())
+                insets
             }
         }
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(7.dp(), 5.dp(), 7.dp(), 5.dp())
+            setPadding(5.dp(), 2.dp(), 5.dp(), 2.dp())
             setBackgroundColor(Color.rgb(15, 23, 28))
         }
 
         fun makeButton(label: String) = Button(this).apply {
             text = label
-            textSize = 12.5f
+            textSize = 10.5f
             isAllCaps = false
             minHeight = 0
             minWidth = 0
@@ -143,16 +152,16 @@ class MainActivity : Activity() {
         val light = makeButton("☼  LUZ")
         val danger = makeButton("△  PELIGRO")
         val reset = makeButton("↻  RESET")
-        val bh = 54.dp()
+        val bh = 34.dp()
         listOf(food, light, danger, reset).forEach { button ->
             controls.addView(
                 button,
                 LinearLayout.LayoutParams(0, bh, 1f).apply {
-                    setMargins(3.dp(), 0, 3.dp(), 0)
+                    setMargins(2.dp(), 0, 2.dp(), 0)
                 }
             )
         }
-        root.addView(controls, LinearLayout.LayoutParams(-1, 64.dp()))
+        root.addView(controls, LinearLayout.LayoutParams(-1, 40.dp()))
 
         val sim = FlyView()
         root.addView(sim, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -3230,7 +3239,7 @@ class MainActivity : Activity() {
 
         // UI-only layout: give the neural observatory more vertical space while
         // keeping enough room above for the interactive stimulus scene.
-        private fun brainPanelHeight(): Float = min(height * .56f, 690.dp().toFloat())
+        private fun brainPanelHeight(): Float = min(height * .40f, 460.dp().toFloat())
 
         private fun drawScene(c: Canvas) {
             val bottom = sceneBottom()
@@ -3310,144 +3319,60 @@ class MainActivity : Activity() {
             val sp = { v: Float -> v * ts }
             val ph = brainPanelHeight()
             val top = height - ph
-            val left = 0f
-            val right = width.toFloat()
-            val innerL = dp(16f)
-            val innerR = width - dp(16f)
-            val panelW = right - left
+            val innerL = dp(12f)
+            val innerR = width - dp(12f)
 
             paint.style = Paint.Style.FILL
             paint.color = Color.rgb(18, 23, 27)
-            c.drawRect(left, top, right, height.toFloat(), paint)
+            c.drawRect(0f, top, width.toFloat(), height.toFloat(), paint)
 
-            // Header
+            // One unobtrusive status line: detailed telemetry is intentionally removed.
             paint.textAlign = Paint.Align.LEFT
             paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = sp(13f)
-            paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.9 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
-
-            paint.typeface = Typeface.DEFAULT
-            paint.textSize = sp(9.0f)
-            paint.color = Color.rgb(171, 181, 187)
-            c.drawText("MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE", innerL, top + dp(36f), paint)
-
-            // Live status + model census, kept in one compact row.
-            val statusX = innerR - dp(124f)
-            paint.color = if (connectomeLoaded && dynamicsLoaded) Color.rgb(70, 205, 120) else Color.rgb(232, 75, 75)
-            c.drawCircle(statusX, top + dp(33f), dp(3.2f), paint)
-            paint.textAlign = Paint.Align.RIGHT
-            paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = sp(8.4f)
-            paint.color = Color.rgb(207, 216, 221)
-            c.drawText(if (connectomeLoaded && dynamicsLoaded) "CONNECTOME + DYNAMICS OK" else "CONNECTOME / DYNAMICS ERROR", innerR, top + dp(36f), paint)
-
-            // Compact census chips.
-            paint.textAlign = Paint.Align.LEFT
-            val chips = arrayOf(
-                "16.669 N", "${"%.3f".format(loadedEdgeCount / 1_000_000f)}M E", "${"%.3f".format(loadedDynamicsEdgeCount / 1_000_000f)}M DYN", "FPS ${fps.toInt()}"
-            )
-            val chipY = top + dp(46f)
-            var chipX = innerL
-            for (label in chips) {
-                val cw = when {
-                    label.startsWith("16") -> dp(61f)
-                    label.startsWith("FPS") -> dp(55f)
-                    else -> dp(76f)
-                }
-                paint.color = Color.rgb(31, 39, 44)
-                c.drawRoundRect(chipX, chipY, chipX + cw, chipY + dp(18f), dp(7f), dp(7f), paint)
-                paint.color = Color.rgb(196, 205, 210)
-                paint.textSize = sp(8.0f)
-                paint.typeface = Typeface.DEFAULT_BOLD
-                c.drawText(label, chipX + dp(7f), chipY + dp(12.5f), paint)
-                chipX += cw + dp(5f)
-            }
-
-            // Stimulus + state row.
-            val stimulusLabel = when {
-                foodOn -> "COMIDA"
-                lightOn -> "LUZ"
-                dangerOn -> "PELIGRO"
-                else -> "NINGUNO"
-            }
-            val stimulusAccent = when {
-                foodOn -> Color.rgb(52, 190, 105)
-                lightOn -> Color.rgb(235, 190, 40)
-                dangerOn -> Color.rgb(230, 72, 68)
-                else -> Color.rgb(105, 116, 124)
-            }
-            val state = behaviorLabel()
-            val rowY = top + dp(69f)
-            paint.color = Color.rgb(30, 38, 43)
-            c.drawRoundRect(innerL, rowY, innerL + dp(112f), rowY + dp(21f), dp(8f), dp(8f), paint)
-            paint.color = stimulusAccent
-            c.drawCircle(innerL + dp(10f), rowY + dp(10.5f), dp(3.2f), paint)
-            paint.color = Color.rgb(235, 240, 242)
             paint.textSize = sp(8.2f)
-            paint.typeface = Typeface.DEFAULT_BOLD
-            c.drawText(stimulusLabel, innerL + dp(18f), rowY + dp(14f), paint)
-            val stateW = dp(154f)
-            paint.color = Color.rgb(30, 38, 43)
-            c.drawRoundRect(innerR - stateW, rowY, innerR, rowY + dp(21f), dp(8f), dp(8f), paint)
-            paint.color = Color.rgb(210, 218, 222)
-            paint.textSize = sp(7.4f)
-            paint.textAlign = Paint.Align.CENTER
-            c.drawText(state, innerR - stateW * .5f, rowY + dp(14f), paint)
-            paint.textAlign = Paint.Align.LEFT
+            val ok = connectomeLoaded && dynamicsLoaded
+            paint.color = if (ok) Color.rgb(70, 205, 120) else Color.rgb(232, 75, 75)
+            c.drawCircle(innerL + dp(3f), top + dp(13f), dp(3f), paint)
+            paint.color = Color.rgb(207, 216, 221)
+            c.drawText(
+                if (ok) "CONNECTOME + DYNAMICS OK" else "CONNECTOME / DYNAMICS ERROR",
+                innerL + dp(11f), top + dp(16f), paint
+            )
 
-            // Two-column live telemetry.
-            val metricsTop = top + dp(98f)
-            val gap = dp(8f)
-            val colW = (panelW - dp(20f) - gap) * .5f
-            val leftX = innerL
-            val rightX = innerL + colW + gap
-            val cardH = dp(88f)
-
-            fun metricCard(x: Float, y: Float, w: Float, title: String) {
-                paint.color = Color.rgb(25, 32, 37)
-                c.drawRoundRect(x, y, x + w, y + cardH, dp(9f), dp(9f), paint)
-                paint.color = Color.rgb(139, 151, 158)
-                paint.textSize = sp(8.2f)
-                paint.typeface = Typeface.DEFAULT_BOLD
-                c.drawText(title, x + dp(9f), y + dp(13f), paint)
+            // Color key mirrors regionColor() exactly. Two short rows fit narrow phones.
+            val legend = arrayOf(
+                Triple("OLFATO", Color.rgb(45, 190, 105), 0),
+                Triple("VISIÓN", Color.rgb(55, 145, 235), 1),
+                Triple("GUSTO", Color.rgb(238, 190, 42), 2),
+                Triple("MECANO", Color.rgb(238, 125, 48), 3),
+                Triple("DESC.", Color.rgb(218, 75, 175), 4),
+                Triple("ASC.", Color.rgb(55, 190, 210), 5),
+                Triple("MOTOR", Color.rgb(235, 70, 75), 6),
+                Triple("CENTRAL", Color.rgb(150, 160, 170), 7)
+            )
+            val rowY1 = top + dp(31f)
+            val rowY2 = top + dp(44f)
+            val usableW = (innerR - innerL)
+            val cellW = usableW / 4f
+            for (i in legend.indices) {
+                val row = if (i < 4) 0 else 1
+                val col = i % 4
+                val x = innerL + cellW * col
+                val y = if (row == 0) rowY1 else rowY2
+                paint.color = legend[i].second
+                c.drawCircle(x + dp(3f), y - dp(3f), dp(3f), paint)
+                paint.color = Color.rgb(205, 213, 218)
+                paint.textAlign = Paint.Align.LEFT
+                paint.typeface = Typeface.DEFAULT
+                paint.textSize = sp(7.2f)
+                c.drawText(legend[i].first, x + dp(9f), y, paint)
             }
 
-            metricCard(leftX, metricsTop, colW, "NEURAL PIPELINE")
-            paint.color = Color.rgb(220, 226, 229)
-            paint.textSize = sp(8.5f)
-            c.drawText("S ${(sensorySpikesDisplay * 100).toInt()}%   C ${(centralSpikesDisplay * 100).toInt()}%   DN ${(descendingSpikesDisplay * 100).toInt()}%   M ${(motorSpikesDisplay * 100).toInt()}%", leftX + dp(9f), metricsTop + dp(29f), paint)
-            c.drawText("DN $dnSpikingCount/1314    MN $motorSpikingCount/708", leftX + dp(9f), metricsTop + dp(43f), paint)
-            c.drawText("SPIKES/s ${spikesPerSecond.toInt()}    OLF ${(olfactoryRateDisplay * 100).toInt()}%    VIS ${(visualRateDisplay * 100).toInt()}%", leftX + dp(9f), metricsTop + dp(57f), paint)
-
-            metricCard(rightX, metricsTop, colW, "MOTOR OUTPUT")
-            c.drawText("LEG L ${"%.3f".format(leftLegDriveSignedCache)}   R ${"%.3f".format(rightLegDriveSignedCache)}   Δ ${"%.3f".format(rightLegDriveSignedCache - leftLegDriveSignedCache)}", rightX + dp(9f), metricsTop + dp(29f), paint)
-            c.drawText("DRIVE ${"%.4f".format(motorDriveSignedCache)}   |${"%.4f".format(motorDriveAbsCache)}   peak ${"%.4f".format(motorDriveAbsPeakCache)}", rightX + dp(9f), metricsTop + dp(43f), paint)
-            c.drawText("MN Hz L/R ${"%.2f".format(legLeftHz)}/${"%.2f".format(legRightHz)}  Δ ${"%+.2f".format(legRightHz - legLeftHz)}", rightX + dp(9f), metricsTop + dp(57f), paint)
-
-            val bodyY = metricsTop + cardH + dp(7f)
-            metricCard(leftX, bodyY, colW, "CUERPO")
-            val headingDeg = Math.toDegrees(heading.toDouble()).toFloat().let { raw ->
-                ((raw + 180f) % 360f + 360f) % 360f - 180f
-            }
-            val netDisplacement = hypot(flyX - .24f, flyY - .55f)
-            c.drawText("V ${"%.4f".format(physicalSpeed)}   A ${"%.4f".format(physicalAcceleration)}   recorrido ${"%.3f".format(pathLength)}", leftX + dp(9f), bodyY + dp(29f), paint)
-            c.drawText("X ${"%.3f".format(flyX)}   Y ${"%.3f".format(flyY)}   rumbo ${"%.1f".format(headingDeg)}°", leftX + dp(9f), bodyY + dp(43f), paint)
-            c.drawText("Δpos ${"%.3f".format(netDisplacement)}   pausa ${"%.1f".format(pauseTimer)}s   pausas $pauseCount", leftX + dp(9f), bodyY + dp(57f), paint)
-            c.drawText("LOOP MECH L/R ${"%.2f".format(legActuator.proprioceptionLeft)}/${"%.2f".format(legActuator.proprioceptionRight)}   SUP ${"%.2f".format(legActuator.supportMean)}   WALL ${"%.2f".format(legActuator.wallPressure)}", leftX + dp(9f), bodyY + dp(71f), paint)
-
-            metricCard(rightX, bodyY, colW, "ENTORNO / RUTA")
-            val topDnText = if (topDnIds[0] >= 0) "${bodyId[topDnIds[0]]} ${dnRoleLabel(descendingRole[topDnIds[0]].toInt())} ${"%.1f".format(topDnHz[0])}Hz" else "—"
-            val topMotorText = if (topMotorIds[0] >= 0) "${bodyId[topMotorIds[0]]} ${motorRoleLabel(motorRole[topMotorIds[0]].toInt())} ${"%.1f".format(topMotorHz[0])}Hz" else "—"
-            c.drawText("TOP DN   $topDnText", rightX + dp(9f), bodyY + dp(29f), paint)
-            c.drawText("TOP MN  $topMotorText", rightX + dp(9f), bodyY + dp(43f), paint)
-            c.drawText("OLF ORN L/C/R ${"%.2f".format(olfInputLeftCache)}/${"%.2f".format(olfInputCenterCache)}/${"%.2f".format(olfInputRightCache)}   bias ${"%+.3f".format(foodDirectionalBias)}", rightX + dp(9f), bodyY + dp(57f), paint)
-            c.drawText("FEED C/P/I $tasteContactEpisodes/$proboscisEpisodes/$ingestionEvents   GUST T/L/P ${"%.1f".format(foodTarsalContactFrame)}/${"%.1f".format(foodLabellarContactFrame)}/${"%.1f".format(foodPharyngealContactFrame)}   FOOD ${"%.0f".format(foodAmount*100f)}%", rightX + dp(9f), bodyY + dp(71f), paint)
-
-            // Larger neural map: the visual center of the final interface.
-            val mapTop = bodyY + cardH + dp(18f)
-            val mapBottom = height - dp(14f)
-            drawBrainMap(c, dp(14f), mapTop, width - dp(28f), max(dp(120f), mapBottom - mapTop))
+            // The map gets the remaining panel height; no telemetry cards compete with it.
+            val mapTop = top + dp(53f)
+            val mapBottom = height - dp(7f)
+            drawBrainMap(c, dp(8f), mapTop, width - dp(16f),
+                max(dp(90f), mapBottom - mapTop))
         }
 
 

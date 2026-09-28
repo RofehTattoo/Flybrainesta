@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.9 embodied sensorimotor actuator.
+ * V1.19.11 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -43,6 +43,9 @@ class LeggedSensorimotorActuator {
         private const val TURN_PROPULSION_DEADZONE = .018f
         private const val TURN_PROPULSION_FULL_SCALE = .105f
         private const val WALKOFF_YAW_SUPPRESSION = .92f
+        private const val MIN_TRANSLATION_FOR_NEURAL_YAW = .18f
+        private const val PAUSE_YAW_CUTOFF = .20f
+        private const val YAW_STOP_RESPONSE_TAU = .075f
         private const val WALL_ESCAPE_MAX_YAW_RATE = 3.10f
         private const val WALL_ESCAPE_RESPONSE_TAU = .085f
         private const val WALL_ESCAPE_DECAY_TAU = .34f
@@ -241,13 +244,25 @@ class LeggedSensorimotorActuator {
         val turnDrive = ((totalTurnPropulsion - TURN_PROPULSION_DEADZONE) /
             (TURN_PROPULSION_FULL_SCALE - TURN_PROPULSION_DEADZONE))
             .coerceIn(0f, 1f)
-        val pauseYawGate = (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
-        val neuralYawTarget = turnBalance * MAX_YAW_RATE * turnDrive * pauseYawGate
-        // Wall escape remains available during genuine physical wall contact.
+        // Neural steering must be supported by actual body translation. This
+        // prevents residual one-sided leg activity from spinning a stationary fly.
+        // A genuine wall-contact reflex is handled separately below.
+        val translationYawGate = (forwardVelocity / MIN_TRANSLATION_FOR_NEURAL_YAW)
+            .coerceIn(0f, 1f)
+        val pauseYawGate = if (walkOff >= PAUSE_YAW_CUTOFF) 0f else
+            (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
+        val neuralYawTarget = turnBalance * MAX_YAW_RATE * turnDrive *
+            translationYawGate * pauseYawGate
+        // Wall escape is a brief onset reflex, not a continuous turn command
+        // while the body remains pinned against the boundary.
         val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
         val yawTarget = (neuralYawTarget + wallYawTarget)
             .coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
-        val yawTau = if (abs(wallEscapeBias) > .06f) WALL_ESCAPE_RESPONSE_TAU else YAW_RESPONSE_TAU
+        val yawTau = when {
+            abs(wallEscapeBias) > .06f -> WALL_ESCAPE_RESPONSE_TAU
+            walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f -> YAW_STOP_RESPONSE_TAU
+            else -> YAW_RESPONSE_TAU
+        }
         val yawAlpha = (1f - exp((-dt / yawTau).toDouble()).toFloat()).coerceIn(0f, 1f)
         val oldYaw = yawRate
         yawRate += (yawTarget - yawRate) * yawAlpha
@@ -262,11 +277,12 @@ class LeggedSensorimotorActuator {
         mechanicalActivity = ((totalContact / LEG_COUNT) * .60f +
             (forwardVelocity / MAX_FORWARD_SPEED) * .40f).coerceIn(0f, 1f)
         wallPressure = (wallPressure * exp((-dt / .14f).toDouble()).toFloat()).coerceIn(0f, 1f)
-        if (!wallContactLatched) {
-            wallEscapeBias = (wallEscapeBias *
-                exp((-dt / WALL_ESCAPE_DECAY_TAU).toDouble()).toFloat())
-                .coerceIn(-1f, 1f)
-        }
+        // The wall reflex is a decaying pulse even if contact remains latched.
+        // Holding this bias at full strength caused endless in-place rotation
+        // whenever the body stayed against a boundary.
+        wallEscapeBias = (wallEscapeBias *
+            exp((-dt / WALL_ESCAPE_DECAY_TAU).toDouble()).toFloat())
+            .coerceIn(-1f, 1f)
     }
 
     /**
@@ -331,7 +347,8 @@ class LeggedSensorimotorActuator {
             wallPressure = max(wallPressure, .08f * wallFacing)
         }
 
-        if (!wallContactLatched) {
+        val contactOnset = !wallContactLatched
+        if (contactOnset) {
             // Choose one direction once per contact episode.
             val rightX = -s
             val rightY = c
@@ -351,27 +368,18 @@ class LeggedSensorimotorActuator {
 
             wallEscapeDirection = if (escapeSide == 0f) 1f else escapeSide
             wallContactLatched = true
-        }
 
-        // Contact onset gets a strong enough impulse even when translational speed
-        // has already collapsed to ~0 at the wall. Face-on impact receives more drive.
-        val contactGain = (0.72f + 0.28f * wallFacing).coerceIn(.72f, 1f)
-        val episodeDrive = wallEscapeDirection * contactGain
-        wallEscapeBias = if (wallContactLatched) {
-            episodeDrive
-        } else {
-            0f
+            // Emit one bounded pulse at contact onset. Do not refresh it every
+            // frame: a persistent contact must not become a perpetual spin command.
+            val contactGain = (0.72f + 0.28f * wallFacing).coerceIn(.72f, 1f)
+            wallEscapeBias = wallEscapeDirection * contactGain
+            val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
+            val yawAlpha = (1f - exp(
+                (-dt / WALL_ESCAPE_RESPONSE_TAU).toDouble()
+            ).toFloat()).coerceIn(0f, 1f)
+            yawRate += (wallYawTarget - yawRate) * yawAlpha
+            yawRate = yawRate.coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
         }
-
-        // Immediate actuator response removes the one-frame delay between detecting
-        // the wall and applying the turn. This still filters the yaw through a
-        // first-order time constant; MainActivity continues to integrate heading.
-        val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
-        val yawAlpha = (1f - exp(
-            (-dt / WALL_ESCAPE_RESPONSE_TAU).toDouble()
-        ).toFloat()).coerceIn(0f, 1f)
-        yawRate += (wallYawTarget - yawRate) * yawAlpha
-        yawRate = yawRate.coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
 
         // Head-on contact briefly unloads propulsion, but never freezes the body.
         if (wallFacing > .55f) {
