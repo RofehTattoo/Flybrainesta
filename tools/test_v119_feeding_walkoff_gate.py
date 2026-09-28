@@ -6,7 +6,7 @@ MAIN=(ROOT/'app/src/main/java/com/example/flybrain/MainActivity.kt').read_text(e
 ACT=(ROOT/'app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt').read_text(encoding='utf-8')
 drive=MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeuralSimulation')]
 assert 'walkOffActivationState' in drive
-assert 'legActuator.step(legGroupRateHz, walkOffActivationState, dt)' in drive
+assert 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in drive
 assert 'foodOn' not in ACT and 'foodDirectionalBias' not in ACT and 'approachAction' not in ACT
 assert 'flyX = (flyX + worldVx * dt)' in drive and 'flyY = (flyY + worldVy * dt)' in drive
 assert 'updateFeedingNeuralReadout(dt)' in drive

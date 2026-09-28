@@ -1,4 +1,4 @@
-# FlyBrain — V1.20.0 / FBR-10-OLF2-MOTORROUTE
+# FlyBrain — V1.19.1 / FBR-10-OLF2-MOTORROUTE
 
 FlyBrain is an Android simulation built from the published MaleCNS v1.0 connectome of the male *Drosophila* central nervous system.
 
@@ -28,12 +28,6 @@ The project deliberately does **not**:
 - silently substitute an artificial graph when a packaged artifact fails validation.
 
 The structural graph is the strict induced subgraph of published MaleCNS edges.
-
-## V1.20.0 neuromuscular embodiment
-
-The leg actuator now consumes the six per-leg-group firing rates at the neural-frame cadence. The synthetic tripod phase table, stance-duty clock, adaptive baseline subtraction, and generated gait frequency have been removed. Joint state follows the measured motor envelope; contact/load and joint-state feedback are returned to the sensor interface. Body motion is produced by transient foot motion under the simplified ground-contact model.
-
-This is an intentionally diagnostic model, not yet a validated muscle-level reconstruction. The retained motor semantics currently identify leg and side but do not establish a complete MN-to-muscle/joint map. The runtime preserves frame-to-frame population-rate variation, not individual MN spike identities as independent muscle commands. Therefore V1.20 does not invent a perpetual gait or spontaneous pauses: if the reduced neural network does not generate temporal motor patterns, locomotion will decay. The ground/contact mechanics are simplified, and a full per-tarsus rigid-body model remains future work.
 
 ## Sensory interface
 

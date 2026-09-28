@@ -3,64 +3,47 @@ package com.example.flybrain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class LeggedSensorimotorActuatorTest {
     @Test
-    fun noMotorOutput_doesNotInventGaitOrBodyMotion() {
+    fun noMotorOutput_doesNotAdvanceLegPhasesOrBody() {
         val a = LeggedSensorimotorActuator()
-        repeat(100) { a.step(FloatArray(6), 0f, .02f) }
+        repeat(50) { a.step(FloatArray(6), 0f, .02f) }
         assertTrue(a.forwardVelocity < 1e-5f)
         assertTrue(a.lateralVelocity < 1e-5f)
         assertTrue(a.yawRate < 1e-5f)
-        assertEquals(0f, a.motorActivation.sum(), 1e-5f)
-        assertEquals(0f, a.jointState.sum(), 1e-5f)
+        assertEquals(0f, a.phase.sum(), 1e-5f)
     }
 
     @Test
-    fun motorEnvelope_movesJointAndProducesOnlyTransientContactForce() {
+    fun bilateralMotorOutput_drivesSixLegMechanicsAndFeedback() {
         val a = LeggedSensorimotorActuator()
-        val motor = FloatArray(6) { 12f }
-        // Neural motor output rises from zero, causing a mechanically coupled stroke.
-        repeat(5) { a.step(motor, 0f, .02f) }
-        assertTrue(a.motorActivation.any { it > .1f })
-        assertTrue(a.jointState.any { it > .1f })
-        assertTrue(a.forwardVelocity > 0f)
-        assertTrue(a.contact.all { it in 0f..1f })
-        // A constant rate does not create an independent periodic gait clock.
-        val heldVelocity = a.forwardVelocity
-        repeat(100) { a.step(motor, 0f, .02f) }
-        assertTrue(a.forwardVelocity < heldVelocity)
+        val motor = FloatArray(6) { .35f }
+        repeat(80) { a.step(motor, 0f, .02f) }
+        assertTrue(a.forwardVelocity > .03f)
+        assertTrue(a.supportMean > .05f)
+        assertTrue(a.proprioceptionGlobal > .02f)
+        assertTrue(a.phase.any { it > .1f })
     }
 
     @Test
-    fun bilateralMotorEnvelope_hasNoSyntheticYaw() {
+    fun rightSupportImbalance_producesPositiveYaw() {
         val a = LeggedSensorimotorActuator()
-        repeat(8) { a.step(FloatArray(6) { 12f }, 0f, .02f) }
-        assertTrue(kotlin.math.abs(a.yawRate) < .03f)
-    }
-
-    @Test
-    fun rightLeftTemporalAsymmetry_canProduceYaw() {
-        val a = LeggedSensorimotorActuator()
-        repeat(8) { a.step(FloatArray(6) { i -> if (i < 3) 0f else 12f }, 0f, .02f) }
+        val motor = FloatArray(6) { i -> if (i < 3) .10f else .60f }
+        repeat(80) { a.step(motor, 0f, .02f) }
         assertTrue(a.yawRate > 0f)
+        assertTrue(a.supportBalance > 0f)
     }
 
     @Test
-    fun walkOffSuppressesNeuralToMechanicalDrive() {
+    fun walkOff_reducesMechanicalDrive() {
         val a = LeggedSensorimotorActuator()
-        repeat(10) { a.step(FloatArray(6) { 12f }, 0f, .02f) }
-        val active = a.forwardVelocity
-        repeat(30) { a.step(FloatArray(6) { 12f }, 1f, .02f) }
-        assertTrue(a.forwardVelocity < active)
-    }
-
-    @Test
-    fun wallContactRemovesInwardVelocityAndCreatesSensoryPressure() {
-        val a = LeggedSensorimotorActuator()
-        repeat(5) { a.step(FloatArray(6) { 12f }, 0f, .02f) }
-        a.applyWallConstraint(0f, 1f, 0f, .02f)
-        assertTrue(a.wallPressure >= .18f)
-        assertTrue(a.forwardVelocity >= 0f)
+        val motor = FloatArray(6) { .55f }
+        repeat(100) { a.step(motor, 0f, .02f) }
+        val walking = a.forwardVelocity
+        repeat(100) { a.step(motor, 1f, .02f) }
+        assertTrue(a.forwardVelocity < walking)
+        assertTrue(a.forwardVelocity < .03f)
     }
 }
