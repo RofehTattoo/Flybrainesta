@@ -9,7 +9,7 @@ assert MAIN.index('private val MAX_FEEDING_MOTOR_NEURONS = 128') < MAIN.index('f
 assert 'tasteContextAgeSeconds = Float.POSITIVE_INFINITY' in MAIN
 assert 'proboscisContextAgeSeconds = Float.POSITIVE_INFINITY' in MAIN
 assert 'pharyngealContextAgeSeconds = Float.POSITIVE_INFINITY' in MAIN
-assert 'FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.35f' in MAIN
+assert 'FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.80f' in MAIN
 assert 'val tasteContextActive = tasteContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS' in MAIN
 assert 'val proboscisContextActive = proboscisContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS' in MAIN
 assert 'val ingestionNeural = foodOn &&' in MAIN

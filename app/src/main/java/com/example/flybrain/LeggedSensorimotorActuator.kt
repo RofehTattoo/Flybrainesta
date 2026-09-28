@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.7 embodied sensorimotor actuator.
+ * V1.19.8 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -134,7 +134,13 @@ class LeggedSensorimotorActuator {
     fun step(legActivation: FloatArray, walkOffActivation: Float, dtRaw: Float) {
         require(legActivation.size >= LEG_COUNT)
         val dt = dtRaw.coerceAtLeast(LINEAR_RESPONSE_MIN_DT)
-        val walkGate = (1f - .97f * walkOffActivation.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+        // A near-complete neural halt must actually stop the gait oscillator.
+        // Squaring the residual gate preserves graded partial walk-off, while
+        // preventing a small residual leg drive from sustaining a slow crawl
+        // during a measured feeding/halting episode.
+        val walkGateBase = (1f - .97f * walkOffActivation.coerceIn(0f, 1f))
+            .coerceIn(0f, 1f)
+        val walkGate = walkGateBase * walkGateBase
 
         var leftLoad = 0f
         var rightLoad = 0f

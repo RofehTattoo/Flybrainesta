@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static regression audit for the V1.19.7 wall escape reflex."""
+"""Static regression audit for the V1.19.8 wall escape reflex."""
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 MAIN=(ROOT/"app/src/main/java/com/example/flybrain/MainActivity.kt").read_text()
@@ -28,7 +28,7 @@ assert "legActuator.applyWallConstraint(" in MAIN and "wallContactNow" in MAIN
 # Version sync.
 META=(ROOT/"app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text()
 GRADLE=(ROOT/"app/build.gradle.kts").read_text()
-assert 'APP_VERSION = "1.19.7"' in META and 'APP_VERSION_CODE = 148' in META
-assert 'versionName = "1.19.7"' in GRADLE and 'versionCode = 148' in GRADLE
+assert 'APP_VERSION = "1.19.8"' in META and 'APP_VERSION_CODE = 149' in META
+assert 'versionName = "1.19.8"' in GRADLE and 'versionCode = 149' in GRADLE
 
 print("WALL ESCAPE REFLEX AUDIT: PASS")

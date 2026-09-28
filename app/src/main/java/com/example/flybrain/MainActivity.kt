@@ -192,13 +192,13 @@ class MainActivity : Activity() {
         // Read-only temporal association window for the measured feeding route.
         // It allows delayed MN9/MN11/CEM spikes to be recognized as one neural
         // feeding episode without issuing any motor command or changing the graph.
-        private val FEEDING_TASTE_HOLD_SECONDS = 0.65f
-        private val FEEDING_PROBOSCIS_HOLD_SECONDS = 1.80f
-        private val FEEDING_INGESTION_HOLD_SECONDS = 2.80f
+        private val FEEDING_TASTE_HOLD_SECONDS = 1.20f
+        private val FEEDING_PROBOSCIS_HOLD_SECONDS = 2.40f
+        private val FEEDING_INGESTION_HOLD_SECONDS = 3.00f
         private val FEEDING_PAUSE_ATTACK_TAU = 0.055f
         private val FEEDING_PAUSE_RELEASE_TAU = 0.75f
         private val FEEDING_CONTEXT_WINDOW_SECONDS = 0.75f
-        private val FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.35f
+        private val FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.80f
 
         // Reference-style neural dynamics (Shiu et al., Nature 2024):
         // v_rest = v_reset = -52 mV, threshold = -45 mV, tau_m = 20 ms,

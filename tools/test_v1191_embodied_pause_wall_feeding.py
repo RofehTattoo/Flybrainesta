@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.7 embodied pause/wall/feeding structural audit."""
+"""V1.19.8 embodied pause/wall/feeding structural audit."""
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 MAIN=(ROOT/"app/src/main/java/com/example/flybrain/MainActivity.kt").read_text()
@@ -34,5 +34,5 @@ assert 'max(wallLeft, wallTop * .30f)' not in MAIN
 assert 'max(wallRight, wallBottom * .30f)' not in MAIN
 assert 'if (foodOn && foodAmount > 0f)' in MAIN
 assert 'WALL_TANGENTIAL_FRICTION' in ACT
-assert '1.19.7' in META and '148' in META and '1.19.7' in GRADLE and '148' in GRADLE
+assert '1.19.8' in META and '149' in META and '1.19.8' in GRADLE and '149' in GRADLE
 print('V1.19.7 EMBODIED PAUSE/WALL/FEEDING AUDIT: PASS')
