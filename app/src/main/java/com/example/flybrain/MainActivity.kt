@@ -1761,8 +1761,11 @@ class MainActivity : Activity() {
         private fun updateBuzzSound() {
             if (soundReleased || !buzzLoaded || buzzSoundId == 0) return
             val movement = (abs(flySpeed) / .18f).coerceIn(0f, 1f)
-            val interaction = max(foodDrive, max(lightDrive, dangerDrive)).coerceIn(0f, 1f)
-            val active = movement > .035f || interaction > .16f
+            val wing = max(wingActivityCache, jumpActivityCache()).coerceIn(0f, 1f)
+            // The buzz follows measured wing/movement activity. Stimulus presence alone
+            // no longer starts a conspicuous artificial drone while the fly is still.
+            val activity = max(wing, movement * .72f)
+            val active = activity > .055f
             if (!active) {
                 if (buzzStreamId != 0) {
                     soundPool?.stop(buzzStreamId)
@@ -1770,11 +1773,15 @@ class MainActivity : Activity() {
                 }
                 return
             }
-            val volume = (0.035f + movement * .16f + interaction * .045f).coerceIn(.035f, .24f)
+            // Keep the sound restrained; wing activity changes both loudness and pitch
+            // slightly, rather than switching between fixed-volume sound states.
+            val volume = (0.018f + activity * .105f).coerceIn(.018f, .125f)
+            val rate = (0.94f + activity * .13f).coerceIn(.94f, 1.07f)
             if (buzzStreamId == 0) {
-                buzzStreamId = soundPool?.play(buzzSoundId, volume, volume, 1, -1, 1.0f) ?: 0
+                buzzStreamId = soundPool?.play(buzzSoundId, volume, volume, 1, -1, rate) ?: 0
             } else {
                 soundPool?.setVolume(buzzStreamId, volume, volume)
+                soundPool?.setRate(buzzStreamId, rate)
             }
         }
 
@@ -3614,39 +3621,62 @@ class MainActivity : Activity() {
             paint.color = Color.argb(34, 0, 0, 0)
             c.drawOval(px - 42f, py + 108f, px + 42f, py + 121f, paint)
 
-            // Transparent wings, posterior to the thorax, with real-looking veins.
+            // Narrow, lanceolate drosophilid wings. The wing blade is translucent;
+            // the costa, longitudinal veins and cross-veins are drawn separately.
+            // Motion is driven by the existing wing motor readout, not a new clock.
             val wingVisual = max(wingActivityCache, jumpActivityCache())
-            val wingBeat = sin(wingBeatPhase) * (10f * wingVisual)
-            val wingAlpha = (62f + 38f * wingVisual).toInt().coerceIn(55, 105)
-            val wingColor = Color.argb(wingAlpha, 175, 202, 218)
-            val wingStroke = Color.argb(175, 92, 117, 132)
+            val wingBeat = sin(wingBeatPhase) * (5.5f * wingVisual)
+            val wingAlpha = (72f + 35f * wingVisual).toInt().coerceIn(65, 112)
+            val wingFill = Color.argb(wingAlpha, 196, 211, 216)
+            val wingVein = Color.argb(190, 92, 111, 119)
 
-            fun drawWing(sign: Float) {
-                val attachX = px + sign * 14f
+            fun drawWing(sign: Float, farWing: Boolean) {
+                val attachX = px + sign * 11f
+                val attachY = py - 2f
+                val foreA = if (farWing) .82f else 1f
                 val path = android.graphics.Path().apply {
-                    moveTo(attachX, py + 8f)
-                    cubicTo(px + sign * 54f, py + 22f, px + sign * 92f, py + 68f, px + sign * 112f, py + 92f)
-                    cubicTo(px + sign * 125f, py + 108f, px + sign * 116f, py + 122f, px + sign * 92f, py + 119f)
-                    cubicTo(px + sign * 56f, py + 114f, px + sign * 30f, py + 70f, px + sign * 5f, py + 22f)
+                    moveTo(attachX, attachY)
+                    cubicTo(px + sign * 29f, py - 25f, px + sign * 63f, py - 69f,
+                            px + sign * 91f, py - 82f)
+                    cubicTo(px + sign * 101f, py - 87f, px + sign * 105f, py - 79f,
+                            px + sign * 99f, py - 66f)
+                    cubicTo(px + sign * 83f, py - 31f, px + sign * 52f, py + 5f,
+                            px + sign * 19f, py + 20f)
+                    cubicTo(px + sign * 12f, py + 13f, px + sign * 7f, py + 5f,
+                            attachX, attachY)
                     close()
                 }
                 c.save()
-                c.rotate(sign * wingBeat, attachX, py + 8f)
+                c.rotate(sign * wingBeat, attachX, attachY)
                 paint.style = Paint.Style.FILL
-                paint.color = wingColor
+                paint.color = wingFill
+                paint.alpha = (wingAlpha * foreA).toInt()
                 c.drawPath(path, paint)
                 paint.style = Paint.Style.STROKE
-                paint.strokeWidth = 1.15f
-                paint.color = wingStroke
+                paint.strokeWidth = .95f
+                paint.color = wingVein
+                paint.alpha = (190 * foreA).toInt()
                 c.drawPath(path, paint)
-                c.drawLine(attachX, py + 12f, px + sign * 105f, py + 103f, paint)
-                c.drawLine(attachX, py + 13f, px + sign * 89f, py + 73f, paint)
-                c.drawLine(attachX, py + 14f, px + sign * 72f, py + 48f, paint)
-                c.drawLine(px + sign * 52f, py + 35f, px + sign * 104f, py + 106f, paint)
+                // Costa and principal longitudinal veins.
+                c.drawLine(attachX + sign * 2f, attachY + 2f,
+                           px + sign * 97f, py - 72f, paint)
+                c.drawLine(attachX + sign * 3f, attachY + 3f,
+                           px + sign * 76f, py - 21f, paint)
+                c.drawLine(attachX + sign * 4f, attachY + 4f,
+                           px + sign * 45f, py + 8f, paint)
+                // Cross-veins are short and fine, avoiding the oversized leaf-like look.
+                c.drawLine(px + sign * 48f, py - 38f,
+                           px + sign * 65f, py - 27f, paint)
+                c.drawLine(px + sign * 67f, py - 57f,
+                           px + sign * 81f, py - 45f, paint)
                 c.restore()
+                paint.alpha = 255
             }
-            drawWing(-1f)
-            drawWing(1f)
+            // Draw the far pair first so the near wing has a clean silhouette.
+            drawWing(-1f, true)
+            drawWing(1f, true)
+            drawWing(-1f, false)
+            drawWing(1f, false)
 
             // Six articulated legs. Phase, stance/swing, lift and load are the
             // current state of the motor-driven mechanical actuator. There is no
@@ -3698,25 +3728,37 @@ class MainActivity : Activity() {
             c.drawLine(px - 34f, py + 39f, px - 25f, py + 24f, paint)
             c.drawLine(px + 34f, py + 39f, px + 25f, py + 24f, paint)
 
-            // Tapered, strongly segmented abdomen of a male Drosophila.
+            // Male abdomen: amber-brown anterior tergites, progressively darker
+            // posterior tergites, and the characteristic near-black terminal region.
             paint.style = Paint.Style.FILL
-            paint.color = Color.rgb(48, 40, 36)
+            paint.color = Color.rgb(79, 54, 39)
             val abdomen = android.graphics.Path().apply {
-                moveTo(px - 23f, py + 28f)
-                cubicTo(px - 30f, py + 52f, px - 25f, py + 101f, px, py + 123f)
-                cubicTo(px + 25f, py + 101f, px + 30f, py + 52f, px + 23f, py + 28f)
+                moveTo(px - 22f, py + 27f)
+                cubicTo(px - 29f, py + 51f, px - 23f, py + 99f, px, py + 121f)
+                cubicTo(px + 23f, py + 99f, px + 29f, py + 51f, px + 22f, py + 27f)
                 close()
             }
             c.drawPath(abdomen, paint)
-            val segY = floatArrayOf(42f, 56f, 70f, 84f, 97f, 109f)
+            val segY = floatArrayOf(39f, 51f, 63f, 75f, 87f, 99f, 109f)
             for (i in segY.indices) {
-                paint.color = if (i % 2 == 0) Color.rgb(92, 66, 49) else Color.rgb(57, 48, 43)
-                val half = 22f - i * 2.1f
-                c.drawRoundRect(px - half, py + segY[i], px + half, py + segY[i] + 9f, 4f, 4f, paint)
+                val half = 21f - i * 1.75f
+                paint.color = when (i) {
+                    0, 1 -> Color.rgb(151, 103, 61)
+                    2 -> Color.rgb(119, 78, 49)
+                    3 -> Color.rgb(83, 57, 43)
+                    else -> Color.rgb(43, 34, 31)
+                }
+                c.drawRoundRect(px - half, py + segY[i], px + half, py + segY[i] + 7.5f, 3f, 3f, paint)
+                // Fine intersegmental boundary.
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = .8f
+                paint.color = Color.argb(125, 34, 27, 25)
+                c.drawLine(px - half + 2f, py + segY[i] + 7f,
+                           px + half - 2f, py + segY[i] + 7f, paint)
+                paint.style = Paint.Style.FILL
             }
-            // Dark posterior tip characteristic of the male.
-            paint.color = Color.rgb(34, 28, 27)
-            c.drawOval(px - 10f, py + 104f, px + 10f, py + 123f, paint)
+            paint.color = Color.rgb(31, 26, 25)
+            c.drawOval(px - 9f, py + 103f, px + 9f, py + 122f, paint)
 
             // Thorax: broad, hairy and slightly lighter dorsally.
             paint.color = Color.rgb(72, 55, 45)
