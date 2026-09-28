@@ -9,7 +9,7 @@ GRADLE=(ROOT/"app/build.gradle.kts").read_text(encoding="utf-8")
 
 for token in ['"fl" -> if (side < 0) 1 else 4','"ml" -> if (side < 0) 2 else 5','"hl" -> if (side < 0) 3 else 6']:
     assert token in MAIN
-for token in ['val phase = FloatArray(LEG_COUNT)','val contact = FloatArray(LEG_COUNT)','val load = FloatArray(LEG_COUNT)','private const val STANCE_DUTY = .62f','private const val MAX_FORWARD_SPEED = .24f']:
+for token in ['val phase = FloatArray(LEG_COUNT)','val contact = FloatArray(LEG_COUNT)','val load = FloatArray(LEG_COUNT)','private const val STANCE_DUTY = .62f','private const val MAX_FORWARD_SPEED = 5.00f']:
     assert token in ACT
 assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, dtRaw: Float)' in ACT
 assert 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in MAIN
@@ -23,6 +23,6 @@ assert 'wingActivity * .010f' not in MAIN and 'flightMotor * .010f' not in MAIN
 assert 'approachAction' not in ACT and 'foodOn' not in ACT and 'lightOn' not in ACT and 'dangerOn' not in ACT
 assert 'heading = Math.PI.toFloat() - heading' not in MAIN and 'heading = -heading' not in MAIN
 assert 'exploratoryTurn' not in MAIN and 'locomotionRng' not in MAIN
-assert 'const val APP_VERSION = "1.19.2"' in META and 'const val APP_VERSION_CODE = 143' in META
-assert 'versionName = "1.19.2"' in GRADLE and 'versionCode = 143' in GRADLE
-print('V1.19 SENSORIMOTOR CLOSED LOOP STATIC AUDIT: PASS')
+assert 'const val APP_VERSION = "1.19.3"' in META and 'const val APP_VERSION_CODE = 144' in META
+assert 'versionName = "1.19.3"' in GRADLE and 'versionCode = 144' in GRADLE
+print('V1.19.3 SENSORIMOTOR CLOSED LOOP STATIC AUDIT: PASS')

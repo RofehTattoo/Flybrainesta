@@ -1760,7 +1760,7 @@ class MainActivity : Activity() {
 
         private fun updateBuzzSound() {
             if (soundReleased || !buzzLoaded || buzzSoundId == 0) return
-            val movement = (abs(flySpeed) / .18f).coerceIn(0f, 1f)
+            val movement = (abs(flySpeed) / 3.8f).coerceIn(0f, 1f)
             val wing = max(wingActivityCache, jumpActivityCache()).coerceIn(0f, 1f)
             // The buzz follows measured wing/movement activity. Stimulus presence alone
             // no longer starts a conspicuous artificial drone while the fly is still.
@@ -3239,7 +3239,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.2 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.19.3 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)
@@ -3616,11 +3616,6 @@ class MainActivity : Activity() {
             val amber = Color.rgb(177, 126, 78)
             val amberHi = Color.rgb(213, 164, 103)
 
-            // Ground shadow.
-            paint.style = Paint.Style.FILL
-            paint.color = Color.argb(34, 0, 0, 0)
-            c.drawOval(px - 42f, py + 108f, px + 42f, py + 121f, paint)
-
             // Anatomically simplified dorsal-style wings:
             // Drosophila has ONE forewing on each side, attached laterally to the
             // thorax.  The wings are broad, rounded distally and extend mainly
@@ -3833,17 +3828,21 @@ class MainActivity : Activity() {
                 c.drawCircle(px + 17f, py + yy + 3f, 1.7f, paint)
             }
 
-            // Antennae with aristae.
+            // Short Drosophila antennae: compact scape/pedicel/funiculus,
+            // with a fine lateral arista. The total projection is kept small.
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.7f
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeWidth = 1.25f
             paint.color = dark
-            c.drawLine(px - 12f, py - 69f, px - 30f, py - 94f, paint)
-            c.drawLine(px + 12f, py - 69f, px + 30f, py - 94f, paint)
-            c.drawLine(px - 30f, py - 94f, px - 46f, py - 108f, paint)
-            c.drawLine(px + 30f, py - 94f, px + 46f, py - 108f, paint)
-            paint.style = Paint.Style.FILL
-            c.drawCircle(px - 47f, py - 109f, 2f, paint)
-            c.drawCircle(px + 47f, py - 109f, 2f, paint)
+            c.drawLine(px - 10f, py - 65f, px - 14f, py - 72f, paint)
+            c.drawLine(px + 10f, py - 65f, px + 14f, py - 72f, paint)
+            paint.strokeWidth = .82f
+            c.drawLine(px - 14f, py - 72f, px - 19f, py - 77f, paint)
+            c.drawLine(px + 14f, py - 72f, px + 19f, py - 77f, paint)
+            // Very short aristae, not a second long antenna stalk.
+            paint.strokeWidth = .58f
+            c.drawLine(px - 17f, py - 74f, px - 22f, py - 80f, paint)
+            c.drawLine(px + 17f, py - 74f, px + 22f, py - 80f, paint)
 
             // Proboscis/mouthparts: presentation is driven by the retained MN9
             // (rostrum protractor) firing readout. No stimulus variable writes the

@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.2 embodied sensorimotor actuator.
+ * V1.19.3 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -26,19 +26,19 @@ class LeggedSensorimotorActuator {
         // Group order: LF, LM, LH, RF, RM, RH.
         private val TRIPOD_OFFSETS = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)
         private const val STANCE_DUTY = .62f
-        private const val MIN_PHASE_HZ = .65f
-        private const val MAX_PHASE_HZ = 5.5f
+        private const val MIN_PHASE_HZ = 1.20f
+        private const val MAX_PHASE_HZ = 16.0f
         private const val MOTOR_THRESHOLD = .035f
-        private const val MAX_FORWARD_SPEED = .24f
+        private const val MAX_FORWARD_SPEED = 5.00f
         private const val MAX_LATERAL_SPEED = .025f
-        private const val FORWARD_ACCEL = 1.25f
+        private const val FORWARD_ACCEL = 45.0f
         private const val LATERAL_ACCEL = .10f
-        private const val FORWARD_DAMPING = 5.4f
+        private const val FORWARD_DAMPING = 6.0f
         private const val LATERAL_DAMPING = 6.5f
         private const val MAX_YAW_RATE = 1.35f
         private const val YAW_RESPONSE_TAU = .16f
         private const val LINEAR_RESPONSE_MIN_DT = .0005f
-        private const val FOOT_STROKE = .034f
+        private const val FOOT_STROKE = .065f
         private const val WALL_YAW_DAMPING = .12f
         private const val WALL_TANGENTIAL_FRICTION = .94f
     }
