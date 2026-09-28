@@ -18,11 +18,14 @@ assert 'synConductance[i] = g0 * b' in MAIN
 assert 'adapt[i]' not in MAIN
 assert 'synTrace' not in MAIN
 assert 'sensoryCurrent' not in MAIN
-assert 'APP_VERSION = "1.19.1"' in META
-assert 'APP_VERSION_CODE = 142' in META
+# Keep release metadata synchronized without pinning this test to one release.
+meta_version = re.search(r'APP_VERSION = "([^"]+)"', META)
+meta_code = re.search(r'APP_VERSION_CODE = (\\d+)', META)
+gradle_version = re.search(r'versionName = "([^"]+)"', GRADLE)
+gradle_code = re.search(r'versionCode = (\\d+)', GRADLE)
+assert meta_version and gradle_version and meta_version.group(1) == gradle_version.group(1)
+assert meta_code and gradle_code and int(meta_code.group(1)) == int(gradle_code.group(1))
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'versionName = "1.19.1"' in GRADLE
-assert 'versionCode = 142' in GRADLE
 # Exact constants and an analytical LIF step.
 dt=.0005; tau_m=.020; tau_s=.005
 a=math.exp(-dt/tau_m); b=math.exp(-dt/tau_s); c=tau_s/(tau_m-tau_s)
@@ -33,6 +36,6 @@ assert v2>v and g2<g and v2 < vrest+g
 assert abs(math.exp(-.020/.020)-math.exp(-1))<1e-15
 raw=(ROOT/"app/src/main/res/raw/malecns_reduced.bin").read_bytes()
 assert raw[:8]==b'FBC103\x00\x00' and struct.unpack_from('<II',raw,8)[0]==16669
-print('V1.19.1 REFERENCE LIF INTEGRATION AUDIT: PASS')
+print('V1.19.2 REFERENCE LIF INTEGRATION AUDIT: PASS')
 print(f'a={a:.12f} b={b:.12f} coupling={c:.6f}')
 print('FBR-10 current local structural SHA-256:', hashlib.sha256(raw).hexdigest())
