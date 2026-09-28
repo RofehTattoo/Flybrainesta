@@ -3,11 +3,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = (ROOT / "app/src/main/java/com/example/flybrain/MainActivity.kt").read_text()
 
-assert 'FEEDING_CONTEXT_WINDOW_SECONDS = 0.50f' in MAIN
+assert 'FEEDING_CONTEXT_WINDOW_SECONDS = 0.75f' in MAIN
 assert 'Random' not in MAIN
 assert MAIN.index('private val MAX_FEEDING_MOTOR_NEURONS = 128') < MAIN.index('feedingMotorIndices = IntArray(MAX_FEEDING_MOTOR_NEURONS)')
 assert 'tasteContextAgeSeconds = Float.POSITIVE_INFINITY' in MAIN
 assert 'proboscisContextAgeSeconds = Float.POSITIVE_INFINITY' in MAIN
+assert 'pharyngealContextAgeSeconds = Float.POSITIVE_INFINITY' in MAIN
+assert 'FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.35f' in MAIN
 assert 'val tasteContextActive = tasteContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS' in MAIN
 assert 'val proboscisContextActive = proboscisContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS' in MAIN
 assert 'val ingestionNeural = foodOn &&' in MAIN

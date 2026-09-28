@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.6 embodied sensorimotor actuator.
+ * V1.19.7 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -34,6 +34,7 @@ class LeggedSensorimotorActuator {
         private const val FORWARD_ACCEL = 45.0f
         private const val LATERAL_ACCEL = .10f
         private const val FORWARD_DAMPING = 6.0f
+        private const val WALK_OFF_BRAKE_ACCEL = 7.0f
         private const val LATERAL_DAMPING = 6.5f
         private const val MAX_YAW_RATE = 1.35f
         private const val WALL_ESCAPE_MAX_YAW_RATE = 3.10f
@@ -209,7 +210,10 @@ class LeggedSensorimotorActuator {
         // averaging by LEG_COUNT incorrectly diluted the total force sixfold.
         // Propulsion still comes only from backward foot motion during stance.
         val propulsive = totalPropulsion.coerceIn(0f, .66f)
-        forwardAcceleration = FORWARD_ACCEL * propulsive - FORWARD_DAMPING * forwardVelocity
+        val walkOff = walkOffActivation.coerceIn(0f, 1f)
+        forwardAcceleration = FORWARD_ACCEL * propulsive -
+            FORWARD_DAMPING * forwardVelocity -
+            WALK_OFF_BRAKE_ACCEL * walkOff
         forwardVelocity = (forwardVelocity + forwardAcceleration * dt).coerceIn(0f, MAX_FORWARD_SPEED)
 
         lateralAcceleration = LATERAL_ACCEL * supportBalance - LATERAL_DAMPING * lateralVelocity

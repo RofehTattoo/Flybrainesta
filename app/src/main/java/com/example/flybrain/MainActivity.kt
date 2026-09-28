@@ -192,12 +192,13 @@ class MainActivity : Activity() {
         // Read-only temporal association window for the measured feeding route.
         // It allows delayed MN9/MN11/CEM spikes to be recognized as one neural
         // feeding episode without issuing any motor command or changing the graph.
-        private val FEEDING_TASTE_HOLD_SECONDS = 0.38f
-        private val FEEDING_PROBOSCIS_HOLD_SECONDS = 0.82f
-        private val FEEDING_INGESTION_HOLD_SECONDS = 1.20f
+        private val FEEDING_TASTE_HOLD_SECONDS = 0.65f
+        private val FEEDING_PROBOSCIS_HOLD_SECONDS = 1.80f
+        private val FEEDING_INGESTION_HOLD_SECONDS = 2.80f
         private val FEEDING_PAUSE_ATTACK_TAU = 0.055f
-        private val FEEDING_PAUSE_RELEASE_TAU = 0.48f
-        private val FEEDING_CONTEXT_WINDOW_SECONDS = 0.50f
+        private val FEEDING_PAUSE_RELEASE_TAU = 0.75f
+        private val FEEDING_CONTEXT_WINDOW_SECONDS = 0.75f
+        private val FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.35f
 
         // Reference-style neural dynamics (Shiu et al., Nature 2024):
         // v_rest = v_reset = -52 mV, threshold = -45 mV, tau_m = 20 ms,
@@ -315,6 +316,7 @@ class MainActivity : Activity() {
         private var proboscisExtension = 0f
         private var tasteContextAgeSeconds = Float.POSITIVE_INFINITY
         private var proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
+        private var pharyngealContextAgeSeconds = Float.POSITIVE_INFINITY
         private val feedingSemanticBodyIds = LongArray(128)
         private val feedingSemanticTags = ByteArray(128)
         private val feedingSemanticSides = ByteArray(128)
@@ -796,6 +798,7 @@ class MainActivity : Activity() {
             ingestionRateHz = 0f
             tasteContextAgeSeconds = Float.POSITIVE_INFINITY
             proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
+            pharyngealContextAgeSeconds = Float.POSITIVE_INFINITY
             tarsalGustatorySpikeEventsFrame = 0
             gustatorySpikeEventsFrame = 0
             haltWalkOffSpikeEventsFrame = 0
@@ -2532,16 +2535,23 @@ class MainActivity : Activity() {
             else if (proboscisContextAgeSeconds.isFinite()) proboscisContextAgeSeconds += dt
             if (!foodOn) proboscisContextAgeSeconds = Float.POSITIVE_INFINITY
             val proboscisContextActive = proboscisContextAgeSeconds <= FEEDING_CONTEXT_WINDOW_SECONDS
+            if (foodOn && foodPharyngealContactFrame >= .04f) {
+                pharyngealContextAgeSeconds = 0f
+            } else if (pharyngealContextAgeSeconds.isFinite()) {
+                pharyngealContextAgeSeconds += dt
+            }
+            if (!foodOn) pharyngealContextAgeSeconds = Float.POSITIVE_INFINITY
+            val pharyngealContextActive = pharyngealContextAgeSeconds <= FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS
             val ingestionNeural = foodOn &&
-                foodPharyngealContactFrame >= .04f &&
-                gustatorySpikeEventsFrame >= FEEDING_TASTE_NEURON_SPIKE_MIN &&
+                pharyngealContextActive &&
                 tasteContextActive &&
                 proboscisContextActive &&
                 ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN
 
-            // Feeding dwell is a consequence of the measured gustatory/feeding
-            // neural route. It prevents a single contact frame from being crossed
-            // at full locomotor speed while keeping food position out of the actuator.
+            // Neural feeding events renew a finite dwell. Gustatory, proboscis and
+            // ingestion outputs can be separated by neural propagation delays; the
+            // temporal context above associates them without synthesizing spikes.
+            // Only this measured neural state reaches the locomotor walk-off gate.
             if (tasteNeural) {
                 feedingPauseHoldSeconds = max(
                     feedingPauseHoldSeconds, FEEDING_TASTE_HOLD_SECONDS
@@ -3300,7 +3310,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.6 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.19.7 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)

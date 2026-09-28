@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.6 regression checks for wall escape independent of residual speed."""
+"""V1.19.7 regression checks for wall escape independent of residual speed."""
 import math
 
 MAX_WALL_YAW = 3.10

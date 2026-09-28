@@ -14,4 +14,4 @@ feed=MAIN[MAIN.index('private fun updateFeedingNeuralReadout'):MAIN.index('priva
 assert 'feedingFunctionSpikeEvents' in feed
 assert 'ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN' in feed
 assert 'haltWalkOffSpikeEventsFrame > 0' in feed
-print('V1.19.6 FEEDING / CLOSED-LOOP BOUNDARY AUDIT: PASS')
+print('V1.19.7 FEEDING / CLOSED-LOOP BOUNDARY AUDIT: PASS')
