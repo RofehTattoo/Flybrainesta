@@ -40,6 +40,10 @@ class MainActivity : Activity() {
 
         window.statusBarColor = Color.rgb(11, 16, 20)
         window.navigationBarColor = Color.rgb(11, 16, 20)
+        if (Build.VERSION.SDK_INT >= 29) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -98,13 +102,24 @@ class MainActivity : Activity() {
         root.addView(identity, LinearLayout.LayoutParams(-1, 62.dp()))
 
         root.setOnApplyWindowInsetsListener { view, insets ->
-            val bars = if (Build.VERSION.SDK_INT >= 30) {
-                insets.getInsets(android.view.WindowInsets.Type.systemBars())
-            } else null
-            val top = bars?.top ?: insets.systemWindowInsetTop
-            val bottom = bars?.bottom ?: insets.systemWindowInsetBottom
-            view.setPadding(0, top, 0, bottom)
-            insets
+            // Android 15 (targetSdk 35) lays app content edge-to-edge by default.
+            // Apply system-bar/cutout insets to the content container itself and
+            // consume them so the custom-drawn brain panel cannot sit underneath
+            // the Android navigation controls.
+            if (Build.VERSION.SDK_INT >= 30) {
+                val insetTypes = android.view.WindowInsets.Type.systemBars() or
+                    android.view.WindowInsets.Type.displayCutout()
+                val safe = insets.getInsets(insetTypes)
+                view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+                android.view.WindowInsets.CONSUMED
+            } else {
+                val left = insets.systemWindowInsetLeft
+                val top = insets.systemWindowInsetTop
+                val right = insets.systemWindowInsetRight
+                val bottom = insets.systemWindowInsetBottom
+                view.setPadding(left, top, right, bottom)
+                insets.consumeSystemWindowInsets()
+            }
         }
 
         val controls = LinearLayout(this).apply {
@@ -3310,12 +3325,12 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.8 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.19.9 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)
             paint.color = Color.rgb(171, 181, 187)
-            c.drawText("MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBC103 + FBD105 + VNCSEM102 · LOOP", innerL, top + dp(36f), paint)
+            c.drawText("MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE", innerL, top + dp(36f), paint)
 
             // Live status + model census, kept in one compact row.
             val statusX = innerR - dp(124f)

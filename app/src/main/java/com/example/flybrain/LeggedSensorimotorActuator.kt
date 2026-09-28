@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.8 embodied sensorimotor actuator.
+ * V1.19.9 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -37,6 +37,12 @@ class LeggedSensorimotorActuator {
         private const val WALK_OFF_BRAKE_ACCEL = 7.0f
         private const val LATERAL_DAMPING = 6.5f
         private const val MAX_YAW_RATE = 1.35f
+        // A left/right ratio is meaningful only when there is enough measured
+        // stance propulsion. Without this gate, tiny residual forces normalize
+        // to a full turn command and the body spins while translationally stopped.
+        private const val TURN_PROPULSION_DEADZONE = .018f
+        private const val TURN_PROPULSION_FULL_SCALE = .105f
+        private const val WALKOFF_YAW_SUPPRESSION = .92f
         private const val WALL_ESCAPE_MAX_YAW_RATE = 3.10f
         private const val WALL_ESCAPE_RESPONSE_TAU = .085f
         private const val WALL_ESCAPE_DECAY_TAU = .34f
@@ -226,9 +232,18 @@ class LeggedSensorimotorActuator {
         lateralVelocity = (lateralVelocity + lateralAcceleration * dt)
             .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
 
+        val totalTurnPropulsion = (rightPropulsion + leftPropulsion).coerceAtLeast(0f)
         val turnBalance = ((rightPropulsion - leftPropulsion) /
-            (rightPropulsion + leftPropulsion + .0005f)).coerceIn(-1f, 1f)
-        val neuralYawTarget = turnBalance * MAX_YAW_RATE
+            (totalTurnPropulsion + .0005f)).coerceIn(-1f, 1f)
+        // Ramp turn authority up only when real stance propulsion exists. This
+        // preserves a genuine pivot (one side propelling) but removes the
+        // ratio-amplification that caused in-place spinning from near-zero force.
+        val turnDrive = ((totalTurnPropulsion - TURN_PROPULSION_DEADZONE) /
+            (TURN_PROPULSION_FULL_SCALE - TURN_PROPULSION_DEADZONE))
+            .coerceIn(0f, 1f)
+        val pauseYawGate = (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
+        val neuralYawTarget = turnBalance * MAX_YAW_RATE * turnDrive * pauseYawGate
+        // Wall escape remains available during genuine physical wall contact.
         val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
         val yawTarget = (neuralYawTarget + wallYawTarget)
             .coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
