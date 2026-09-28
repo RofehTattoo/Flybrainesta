@@ -23,6 +23,6 @@ assert 'wingActivity * .010f' not in MAIN and 'flightMotor * .010f' not in MAIN
 assert 'approachAction' not in ACT and 'foodOn' not in ACT and 'lightOn' not in ACT and 'dangerOn' not in ACT
 assert 'heading = Math.PI.toFloat() - heading' not in MAIN and 'heading = -heading' not in MAIN
 assert 'exploratoryTurn' not in MAIN and 'locomotionRng' not in MAIN
-assert 'const val APP_VERSION = "1.19.3"' in META and 'const val APP_VERSION_CODE = 144' in META
-assert 'versionName = "1.19.3"' in GRADLE and 'versionCode = 144' in GRADLE
+assert 'const val APP_VERSION = "1.19.4"' in META and 'const val APP_VERSION_CODE = 145' in META
+assert 'versionName = "1.19.4"' in GRADLE and 'versionCode = 145' in GRADLE
 print('V1.19.3 SENSORIMOTOR CLOSED LOOP STATIC AUDIT: PASS')

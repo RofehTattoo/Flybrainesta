@@ -2929,7 +2929,7 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19: closed-loop sensorimotor body mechanics. The actuator sees
+            // V1.19.4: closed-loop sensorimotor body mechanics. The actuator sees
             // only the six measured leg-MN subgroup activations and the measured
             // walk-OFF output. No sensory stimulus or action/goal variable enters.
             legActuator.step(legGroupActivation, walkOffActivationState, dt)
@@ -2937,7 +2937,7 @@ class MainActivity : Activity() {
             bodyLateralSpeed = legActuator.lateralVelocity
             yawRate = legActuator.yawRate
 
-            // V1.19: yaw is part of the mechanical body state. Integrate the
+            // V1.19.4: yaw is part of the mechanical body state. Integrate the
             // actuator-produced angular velocity before resolving body velocity
             // into world coordinates. No stimulus/action variable writes heading.
             heading += yawRate * dt

@@ -36,6 +36,6 @@ assert v2>v and g2<g and v2 < vrest+g
 assert abs(math.exp(-.020/.020)-math.exp(-1))<1e-15
 raw=(ROOT/"app/src/main/res/raw/malecns_reduced.bin").read_bytes()
 assert raw[:8]==b'FBC103\x00\x00' and struct.unpack_from('<II',raw,8)[0]==16669
-print('V1.19.3 REFERENCE LIF INTEGRATION AUDIT: PASS')
+print('V1.19.4 REFERENCE LIF INTEGRATION AUDIT: PASS')
 print(f'a={a:.12f} b={b:.12f} coupling={c:.6f}')
 print('FBR-10 current local structural SHA-256:', hashlib.sha256(raw).hexdigest())

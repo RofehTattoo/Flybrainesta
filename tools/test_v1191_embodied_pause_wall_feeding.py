@@ -34,5 +34,5 @@ assert 'max(wallLeft, wallTop * .30f)' not in MAIN
 assert 'max(wallRight, wallBottom * .30f)' not in MAIN
 assert 'if (foodOn && foodAmount > 0f)' in MAIN
 assert 'WALL_TANGENTIAL_FRICTION' in ACT
-assert '1.19.3' in META and '143' in META and '1.19.3' in GRADLE and '143' in GRADLE
-print('V1.19.3 EMBODIED PAUSE/WALL/FEEDING AUDIT: PASS')
+assert '1.19.4' in META and '145' in META and '1.19.4' in GRADLE and '145' in GRADLE
+print('V1.19.4 EMBODIED PAUSE/WALL/FEEDING AUDIT: PASS')

@@ -26,6 +26,6 @@
     "Olfactory input is restricted to retained real MaleCNS ORNs",
     "Tarsal gustatory input is restricted to retained official `leg bristle` gustatory receptors; feeding motor output is read from retained official cb_motor types and never synthesized."
   ],
-  "version": "1.19.3",
-  "versionCode": 144
+  "version": "1.19.4",
+  "versionCode": 145
 }
