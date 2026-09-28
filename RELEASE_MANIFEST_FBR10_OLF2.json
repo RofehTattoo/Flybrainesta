@@ -1,5 +1,5 @@
 {
-  "release": "FlyBrain V1.19.7 / FBR-10-OLF2-MOTORROUTE",
+  "release": "FlyBrain V1.19.8 / FBR-10-OLF2-MOTORROUTE",
   "status": "source-baseline-for-CI-rebuild",
   "male_cns": "v1.0",
   "target_neurons": 16669,
@@ -26,6 +26,6 @@
     "Olfactory input is restricted to retained real MaleCNS ORNs",
     "Tarsal gustatory input is restricted to retained official `leg bristle` gustatory receptors; feeding motor output is read from retained official cb_motor types and never synthesized."
   ],
-  "version": "1.19.7",
-  "versionCode": 147
+  "version": "1.19.8",
+  "versionCode": 149
 }

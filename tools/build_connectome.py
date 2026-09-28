@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.7 FBR-10-OLF2-MOTORROUTE.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.8 FBR-10-OLF2-MOTORROUTE.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 16,669 neurons from the audited 166,700-neuron census
@@ -24,8 +24,8 @@ import pyarrow.ipc as ipc
 
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
-FLYBRAIN_RELEASE = "1.19.7"
-APP_VERSION_CODE = 148
+FLYBRAIN_RELEASE = "1.19.8"
+APP_VERSION_CODE = 149
 REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
@@ -1230,10 +1230,10 @@ def main(root: Path) -> None:
 
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
-    const val FLYBRAIN_VERSION = "1.19.7"
+    const val FLYBRAIN_VERSION = "1.19.8"
     const val FLYBRAIN_VERSION_CODE = 143
-    const val APP_VERSION = "1.19.7"
-    const val APP_VERSION_CODE = 148
+    const val APP_VERSION = "1.19.8"
+    const val APP_VERSION_CODE = 149
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = %d
     // 54 distinct published (type, entryNerve) combinations; 53 unique
