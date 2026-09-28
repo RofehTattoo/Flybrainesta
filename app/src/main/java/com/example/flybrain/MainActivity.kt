@@ -1775,8 +1775,8 @@ class MainActivity : Activity() {
             }
             // Keep the sound restrained; wing activity changes both loudness and pitch
             // slightly, rather than switching between fixed-volume sound states.
-            val volume = (0.018f + activity * .105f).coerceIn(.018f, .125f)
-            val rate = (0.94f + activity * .13f).coerceIn(.94f, 1.07f)
+            val volume = (0.022f + activity * .125f).coerceIn(.022f, .145f)
+            val rate = (0.97f + activity * .065f).coerceIn(.97f, 1.035f)
             if (buzzStreamId == 0) {
                 buzzStreamId = soundPool?.play(buzzSoundId, volume, volume, 1, -1, rate) ?: 0
             } else {
@@ -3621,62 +3621,101 @@ class MainActivity : Activity() {
             paint.color = Color.argb(34, 0, 0, 0)
             c.drawOval(px - 42f, py + 108f, px + 42f, py + 121f, paint)
 
-            // Narrow, lanceolate drosophilid wings. The wing blade is translucent;
-            // the costa, longitudinal veins and cross-veins are drawn separately.
-            // Motion is driven by the existing wing motor readout, not a new clock.
-            val wingVisual = max(wingActivityCache, jumpActivityCache())
-            val wingBeat = sin(wingBeatPhase) * (5.5f * wingVisual)
-            val wingAlpha = (72f + 35f * wingVisual).toInt().coerceIn(65, 112)
-            val wingFill = Color.argb(wingAlpha, 196, 211, 216)
-            val wingVein = Color.argb(190, 92, 111, 119)
+            // Anatomically simplified dorsal-style wings:
+            // Drosophila has ONE forewing on each side, attached laterally to the
+            // thorax.  The wings are broad, rounded distally and extend mainly
+            // perpendicular to the body axis (local X); they are not four
+            // leaf-shaped appendages and do not overlap the abdomen.
+            val wingVisual = max(wingActivityCache, jumpActivityCache()).coerceIn(0f, 1f)
+            val wingStroke = sin(wingBeatPhase) * (3.8f * wingVisual)
+            val wingFill = Color.argb(
+                (46f + 30f * wingVisual).toInt().coerceIn(42, 78),
+                205, 215, 218
+            )
+            val wingInk = Color.argb(
+                (125f + 45f * wingVisual).toInt().coerceIn(120, 175),
+                93, 103, 106
+            )
 
-            fun drawWing(sign: Float, farWing: Boolean) {
-                val attachX = px + sign * 11f
-                val attachY = py - 2f
-                val foreA = if (farWing) .82f else 1f
-                val path = android.graphics.Path().apply {
-                    moveTo(attachX, attachY)
-                    cubicTo(px + sign * 29f, py - 25f, px + sign * 63f, py - 69f,
-                            px + sign * 91f, py - 82f)
-                    cubicTo(px + sign * 101f, py - 87f, px + sign * 105f, py - 79f,
-                            px + sign * 99f, py - 66f)
-                    cubicTo(px + sign * 83f, py - 31f, px + sign * 52f, py + 5f,
-                            px + sign * 19f, py + 20f)
-                    cubicTo(px + sign * 12f, py + 13f, px + sign * 7f, py + 5f,
-                            attachX, attachY)
+            fun drawAnatomicalWing(side: Float) {
+                val baseX = px + side * 24f
+                val baseY = py - 2f
+
+                // Leading edge is slightly anterior (-Y); distal margin is rounded;
+                // trailing edge returns posteriorly (+Y) before the narrow base.
+                val wing = android.graphics.Path().apply {
+                    moveTo(baseX, baseY - 4f)
+                    cubicTo(
+                        px + side * 34f, py - 10f,
+                        px + side * 61f, py - 28f,
+                        px + side * 78f, py - 27f
+                    )
+                    cubicTo(
+                        px + side * 90f, py - 26f,
+                        px + side * 96f, py - 14f,
+                        px + side * 93f, py + 2f
+                    )
+                    cubicTo(
+                        px + side * 89f, py + 20f,
+                        px + side * 72f, py + 31f,
+                        px + side * 52f, py + 29f
+                    )
+                    cubicTo(
+                        px + side * 37f, py + 28f,
+                        px + side * 28f, py + 17f,
+                        baseX, baseY + 5f
+                    )
                     close()
                 }
+
                 c.save()
-                c.rotate(sign * wingBeat, attachX, attachY)
+                // The wing articulates at the thoracic base. Keep the visual
+                // excursion small so the membrane stays anatomically plausible.
+                c.rotate(side * wingStroke, baseX, baseY)
+
                 paint.style = Paint.Style.FILL
-                paint.color = wingFill
-                paint.alpha = (wingAlpha * foreA).toInt()
-                c.drawPath(path, paint)
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = .95f
-                paint.color = wingVein
-                paint.alpha = (190 * foreA).toInt()
-                c.drawPath(path, paint)
-                // Costa and principal longitudinal veins.
-                c.drawLine(attachX + sign * 2f, attachY + 2f,
-                           px + sign * 97f, py - 72f, paint)
-                c.drawLine(attachX + sign * 3f, attachY + 3f,
-                           px + sign * 76f, py - 21f, paint)
-                c.drawLine(attachX + sign * 4f, attachY + 4f,
-                           px + sign * 45f, py + 8f, paint)
-                // Cross-veins are short and fine, avoiding the oversized leaf-like look.
-                c.drawLine(px + sign * 48f, py - 38f,
-                           px + sign * 65f, py - 27f, paint)
-                c.drawLine(px + sign * 67f, py - 57f,
-                           px + sign * 81f, py - 45f, paint)
-                c.restore()
                 paint.alpha = 255
+                paint.color = wingFill
+                c.drawPath(wing, paint)
+
+                paint.style = Paint.Style.STROKE
+                paint.strokeCap = Paint.Cap.ROUND
+                paint.strokeWidth = 0.85f
+                paint.color = wingInk
+                c.drawPath(wing, paint)
+
+                // Costa / leading margin.
+                paint.strokeWidth = 1.1f
+                c.drawLine(
+                    baseX + side * 2f, baseY - 1f,
+                    px + side * 88f, py - 16f, paint
+                )
+
+                // Principal longitudinal veins, simplified but ordered.
+                paint.strokeWidth = 0.62f
+                c.drawLine(baseX + side * 3f, baseY - 2f,
+                           px + side * 86f, py - 7f, paint)
+                c.drawLine(baseX + side * 3f, baseY - 1f,
+                           px + side * 83f, py + 4f, paint)
+                c.drawLine(baseX + side * 4f, baseY + 1f,
+                           px + side * 74f, py + 16f, paint)
+                c.drawLine(baseX + side * 5f, baseY + 2f,
+                           px + side * 58f, py + 25f, paint)
+
+                // Two short cross-veins; kept inside the membrane rather than
+                // drawing a decorative grid.
+                c.drawLine(px + side * 49f, py - 13f,
+                           px + side * 57f, py + 2f, paint)
+                c.drawLine(px + side * 68f, py - 11f,
+                           px + side * 75f, py + 9f, paint)
+
+                c.restore()
             }
-            // Draw the far pair first so the near wing has a clean silhouette.
-            drawWing(-1f, true)
-            drawWing(1f, true)
-            drawWing(-1f, false)
-            drawWing(1f, false)
+
+            // Exactly two wings: left and right.
+            drawAnatomicalWing(-1f)
+            drawAnatomicalWing(1f)
+            paint.alpha = 255
 
             // Six articulated legs. Phase, stance/swing, lift and load are the
             // current state of the motor-driven mechanical actuator. There is no
