@@ -18,7 +18,7 @@ assert 'synConductance[i] = g0 * b' in MAIN
 assert 'adapt[i]' not in MAIN
 assert 'synTrace' not in MAIN
 assert 'sensoryCurrent' not in MAIN
-# Keep release metadata synchronized without pinning this test to one release.
+# Keep release metadata synchronized after canonical connectome regeneration.
 meta_version = re.search(r'APP_VERSION = "([^"]+)"', META)
 meta_code = re.search(r'APP_VERSION_CODE = (\d+)', META)
 gradle_version = re.search(r'versionName = "([^"]+)"', GRADLE)
