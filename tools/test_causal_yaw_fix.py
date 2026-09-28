@@ -6,7 +6,9 @@ body_start = MAIN.index("private fun driveBody")
 body_end = MAIN.index("private fun runNeuralSimulation", body_start)
 body = MAIN[body_start:body_end]
 
-assert 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in body
+assert 'feedingPauseActivation' in body
+assert 'effectiveWalkOffActivation' in body
+assert 'legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)' in body
 assert 'legActuator.yawRate' in body
 assert 'supportBalance' in (ROOT / "app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt").read_text(encoding="utf-8")
 assert "neckActivity *" not in body
