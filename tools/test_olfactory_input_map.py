@@ -7,7 +7,7 @@ BUILDER = (ROOT / 'tools/build_olfactory_input_map.py').read_text()
 FBC = ROOT / 'app/src/main/res/raw/malecns_reduced.bin'
 
 assert 'olfactoryNeuronIndices' in MAIN
-# V1.19.5 closed-loop mechanosensory input maps wall pressure into the
+# V1.19.6 closed-loop mechanosensory input maps wall pressure into the
 # fly's body frame, combines it with side-resolved proprioception, and writes
 # a bounded rate to each retained mechanosensory receptor.
 assert 'val mechLeft = legActuator.proprioceptionLeft' in MAIN

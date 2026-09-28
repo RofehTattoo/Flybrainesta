@@ -192,6 +192,11 @@ class MainActivity : Activity() {
         // Read-only temporal association window for the measured feeding route.
         // It allows delayed MN9/MN11/CEM spikes to be recognized as one neural
         // feeding episode without issuing any motor command or changing the graph.
+        private val FEEDING_TASTE_HOLD_SECONDS = 0.38f
+        private val FEEDING_PROBOSCIS_HOLD_SECONDS = 0.82f
+        private val FEEDING_INGESTION_HOLD_SECONDS = 1.20f
+        private val FEEDING_PAUSE_ATTACK_TAU = 0.055f
+        private val FEEDING_PAUSE_RELEASE_TAU = 0.48f
         private val FEEDING_CONTEXT_WINDOW_SECONDS = 0.50f
 
         // Reference-style neural dynamics (Shiu et al., Nature 2024):
@@ -297,6 +302,9 @@ class MainActivity : Activity() {
         private var tasteContactNeuralNow = false
         private var proboscisNeuralNow = false
         private var ingestionNeuralNow = false
+        private var feedingPauseActivation = 0f
+        private var feedingPauseHoldSeconds = 0f
+        private var feedingPausePeak = 0f
         private var haltDuringFoodContactNow = false
         private var tasteContactEpisodes = 0
         private var proboscisEpisodes = 0
@@ -805,6 +813,9 @@ class MainActivity : Activity() {
             tasteContactNeuralNow = false
             proboscisNeuralNow = false
             ingestionNeuralNow = false
+            feedingPauseActivation = 0f
+            feedingPauseHoldSeconds = 0f
+            feedingPausePeak = 0f
             haltDuringFoodContactNow = false
             tasteContactEpisodes = 0
             proboscisEpisodes = 0
@@ -2528,6 +2539,45 @@ class MainActivity : Activity() {
                 proboscisContextActive &&
                 ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN
 
+            // Feeding dwell is a consequence of the measured gustatory/feeding
+            // neural route. It prevents a single contact frame from being crossed
+            // at full locomotor speed while keeping food position out of the actuator.
+            if (tasteNeural) {
+                feedingPauseHoldSeconds = max(
+                    feedingPauseHoldSeconds, FEEDING_TASTE_HOLD_SECONDS
+                )
+                feedingPausePeak = max(feedingPausePeak, .72f)
+            }
+            if (proboscisNeural) {
+                feedingPauseHoldSeconds = max(
+                    feedingPauseHoldSeconds, FEEDING_PROBOSCIS_HOLD_SECONDS
+                )
+                feedingPausePeak = max(feedingPausePeak, .94f)
+            }
+            if (ingestionNeural) {
+                feedingPauseHoldSeconds = max(
+                    feedingPauseHoldSeconds, FEEDING_INGESTION_HOLD_SECONDS
+                )
+                feedingPausePeak = 1f
+            }
+
+            val feedingPauseTarget = if (feedingPauseHoldSeconds > 0f) {
+                feedingPausePeak.coerceIn(0f, 1f)
+            } else 0f
+            val pauseTau = if (feedingPauseTarget > feedingPauseActivation) {
+                FEEDING_PAUSE_ATTACK_TAU
+            } else {
+                FEEDING_PAUSE_RELEASE_TAU
+            }
+            feedingPauseActivation = relaxMotorActivation(
+                feedingPauseActivation, feedingPauseTarget,
+                dt.coerceAtLeast(.001f), pauseTau
+            )
+            feedingPauseHoldSeconds = (feedingPauseHoldSeconds - dt).coerceAtLeast(0f)
+            if (feedingPauseHoldSeconds <= 0f && feedingPauseTarget <= 0f) {
+                feedingPausePeak = 0f
+            }
+
             tasteContactNeuralNow = tasteNeural
             proboscisNeuralNow = proboscisNeural
             ingestionNeuralNow = ingestionNeural
@@ -2705,8 +2755,14 @@ class MainActivity : Activity() {
         private var jumpActivationState = 0f
         private var abdomenActivationState = 0f
 
-        private fun relaxMotorActivation(previous: Float, target: Float, dt: Float): Float {
-            val alpha = (1f - exp((-dt / MOTOR_ACTIVATION_TAU_SECONDS).toDouble()).toFloat()).coerceIn(0f, 1f)
+        private fun relaxMotorActivation(
+            previous: Float,
+            target: Float,
+            dt: Float,
+            tauSeconds: Float = MOTOR_ACTIVATION_TAU_SECONDS
+        ): Float {
+            val tau = tauSeconds.coerceAtLeast(.001f)
+            val alpha = (1f - exp((-dt / tau).toDouble()).toFloat()).coerceIn(0f, 1f)
             return previous + (target - previous) * alpha
         }
 
@@ -2932,7 +2988,10 @@ class MainActivity : Activity() {
             // V1.19.4: closed-loop sensorimotor body mechanics. The actuator sees
             // only the six measured leg-MN subgroup activations and the measured
             // walk-OFF output. No sensory stimulus or action/goal variable enters.
-            legActuator.step(legGroupActivation, walkOffActivationState, dt)
+            val effectiveWalkOffActivation = max(
+                walkOffActivationState, feedingPauseActivation
+            )
+            legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)
             flySpeed = legActuator.forwardVelocity
             bodyLateralSpeed = legActuator.lateralVelocity
             yawRate = legActuator.yawRate
@@ -3241,7 +3300,7 @@ class MainActivity : Activity() {
             paint.typeface = Typeface.DEFAULT_BOLD
             paint.textSize = sp(13f)
             paint.color = Color.rgb(245, 247, 248)
-            c.drawText("FLYBRAIN V1.19.5 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
+            c.drawText("FLYBRAIN V1.19.6 · SENSORIMOTOR CLOSED LOOP", innerL, top + dp(22f), paint)
 
             paint.typeface = Typeface.DEFAULT
             paint.textSize = sp(9.0f)
