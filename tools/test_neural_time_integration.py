@@ -1,5 +1,5 @@
 from pathlib import Path
-import math, struct, hashlib
+import math, struct, hashlib, re
 ROOT=Path(__file__).resolve().parents[1]
 MAIN=(ROOT/"app/src/main/java/com/example/flybrain/MainActivity.kt").read_text(encoding="utf-8")
 META=(ROOT/"app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
@@ -20,9 +20,9 @@ assert 'synTrace' not in MAIN
 assert 'sensoryCurrent' not in MAIN
 # Keep release metadata synchronized without pinning this test to one release.
 meta_version = re.search(r'APP_VERSION = "([^"]+)"', META)
-meta_code = re.search(r'APP_VERSION_CODE = (\\d+)', META)
+meta_code = re.search(r'APP_VERSION_CODE = (\d+)', META)
 gradle_version = re.search(r'versionName = "([^"]+)"', GRADLE)
-gradle_code = re.search(r'versionCode = (\\d+)', GRADLE)
+gradle_code = re.search(r'versionCode = (\d+)', GRADLE)
 assert meta_version and gradle_version and meta_version.group(1) == gradle_version.group(1)
 assert meta_code and gradle_code and int(meta_code.group(1)) == int(gradle_code.group(1))
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
