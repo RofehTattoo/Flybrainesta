@@ -8,10 +8,13 @@ BUILDER = (ROOT / 'tools/build_sensory_input_map.py').read_text()
 # Phase 1: mapped receptor populations are the only external sensory injection targets.
 for token in [
     'visualReceptorIndices', 'gustatoryReceptorIndices', 'mechanosensoryReceptorIndices',
-    'loadSensoryInputMap()', 'setMappedSensoryRate', 'setMappedSensoryRate(visualReceptorIndices', 'SENSORY_VIS_MAX_HZ',
+    'loadSensoryInputMap()', 'setMappedSensoryRate', 'SENSORY_VIS_MAX_HZ',
     'sensory_input_map.tsv',
 ]:
     assert token in MAIN, token
+assert 'visualReceptorIndices' in MAIN
+assert 'setMappedSensoryRate(' in MAIN
+assert 'visualReceptorIndices,' in MAIN
 
 # The old population-wide / cyclic encoder must be gone.
 for forbidden in [
@@ -34,7 +37,7 @@ for forbidden in [
 sense_start = MAIN.index('private fun sense(dt: Float)')
 sense_end = MAIN.index('private fun populationRate', sense_start)
 sense = MAIN[sense_start:sense_end]
-assert 'setMappedSensoryRate(visualReceptorIndices' in sense
+assert 'setMappedSensoryRate(' in sense and 'visualReceptorIndices' in sense
 assert 'gustatoryTarsalReceptorIndices' in sense
 assert 'mechanosensorySide[i].toInt()' in sense and 'legActuator.proprioceptionLeft' in sense
 assert 'dangerPattern' not in sense

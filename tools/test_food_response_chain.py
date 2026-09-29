@@ -17,7 +17,7 @@ assert 'legGroupActivation[g] = relaxMotorActivation' in body
 assert 'feedingPauseActivation' in body
 assert 'effectiveWalkOffActivation' in body
 assert 'legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)' in body
-# V1.19.13 integrates into temporary world coordinates so collision recovery
+# V1.19.14 integrates into temporary world coordinates so collision recovery
 # can be applied before the arena clamp.
 assert 'var nextFlyX = flyX + worldVx * dt' in body
 assert 'var nextFlyY = flyY + worldVy * dt' in body

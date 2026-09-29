@@ -8,7 +8,7 @@ drive=MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeural
 assert 'walkOffActivationState' in drive and 'feedingPauseActivation' in drive
 assert 'effectiveWalkOffActivation' in drive and 'legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)' in drive
 assert 'foodOn' not in ACT and 'foodDirectionalBias' not in ACT and 'approachAction' not in ACT
-# V1.19.13 uses a collision-aware position integration path.
+# V1.19.14 uses a collision-aware position integration path.
 assert 'var nextFlyX = flyX + worldVx * dt' in drive
 assert 'var nextFlyY = flyY + worldVy * dt' in drive
 assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in drive

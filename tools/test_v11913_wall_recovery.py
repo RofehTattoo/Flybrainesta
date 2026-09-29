@@ -13,6 +13,6 @@ assert "if (planarSpeed < .045f && wallRepulseCooldown <= 0f)" in ACT
 assert "val retrySide = when {" in ACT
 assert "if (wallEscapePulseRemaining <= 0f)" in ACT
 assert "data class StartupEntry" in MAIN
-assert 'APP_VERSION = "1.19.13"' in META
-assert 'APP_VERSION_CODE = 154' in META
-print("V1.19.13 WALL CORNER RECOVERY / STARTUP COMPILE REGRESSION: PASS")
+assert 'APP_VERSION = "1.19.14"' in META
+assert 'APP_VERSION_CODE = 155' in META
+print("V1.19.14 WALL CORNER RECOVERY / STARTUP COMPILE REGRESSION: PASS")

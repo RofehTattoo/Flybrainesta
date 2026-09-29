@@ -204,7 +204,7 @@ class MainActivity : Activity() {
 
 
     /**
-     * V1.19.13 startup observatory.
+     * V1.19.14 startup observatory.
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
      * It stays on screen for at least 4.5 s after the loader completes.
      */
@@ -643,7 +643,7 @@ class MainActivity : Activity() {
         private val FOOD_PHARYNGEAL_CONTACT_RADIUS = .038f
         private val FOOD_INITIAL_AMOUNT = 1f
         private val FOOD_INGESTION_STEP = .10f
-        // V1.19.13: the white arena is the real locomotor workspace; keep only
+        // V1.19.14: the white arena is the real locomotor workspace; keep only
         // a narrow safety margin for the fly sprite and visible border.
         private val BODY_MIN_X = .045f
         private val BODY_MAX_X = .955f
@@ -2139,19 +2139,30 @@ class MainActivity : Activity() {
             val leftTasteRate = foodTarsalLeftContactFrame * 180f * tasteState
             val rightTasteRate = foodTarsalRightContactFrame * 180f * tasteState
             val centerTasteRate = ((foodTarsalLeftContactFrame + foodTarsalRightContactFrame) * .5f) * 180f * tasteState
-            val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .48f) * 1.55f
-            val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .48f) * 2.15f
+            val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .42f)
+            val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .38f)
 
             val dangerDistance = hypot(dangerX - flyX, dangerY - flyY)
             val approachRate = if (dangerOn && previousDangerDistance.isFinite()) {
                 ((previousDangerDistance - dangerDistance) / dt.coerceAtLeast(.001f)).coerceAtLeast(0f)
             } else 0f
-            dangerLoom = if (dangerOn) (approachRate / .35f).coerceIn(0f, 1f) else 0f
+            dangerLoom = if (dangerOn) (approachRate / .22f).coerceIn(0f, 1f) else 0f
             previousDangerDistance = if (dangerOn) dangerDistance else Float.NaN
-            val visualThreatIntensity = dangerBaseIntensity * (.45f + .80f * dangerLoom)
-            val combinedVisualIntensity = (lightIntensity + visualThreatIntensity).coerceIn(0f, 3.5f)
 
-            setMappedSensoryRate(visualReceptorIndices, combinedVisualIntensity / 3.5f * SENSORY_VIS_MAX_HZ)
+            // Primary visual encoder:
+            // - light is a sustained luminance field;
+            // - danger is a stronger local luminance/looming event.
+            // Both remain external input to the retained photoreceptors only.
+            val visualLightComponent = lightIntensity * 1.65f
+            val visualThreatComponent = dangerBaseIntensity *
+                (.70f + 1.45f * dangerLoom)
+            val combinedVisualIntensity = (visualLightComponent + visualThreatComponent)
+                .coerceIn(0f, 3.5f)
+
+            setMappedSensoryRate(
+                visualReceptorIndices,
+                combinedVisualIntensity / 3.5f * SENSORY_VIS_MAX_HZ
+            )
             injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_MAX_HZ)
             for (i in gustatoryTarsalReceptorIndices) {
                 externalRateHz[i] = when (gustatorySide[i].toInt()) {
@@ -2893,7 +2904,7 @@ class MainActivity : Activity() {
             val foodContext = ((olfactoryRate * .72f + gustatoryRate * .28f) *
                 (1f - satiety * .35f)).coerceIn(0f, 1f)
             val threatContext = (mechanosensoryRate * .35f + dangerDrive * .65f).coerceIn(0f, 1f)
-            val visualContext = visualRate.coerceIn(0f, 1f)
+            val visualContext = max(visualRate, visualRateDisplay * .65f).coerceIn(0f, 1f)
 
             // Forward/approach is now separated. Walking evidence alone is not
             // enough: approach also needs an olfactory/gustatory target signal.
@@ -3289,7 +3300,7 @@ class MainActivity : Activity() {
             val motorRate = (allMotorSpikeEvents * invFrame / motorCount.toFloat()).coerceIn(0f, 260f)
 
             // UI diagnostics report measured firing, not stimulus intensity.
-            visualRateDisplay = .82f * visualRateDisplay + .18f * visualRate
+            visualRateDisplay = .72f * visualRateDisplay + .28f * visualRate
             olfactoryRateDisplay = .82f * olfactoryRateDisplay + .18f * olfactoryRate
             gustatoryRateDisplay = .82f * gustatoryRateDisplay + .18f * gustatoryRate
             mechanosensoryRateDisplay = .82f * mechanosensoryRateDisplay + .18f * mechanosensoryRate

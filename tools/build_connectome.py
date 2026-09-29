@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.13 FBR-10-OLF2-MOTORROUTE.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.14 FBR-10-OLF2-MOTORROUTE.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 16,669 neurons from the audited 166,700-neuron census
@@ -24,8 +24,8 @@ import pyarrow.ipc as ipc
 
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
-FLYBRAIN_RELEASE = "1.19.13"
-APP_VERSION_CODE = 154
+FLYBRAIN_RELEASE = "1.19.14"
+APP_VERSION_CODE = 155
 REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
@@ -86,6 +86,31 @@ def normalized_orn_type_entry_nerve_pairs(df: pd.DataFrame) -> pd.DataFrame:
     # inflate the 54-combination source/retained census.
     pairs = pairs[pairs["type"].ne("")]
     return pairs.drop_duplicates().sort_values(["type", "entryNerve"]).reset_index(drop=True)
+
+
+def is_primary_visual_receptor(row) -> bool:
+    """True only for external-input photoreceptors used by the runtime VIS map.
+
+    Channel 0 contains broader visual populations (projection/centrifugal neurons),
+    but the Android sensor encoder injects external Poisson current only into the
+    primary R1-6/R7/R8 photoreceptors. Route-preservation must use the same endpoint
+    definition, otherwise the 10% reduction can preferentially retain visual relay
+    cells that never receive external light/danger input.
+    """
+    sc = clean(row.get("superclass", "")).strip().lower()
+    cl = clean(row.get("class", "")).strip().lower()
+    typ = clean(row.get("type", "")).strip()
+    fw = clean(row.get("flywireType", "")).strip().upper()
+    return (
+        sc == "ol_sensory"
+        and cl == "visual"
+        and (
+            fw in {"R1-6", "R7", "R8"}
+            or typ == "R1-R6"
+            or typ.startswith("R7")
+            or typ.startswith("R8")
+        )
+    )
 
 
 def is_olfactory_orn(row) -> bool:
@@ -363,6 +388,7 @@ def main(root: Path) -> None:
     annotated["halt_role"] = annotated.apply(classify_halt_role, axis=1)
 
     is_sensory = annotated["channel"].to_numpy(np.int8) < 4
+    is_primary_visual = annotated.apply(is_primary_visual_receptor, axis=1).to_numpy(bool)
     is_desc = annotated["superclass"].astype(str).eq("descending_neuron").to_numpy()
     is_motor = annotated["superclass"].astype(str).eq("vnc_motor").to_numpy()
     channel = annotated["channel"].to_numpy(np.int8)
@@ -393,8 +419,11 @@ def main(root: Path) -> None:
             + ", ".join(missing_roles)
         )
 
-    # Incoming sensory weight per candidate, separated by modality.
+    # Incoming sensory weight per candidate, separated by broad channel.
     sensor_in = np.zeros((4, len(ids)), dtype=np.float64)
+    # Endpoint-faithful visual input: only the photoreceptors actually stimulated
+    # by the runtime light/danger encoder are allowed to score visual routes.
+    primary_visual_in = np.zeros(len(ids), dtype=np.float64)
     # Candidate -> DN role weight.
     cell_to_desc = np.zeros((5, len(ids)), dtype=np.float64)
     # DN role -> candidate weight.
@@ -432,6 +461,13 @@ def main(root: Path) -> None:
                 mm = m & (channel[ai] == ch)
                 if mm.any():
                     np.add.at(sensor_in[ch], ci[mm], wd[mm])
+
+        # Primary photoreceptor -> candidate. Keep this separate from channel 0,
+        # because channel 0 also contains visual relay/projection neurons that do
+        # not receive the external runtime light/danger current.
+        m = is_primary_visual[ai]
+        if m.any():
+            np.add.at(primary_visual_in, ci[m], wd[m])
 
         # Candidate -> descending neuron. Keep both the role-specific view used
         # by diagnostics and an all-DN view used for topology preservation.
@@ -492,9 +528,13 @@ def main(root: Path) -> None:
     sensory_forward = np.sqrt(
         np.maximum(0.0, sensor_in.sum(axis=0) * cell_to_desc[1])
     )
-    visual_turn = np.sqrt(np.maximum(0.0, sensor_in[0] * cell_to_desc[2]))
+    # Visual action routes are endpoint-faithful to the actual runtime encoder.
+    # Light and danger both stimulate real visual photoreceptors; danger adds a
+    # temporal looming component in the runtime environment model. Neither path
+    # creates a direct action command.
+    visual_turn = np.sqrt(np.maximum(0.0, primary_visual_in * cell_to_desc[2]))
     threat_escape = np.sqrt(
-        np.maximum(0.0, (sensor_in[0] + sensor_in[3]) * cell_to_desc[4])
+        np.maximum(0.0, primary_visual_in * cell_to_desc[4])
     )
 
     forward_motor_path = np.sqrt(
@@ -628,6 +668,8 @@ def main(root: Path) -> None:
             ("forward", route_forward),
             ("turn", route_turn),
             ("escape", route_escape),
+            ("visual_primary_turn", visual_turn),
+            ("visual_primary_escape", threat_escape),
             ("olfactory_forward", route_olfactory_forward),
             ("olfactory_to_desc", olfactory_to_desc_path),
             ("descending_to_leg", descending_to_leg_path),
@@ -1230,10 +1272,10 @@ def main(root: Path) -> None:
 
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
-    const val FLYBRAIN_VERSION = "1.19.13"
+    const val FLYBRAIN_VERSION = "1.19.14"
     const val FLYBRAIN_VERSION_CODE = 150
-    const val APP_VERSION = "1.19.13"
-    const val APP_VERSION_CODE = 154
+    const val APP_VERSION = "1.19.14"
+    const val APP_VERSION_CODE = 155
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = %d
     // 54 distinct published (type, entryNerve) combinations; 53 unique
@@ -1335,6 +1377,10 @@ object GeneratedConnectomeMeta {
         "olfactory_route_forward_selected_nonzero": int((route_olfactory_forward_selected > 0).sum()),
         "olfactory_route_motor_source_nonzero": int((route_olfactory_motor > 0).sum()),
         "olfactory_route_motor_selected_nonzero": int((route_olfactory_motor_selected > 0).sum()),
+        "visual_primary_to_turn_source_nonzero": int((primary_visual_in * cell_to_desc[2] > 0).sum()),
+        "visual_primary_to_escape_source_nonzero": int((primary_visual_in * cell_to_desc[4] > 0).sum()),
+        "visual_primary_route_turn_selected_nonzero": int((selected["route_turn"] > 0).sum()),
+        "visual_primary_route_escape_selected_nonzero": int((selected["route_escape"] > 0).sum()),
         "olfactory_to_desc_source_nonzero": int((olfactory_to_desc_path > 0).sum()),
         "olfactory_to_desc_three_edge_source_nonzero": int((olfactory_three_edge > 0).sum()),
         "olfactory_to_desc_selected_nonzero": int((selected["route_olfactory_to_desc"] > 0).sum()),
