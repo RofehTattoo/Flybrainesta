@@ -9,6 +9,10 @@ assert '"Rojo · Motor"' in MAIN and '"Gris · Central"' in MAIN
 assert 'sim.startBrainLoading()' in MAIN
 assert 'Thread {' in MAIN and 'name = "flybrain-connectome-loader"' in MAIN
 assert 'brainLoadFinished' in MAIN and 'brainLoadFinishedAt' in MAIN
+assert 'private data class StartupEntry' in MAIN
+assert '@Volatile var brainLoadFinished = false' in MAIN
+assert '@Volatile var brainLoadOk = false' in MAIN
+assert '@Volatile var brainLoadFinishedAt = 0L' in MAIN
 assert 'private val BODY_MIN_X = .045f' in MAIN
 assert 'private val BODY_MAX_X = .955f' in MAIN
 assert 'private val BODY_MIN_Y = .055f' in MAIN

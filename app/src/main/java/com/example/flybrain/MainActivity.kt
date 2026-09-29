@@ -206,20 +206,21 @@ class MainActivity : Activity() {
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
      * It stays on screen for at least 4.5 s after the loader completes.
      */
+    private data class StartupEntry(val title: String, val body: String, val color: Int)
+
     inner class StartupView(private val sim: FlyView) : View(this) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val startAt = SystemClock.uptimeMillis()
 
-        private data class Entry(val title: String, val body: String, val color: Int)
         private val entries = arrayOf(
-            Entry("Verde · Olfato", "Neuronas olfativas (ORN).", Color.rgb(45, 190, 105)),
-            Entry("Azul · Visión", "Neuronas visuales.", Color.rgb(55, 145, 235)),
-            Entry("Amarillo · Gusto", "Neuronas gustativas.", Color.rgb(238, 190, 42)),
-            Entry("Naranja · Mecano", "Señales mecanosensoriales.", Color.rgb(238, 125, 48)),
-            Entry("Rosa · Descenso", "Neuronas descendentes.", Color.rgb(218, 75, 175)),
-            Entry("Cian · Ascenso", "Neuronas ascendentes.", Color.rgb(55, 190, 210)),
-            Entry("Rojo · Motor", "Neuronas motoras.", Color.rgb(235, 70, 75)),
-            Entry("Gris · Central", "Otras poblaciones centrales.", Color.rgb(150, 160, 170))
+            StartupEntry("Verde · Olfato", "Neuronas olfativas (ORN).", Color.rgb(45, 190, 105)),
+            StartupEntry("Azul · Visión", "Neuronas visuales.", Color.rgb(55, 145, 235)),
+            StartupEntry("Amarillo · Gusto", "Neuronas gustativas.", Color.rgb(238, 190, 42)),
+            StartupEntry("Naranja · Mecano", "Señales mecanosensoriales.", Color.rgb(238, 125, 48)),
+            StartupEntry("Rosa · Descenso", "Neuronas descendentes.", Color.rgb(218, 75, 175)),
+            StartupEntry("Cian · Ascenso", "Neuronas ascendentes.", Color.rgb(55, 190, 210)),
+            StartupEntry("Rojo · Motor", "Neuronas motoras.", Color.rgb(235, 70, 75)),
+            StartupEntry("Gris · Central", "Otras poblaciones centrales.", Color.rgb(150, 160, 170))
         )
 
         override fun onDraw(c: Canvas) {
@@ -811,10 +812,10 @@ class MainActivity : Activity() {
             checkTemporalConfiguration()
         }
 
-        @Volatile private var brainLoadFinished = false
-        @Volatile private var brainLoadOk = false
+        @Volatile var brainLoadFinished = false
+        @Volatile var brainLoadOk = false
         @Volatile private var brainLoadingStarted = false
-        @Volatile private var brainLoadFinishedAt = 0L
+        @Volatile var brainLoadFinishedAt = 0L
 
         fun startBrainLoading() {
             if (brainLoadingStarted) return
