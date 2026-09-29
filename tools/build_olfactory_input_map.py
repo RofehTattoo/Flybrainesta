@@ -186,10 +186,14 @@ def main():
     ):
         raise SystemExit("ORN provenance validation failed")
 
-    # Guard against the historical visual block being accidentally selected.
-    visual_ids = {int(n["bodyId"]) for n in nodes[618:739]}
-    if visual_ids.intersection({r["bodyId"] for r in out}):
-        raise SystemExit("historical 618..738 visual OLF block overlaps real ORN map")
+    # Diagnostic only: FBC indices are not a biological modality label.
+    # The runtime map above is selected by official MaleCNS annotations and
+    # retained bodyIds; an ORN may legitimately occupy an index in this
+    # historical interval. Never reject annotation-verified ORNs by index.
+    historical_interval_ids = {int(n["bodyId"]) for n in nodes[618:739]}
+    historical_interval_orn_overlap = len(
+        historical_interval_ids.intersection({r["bodyId"] for r in out})
+    )
 
     p = Path(args.output); p.parent.mkdir(parents=True, exist_ok=True)
     fields = list(out[0])
@@ -206,7 +210,11 @@ def main():
         "fbc103_modified": False,
         "fbc103_release_id": "FBR-10-OLF2-MOTORROUTE",
         "olf_retained": len(out),
-        "historical_olf_block": {"start": 618, "end": 739, "used_for_olfactory_input": False},
+        "historical_olf_block": {
+            "start": 618, "end": 739,
+            "used_for_olfactory_input": False,
+            "annotation_verified_orn_overlap_diagnostic": historical_interval_orn_overlap,
+        },
         "side_counts": side_counts,
         "type_counts": type_counts,
         "type_label_count": len(type_counts),
