@@ -8,7 +8,12 @@ drive=MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeural
 assert 'walkOffActivationState' in drive and 'feedingPauseActivation' in drive
 assert 'effectiveWalkOffActivation' in drive and 'legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)' in drive
 assert 'foodOn' not in ACT and 'foodDirectionalBias' not in ACT and 'approachAction' not in ACT
-assert 'flyX = (flyX + worldVx * dt)' in drive and 'flyY = (flyY + worldVy * dt)' in drive
+# V1.19.13 uses a collision-aware position integration path.
+assert 'var nextFlyX = flyX + worldVx * dt' in drive
+assert 'var nextFlyY = flyY + worldVy * dt' in drive
+assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in drive
+assert 'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)' in drive
+assert 'WALL_POSITION_RECOVERY' in drive
 assert 'updateFeedingNeuralReadout(dt)' in drive
 feed=MAIN[MAIN.index('private fun updateFeedingNeuralReadout'):MAIN.index('private fun populationRate')]
 assert 'feedingFunctionSpikeEvents' in feed

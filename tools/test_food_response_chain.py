@@ -17,8 +17,14 @@ assert 'legGroupActivation[g] = relaxMotorActivation' in body
 assert 'feedingPauseActivation' in body
 assert 'effectiveWalkOffActivation' in body
 assert 'legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)' in body
-assert 'flyX = (flyX + worldVx * dt)' in body
-assert 'flyY = (flyY + worldVy * dt)' in body
+# V1.19.13 integrates into temporary world coordinates so collision recovery
+# can be applied before the arena clamp.
+assert 'var nextFlyX = flyX + worldVx * dt' in body
+assert 'var nextFlyY = flyY + worldVy * dt' in body
+assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in body
+assert 'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)' in body
+assert 'if (wallContactNow)' in body
+assert 'WALL_POSITION_RECOVERY' in body
 assert 'wingActivity * .010f' not in body
 assert 'flightMotor * .010f' not in body
 assert 'heading = Math.PI.toFloat() - heading' not in body
