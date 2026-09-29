@@ -573,9 +573,6 @@ def main(root: Path) -> None:
     threat_escape = np.sqrt(
         np.maximum(0.0, primary_visual_in * cell_to_desc[4])
     )
-    visual_turn = np.maximum(visual_turn, visual_three_turn)
-    threat_escape = np.maximum(threat_escape, visual_three_escape)
-
     forward_motor_path = np.sqrt(
         np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1])
     )
@@ -708,6 +705,14 @@ def main(root: Path) -> None:
         if m2.any():
             np.add.at(halt_to_motor, ai[m2], wd[m2])
             np.add.at(halt_target, ci[m2], wd[m2])
+
+    # The three-edge visual relay scores are accumulated by the full edge scan
+    # above, so combine them only after that scan has completed. Recompute the
+    # composite turn/escape scores here before route validation and normalization.
+    visual_turn = np.maximum(visual_turn, visual_three_turn)
+    threat_escape = np.maximum(threat_escape, visual_three_escape)
+    route_turn = visual_turn + turn_motor_path
+    route_escape = threat_escape + escape_motor_path
 
     route_halt = np.maximum(halt_target, 0.5 * halt_to_walk)
 
