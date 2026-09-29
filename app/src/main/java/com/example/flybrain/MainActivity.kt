@@ -2232,7 +2232,7 @@ class MainActivity : Activity() {
             }
 
             lightDrive = lightIntensity.coerceIn(0f, 1f)
-            dangerDrive = visualThreatIntensity.coerceIn(0f, 1f)
+            dangerDrive = visualThreatComponent.coerceIn(0f, 1f)
             foodSignalDisplay = .90f * foodSignalDisplay + .10f * foodDrive
             lightSignalDisplay = .90f * lightSignalDisplay + .10f * lightDrive
             dangerSignalDisplay = .90f * dangerSignalDisplay + .10f * dangerDrive
