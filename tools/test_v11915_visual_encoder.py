@@ -25,11 +25,19 @@ causal_body = MAIN[drive_start:actuator_end]
 for token in ('approachAction', 'escapeAction', 'orientAction', 'lightDrive', 'dangerDrive', 'lightOn', 'dangerOn'):
     assert token not in causal_body, token
 assert causal_body.count('legActuator.step') == 0
-# Reduction is intentionally frozen for this release; visual correction is runtime-only.
+# V1.19.16 explicitly reconstructs the visual slice of FBR-10 while keeping the
+# global 16,669-node target and the induced-edge rule. The primary receptor quota
+# must be derived from the pinned MaleCNS source, never from the old selected graph.
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in BUILD
+assert 'TARGET_PRIMARY_VISUAL = int(round(primary_visual_source_count * 0.10))' in BUILD
+assert 'TARGET_VISUAL_TOTAL = int(round(visual_source_count * 0.10))' in BUILD
+assert 'visual_primary_source = annotated[is_primary_visual].copy()' in BUILD
+assert 'annotated["channel"] != 0' in BUILD
+assert 'route_visual_turn' in BUILD and 'route_visual_escape' in BUILD
+assert 'visual_three_turn' in BUILD and 'visual_three_escape' in BUILD
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.19.15"' in META
-assert 'const val APP_VERSION_CODE = 156' in META
-assert 'versionName = "1.19.15"' in GRADLE
-assert 'versionCode = 156' in GRADLE
-print('V1.19.15 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')
+assert 'const val APP_VERSION = "1.19.16"' in META
+assert 'const val APP_VERSION_CODE = 157' in META
+assert 'versionName = "1.19.16"' in GRADLE
+assert 'versionCode = 157' in GRADLE
+print('V1.19.16 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')

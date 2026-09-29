@@ -14,5 +14,5 @@ assert "setMappedSensoryRate(" in MAIN
 assert "visualReceptorIndices" in MAIN
 assert "val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .42f)" in MAIN
 assert "val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .38f)" in MAIN
-assert "val visualThreatComponent = dangerBaseIntensity" in MAIN
+assert "val visualThreatComponent = (dangerBaseIntensity *" in MAIN
 print("V1.19.14 VISUAL ENDPOINT CONTRACT: PASS")

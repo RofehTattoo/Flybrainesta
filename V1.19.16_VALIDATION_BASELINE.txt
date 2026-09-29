@@ -1,0 +1,17 @@
+FlyBrain V1.19.16 — source baseline validation
+Generated: 2026-09-29
+
+This release reopens the FBR-10 visual slice. The checked-in FBC103 binary is a bootstrap artifact from the prior reduction and is intentionally replaced by the CI rebuild before APK compilation. Therefore its old SHA must not be treated as the V1.19.16 canonical binary.
+
+The source code now requires the pinned MaleCNS v1.0 photoreceptor census to be approximately 6.1k and reserves exactly 10% of that population in the rebuilt 16,669-neuron reduction, balanced by R1-6/R7/R8 family and anatomical side.
+
+Local checks completed:
+- Python syntax compilation for tools/: PASS
+- Visual FBR-10 reconstruction contract: PASS
+- Visual encoder contract: PASS
+- sensory input purity: PASS
+- visual endpoint contract: PASS
+- sensorimotor closed-loop contract: PASS
+- release provenance contract: PASS
+
+Full FBR-10 rebuild was not executed locally because the pinned MaleCNS Feather files are not present in the container and the environment has no network access to the source archive. GitHub Actions downloads and verifies the pinned source, performs the rebuild, regenerates runtime maps/dynamics, and then assembles the APK.

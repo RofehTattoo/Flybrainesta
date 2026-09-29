@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.15 FBR-10-OLF2-MOTORROUTE.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.16 FBR-10-OLF2-MOTORROUTE.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 16,669 neurons from the audited 166,700-neuron census
@@ -24,8 +24,8 @@ import pyarrow.ipc as ipc
 
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
-FLYBRAIN_RELEASE = "1.19.15"
-APP_VERSION_CODE = 156
+FLYBRAIN_RELEASE = "1.19.16"
+APP_VERSION_CODE = 157
 REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
@@ -111,6 +111,30 @@ def is_primary_visual_receptor(row) -> bool:
             or typ.startswith("R8")
         )
     )
+
+
+def primary_visual_family(row) -> str:
+    """Canonical photoreceptor family used only for deterministic quota balancing."""
+    fw = clean(row.get("flywireType", "")).strip().upper()
+    typ = clean(row.get("type", "")).strip().upper()
+    if fw == "R1-6" or typ in {"R1-R6", "R1-6"} or typ.startswith("R1-R6"):
+        return "R1-6"
+    if fw == "R7" or typ.startswith("R7"):
+        return "R7"
+    if fw == "R8" or typ.startswith("R8"):
+        return "R8"
+    return "OTHER"
+
+
+def visual_side_code(row) -> int:
+    """Use official soma/root side metadata; no screen-coordinate inference."""
+    for key in ("somaSide", "rootSide"):
+        x = clean(row.get(key, "")).strip().upper()
+        if x in {"L", "LEFT"}:
+            return -1
+        if x in {"R", "RIGHT"}:
+            return 1
+    return 0
 
 
 def is_olfactory_orn(row) -> bool:
@@ -389,6 +413,19 @@ def main(root: Path) -> None:
 
     is_sensory = annotated["channel"].to_numpy(np.int8) < 4
     is_primary_visual = annotated.apply(is_primary_visual_receptor, axis=1).to_numpy(bool)
+    primary_visual_source_count = int(is_primary_visual.sum())
+    if not (5900 <= primary_visual_source_count <= 6200):
+        raise RuntimeError(
+            "MaleCNS v1.0 primary photoreceptor census changed or the visual receptor classifier is wrong: "
+            f"expected roughly 6,100, found {primary_visual_source_count}"
+        )
+    TARGET_PRIMARY_VISUAL = int(round(primary_visual_source_count * 0.10))
+    visual_source_count = int((annotated["channel"].to_numpy(np.int8) == 0).sum())
+    TARGET_VISUAL_TOTAL = int(round(visual_source_count * 0.10))
+    if TARGET_PRIMARY_VISUAL >= TARGET_VISUAL_TOTAL:
+        raise RuntimeError(
+            f"visual quota impossible: primary={TARGET_PRIMARY_VISUAL} total_visual={TARGET_VISUAL_TOTAL}"
+        )
     is_desc = annotated["superclass"].astype(str).eq("descending_neuron").to_numpy()
     is_motor = annotated["superclass"].astype(str).eq("vnc_motor").to_numpy()
     channel = annotated["channel"].to_numpy(np.int8)
@@ -536,6 +573,8 @@ def main(root: Path) -> None:
     threat_escape = np.sqrt(
         np.maximum(0.0, primary_visual_in * cell_to_desc[4])
     )
+    visual_turn = np.maximum(visual_turn, visual_three_turn)
+    threat_escape = np.maximum(threat_escape, visual_three_escape)
 
     forward_motor_path = np.sqrt(
         np.maximum(0.0, desc_to_cell[1] * cell_to_motor[1])
@@ -597,6 +636,8 @@ def main(root: Path) -> None:
     # The score uses only published contact counts and is normalized later.
     olfactory_three_edge = np.zeros(len(ids), dtype=np.float64)
     desc_leg_three_edge = np.zeros(len(ids), dtype=np.float64)
+    visual_three_turn = np.zeros(len(ids), dtype=np.float64)
+    visual_three_escape = np.zeros(len(ids), dtype=np.float64)
     # Re-use the retained classification arrays: halt neurons -> walking DNs,
     # and halt neurons -> motor/premotor outputs are the two biologically relevant
     # preservation routes.
@@ -630,6 +671,23 @@ def main(root: Path) -> None:
             path_score = np.sqrt(np.maximum(0.0, olf_source[m3_olf] * wd[m3_olf] * olf_target[m3_olf]))
             np.add.at(olfactory_three_edge, ai[m3_olf], path_score)
             np.add.at(olfactory_three_edge, ci[m3_olf], path_score)
+
+        # Measured three-edge visual relay: photoreceptor -> A -> B -> visual DN.
+        # Both A and B are scored only when every middle edge is present in the
+        # published MaleCNS graph; no synthetic visual bridge is introduced.
+        vis_source = primary_visual_in[ai]
+        vis_turn_target = cell_to_desc[2][ci]
+        vis_escape_target = cell_to_desc[4][ci]
+        m3_vturn = (vis_source > 0) & (vis_turn_target > 0)
+        if m3_vturn.any():
+            path_score = np.sqrt(np.maximum(0.0, vis_source[m3_vturn] * wd[m3_vturn] * vis_turn_target[m3_vturn]))
+            np.add.at(visual_three_turn, ai[m3_vturn], path_score)
+            np.add.at(visual_three_turn, ci[m3_vturn], path_score)
+        m3_vescape = (vis_source > 0) & (vis_escape_target > 0)
+        if m3_vescape.any():
+            path_score = np.sqrt(np.maximum(0.0, vis_source[m3_vescape] * wd[m3_vescape] * vis_escape_target[m3_vescape]))
+            np.add.at(visual_three_escape, ai[m3_vescape], path_score)
+            np.add.at(visual_three_escape, ci[m3_vescape], path_score)
 
         # Measured three-edge DN->leg relay:
         # DN -> A -> B -> LEG-MN. `all_desc_to_cell[A]` proves DN->A,
@@ -693,6 +751,8 @@ def main(root: Path) -> None:
     route_sensorimotor_n = normalize_score(route_sensorimotor)
     route_olfactory_forward_n = normalize_score(route_olfactory_forward)
     route_olfactory_motor_n = normalize_score(route_olfactory_motor)
+    visual_turn_n = normalize_score(visual_turn)
+    visual_escape_n = normalize_score(threat_escape)
     olfactory_to_desc_n = normalize_score(olfactory_to_desc_path)
     descending_to_leg_n = normalize_score(descending_to_leg_path)
     route_halt_n = normalize_score(route_halt)
@@ -704,6 +764,41 @@ def main(root: Path) -> None:
     annotated["route_sensorimotor"] = route_sensorimotor_n
     annotated["route_olfactory_forward"] = route_olfactory_forward_n
     annotated["route_olfactory_motor"] = route_olfactory_motor_n
+    annotated["route_visual_turn"] = visual_turn_n
+    annotated["route_visual_escape"] = visual_escape_n
+    annotated["route_visual_relay"] = np.maximum(visual_turn_n, visual_escape_n)
+
+    # Source-endpoint co-selection score for primary photoreceptors. Selecting
+    # receptors by degree alone can keep cells whose strongest partners are relay
+    # neurons that are later discarded by the 10% visual budget. Measure the
+    # published PR -> visual-relay edges again and weight each receptor by the
+    # retained-candidate route quality of its real downstream partners. This is
+    # still purely descriptive; no edge or current is created.
+    primary_visual_route_score = (
+        0.55 * normalize_score(cell_to_desc[2])
+        + 0.45 * normalize_score(cell_to_desc[4])
+    ) * is_primary_visual.astype(np.float64)
+    visual_relay_route_n = annotated["route_visual_relay"].to_numpy(np.float64)
+    for bi in range(reader.num_record_batches):
+        b = reader.get_batch(bi)
+        pre = b.column(b.schema.get_field_index("body_pre")).to_numpy(zero_copy_only=False).astype(np.int64)
+        post = b.column(b.schema.get_field_index("body_post")).to_numpy(zero_copy_only=False).astype(np.int64)
+        w = b.column(b.schema.get_field_index("weight")).to_numpy(zero_copy_only=False).astype(np.float64)
+        pi = np.searchsorted(ids, pre)
+        po = np.searchsorted(ids, post)
+        pv = (pi < len(ids)) & (ids[np.minimum(pi, len(ids)-1)] == pre)
+        qv = (po < len(ids)) & (ids[np.minimum(po, len(ids)-1)] == post)
+        both = pv & qv & (w > 0)
+        if not both.any():
+            continue
+        ai = pi[both]
+        ci = po[both]
+        wd = w[both]
+        m = is_primary_visual[ai] & (channel[ci] == 0) & (~is_primary_visual[ci])
+        if m.any():
+            np.add.at(primary_visual_route_score, ai[m], wd[m] * visual_relay_route_n[ci[m]])
+    primary_visual_route_score_n = normalize_score(primary_visual_route_score)
+    annotated["route_visual_primary_source"] = primary_visual_route_score_n
     annotated["route_olfactory_to_desc"] = olfactory_to_desc_n
     annotated["route_desc_to_leg"] = descending_to_leg_n
     annotated["route_halt"] = route_halt_n
@@ -739,8 +834,11 @@ def main(root: Path) -> None:
     # them from protection. No synthetic type label is assigned.
     orn_selection_source = annotated[annotated["is_olfactory_orn"]].copy()
 
+    # Visual neurons receive a dedicated 10% budget below; keep them out of the
+    # generic one-representative-per-type pool so the budget is exact.
     type_rep = (
-        annotated.sort_values(["degree", "bodyId"], ascending=[False, True])
+        annotated[annotated["channel"] != 0]
+        .sort_values(["degree", "bodyId"], ascending=[False, True])
         .drop_duplicates(["superclass", type_col], keep="first")
     )
 
@@ -796,14 +894,116 @@ def main(root: Path) -> None:
         raise AssertionError(("unable to reserve requested ORNs", TARGET_ORNS, remaining_orn))
     protected_orns = pd.concat(orn_protected_parts, ignore_index=True).drop_duplicates("bodyId")
 
-    seed = pd.concat([forced, type_rep, protected_orns], ignore_index=True).drop_duplicates("bodyId")
+    # ---- Explicit 10% visual reconstruction ---------------------------------
+    # Reserve exactly 10% of the primary R1-6/R7/R8 receptor population, balanced
+    # by receptor family and official anatomical side. Then reserve the remainder
+    # of the 10% visual-channel budget for measured optic-lobe relay cells. This
+    # prevents the external visual-input endpoints from collapsing to a token
+    # handful during the global 16,669-neuron reduction.
+    visual_primary_source = annotated[is_primary_visual].copy()
+    visual_primary_source["_visual_family"] = visual_primary_source.apply(primary_visual_family, axis=1)
+    visual_primary_source["_visual_side"] = visual_primary_source.apply(visual_side_code, axis=1)
+    groups = list(visual_primary_source.groupby(["_visual_family", "_visual_side"], sort=True, dropna=False))
+    if len(groups) > TARGET_PRIMARY_VISUAL:
+        raise AssertionError("not enough visual-primary quota for family/side coverage")
+    raw_quota = {key: len(group) * TARGET_PRIMARY_VISUAL / primary_visual_source_count for key, group in groups}
+    visual_quota = {key: max(1, int(math.floor(value))) for key, value in raw_quota.items()}
+    while sum(visual_quota.values()) > TARGET_PRIMARY_VISUAL:
+        candidates = [key for key, group in groups if visual_quota[key] > 1]
+        if not candidates: break
+        key = min(candidates, key=lambda k: (raw_quota[k] - math.floor(raw_quota[k]), k))
+        visual_quota[key] -= 1
+    while sum(visual_quota.values()) < TARGET_PRIMARY_VISUAL:
+        candidates = [key for key, group in groups if visual_quota[key] < len(group)]
+        if not candidates: break
+        key = max(candidates, key=lambda k: (raw_quota[k] - math.floor(raw_quota[k]), k))
+        visual_quota[key] += 1
+    if sum(visual_quota.values()) != TARGET_PRIMARY_VISUAL:
+        raise AssertionError(("visual primary quota allocation failed", sum(visual_quota.values()), TARGET_PRIMARY_VISUAL))
+    protected_visual_primary = pd.concat([
+        group.sort_values(["route_visual_primary_source", "degree", "bodyId"], ascending=[False, False, True]).head(visual_quota[key])
+        for key, group in groups
+    ], ignore_index=True).drop_duplicates("bodyId")
+    if len(protected_visual_primary) != TARGET_PRIMARY_VISUAL:
+        raise AssertionError(("visual primary selection failed", len(protected_visual_primary), TARGET_PRIMARY_VISUAL))
+
+    visual_relay_target = TARGET_VISUAL_TOTAL - TARGET_PRIMARY_VISUAL
+
+    # Re-score optic-lobe relay candidates against the PRIMARY RECEPTORS ACTUALLY
+    # RETAINED above. This closes the selection loop: a relay is protected for
+    # visual behavior only when its published incoming contacts include retained
+    # photoreceptors and it has a measured path onward to a visual turn/escape DN.
+    retained_primary_ids = set(protected_visual_primary.bodyId.astype(int).tolist())
+    retained_primary_visual_in = np.zeros(len(ids), dtype=np.float64)
+    for bi in range(reader.num_record_batches):
+        b = reader.get_batch(bi)
+        pre = b.column(b.schema.get_field_index("body_pre")).to_numpy(zero_copy_only=False).astype(np.int64)
+        post = b.column(b.schema.get_field_index("body_post")).to_numpy(zero_copy_only=False).astype(np.int64)
+        w = b.column(b.schema.get_field_index("weight")).to_numpy(zero_copy_only=False).astype(np.float64)
+        pi = np.searchsorted(ids, pre)
+        po = np.searchsorted(ids, post)
+        pv = (pi < len(ids)) & (ids[np.minimum(pi, len(ids)-1)] == pre)
+        qv = (po < len(ids)) & (ids[np.minimum(po, len(ids)-1)] == post)
+        both = pv & qv & (w > 0)
+        if not both.any():
+            continue
+        ai = pi[both]
+        ci = po[both]
+        wd = w[both]
+        m = np.isin(pre[both], list(retained_primary_ids)) & (channel[ci] == 0) & (~is_primary_visual[ci])
+        if m.any():
+            np.add.at(retained_primary_visual_in, ci[m], wd[m])
+    visual_turn_retained = np.sqrt(np.maximum(0.0, retained_primary_visual_in * cell_to_desc[2]))
+    visual_escape_retained = np.sqrt(np.maximum(0.0, retained_primary_visual_in * cell_to_desc[4]))
+    visual_turn_retained_n = normalize_score(visual_turn_retained)
+    visual_escape_retained_n = normalize_score(visual_escape_retained)
+    annotated["route_visual_turn_retained"] = visual_turn_retained_n
+    annotated["route_visual_escape_retained"] = visual_escape_retained_n
+    annotated["route_visual_relay_retained"] = np.maximum(visual_turn_retained_n, visual_escape_retained_n)
+
+    if not np.any(visual_turn_retained > 0) or not np.any(visual_escape_retained > 0):
+        raise AssertionError(
+            "retained primary visual receptors do not support both measured turn and escape visual routes"
+        )
+
+    visual_relay_pool = annotated[
+        annotated["channel"].eq(0) & ~annotated["is_olfactory_orn"]
+        & ~annotated.bodyId.isin(set(visual_primary_source.bodyId.astype(int)))
+    ].copy()
+    if len(visual_relay_pool) < visual_relay_target:
+        raise AssertionError(("visual relay pool too small", len(visual_relay_pool), visual_relay_target))
+    turn_take = min(int(round(visual_relay_target * 0.55)), visual_relay_target)
+    escape_take = visual_relay_target - turn_take
+    relay_parts = []; relay_ids = set()
+    turn_part = visual_relay_pool.sort_values(
+        ["route_visual_turn_retained", "route_visual_escape_retained", "degree", "bodyId"], ascending=[False, False, False, True]
+    ).head(turn_take)
+    relay_parts.append(turn_part); relay_ids.update(turn_part.bodyId.astype(int).tolist())
+    escape_part = visual_relay_pool[~visual_relay_pool.bodyId.isin(relay_ids)].sort_values(
+        ["route_visual_escape_retained", "route_visual_turn_retained", "degree", "bodyId"], ascending=[False, False, False, True]
+    ).head(escape_take)
+    relay_parts.append(escape_part); relay_ids.update(escape_part.bodyId.astype(int).tolist())
+    if len(relay_ids) < visual_relay_target:
+        fill = visual_relay_pool[~visual_relay_pool.bodyId.isin(relay_ids)].sort_values(
+            ["route_visual_relay_retained", "degree", "bodyId"], ascending=[False, False, True]
+        ).head(visual_relay_target - len(relay_ids))
+        relay_parts.append(fill); relay_ids.update(fill.bodyId.astype(int).tolist())
+    protected_visual_relay = pd.concat(relay_parts, ignore_index=True).drop_duplicates("bodyId")
+    if len(protected_visual_relay) != visual_relay_target:
+        raise AssertionError(("visual relay quota failed", len(protected_visual_relay), visual_relay_target))
+    protected_visual = pd.concat([protected_visual_primary, protected_visual_relay], ignore_index=True).drop_duplicates("bodyId")
+    if len(protected_visual) != TARGET_VISUAL_TOTAL:
+        raise AssertionError(("visual total quota failed", len(protected_visual), TARGET_VISUAL_TOTAL))
+
+    seed = pd.concat([forced, type_rep, protected_orns, protected_visual], ignore_index=True).drop_duplicates("bodyId")
 
     if len(seed) > TARGET:
         forced_ids = set(forced.bodyId.astype(int).tolist())
         protected_orn_ids = set(protected_orns.bodyId.astype(int).tolist())
         keep_forced = forced.drop_duplicates("bodyId")
         keep_orn = protected_orns.drop_duplicates("bodyId")
-        protected_core = pd.concat([keep_forced, keep_orn], ignore_index=True).drop_duplicates("bodyId")
+        keep_visual = protected_visual.drop_duplicates("bodyId")
+        protected_core = pd.concat([keep_forced, keep_orn, keep_visual], ignore_index=True).drop_duplicates("bodyId")
         if len(protected_core) > TARGET:
             raise AssertionError(("forced+ORN protection exceeds target", len(protected_core), TARGET))
         optional_types = type_rep[
@@ -824,6 +1024,7 @@ def main(root: Path) -> None:
     pool = annotated[
         ~annotated.bodyId.isin(seed_ids)
         & ~annotated["is_olfactory_orn"]
+        & (annotated["channel"] != 0)
     ].copy()
 
     # Route preservation is intended to protect intermediate circuit cells,
@@ -942,6 +1143,7 @@ def main(root: Path) -> None:
     pool = annotated[
         ~annotated.bodyId.isin(seed_ids)
         & ~annotated["is_olfactory_orn"]
+        & (annotated["channel"] != 0)
     ].copy()
 
     pool_counts = pool.groupby("superclass", sort=True).size().to_dict()
@@ -1048,6 +1250,64 @@ def main(root: Path) -> None:
         raise AssertionError(
             "selected ORN type+entryNerve combinations="
             f"{len(retained_orn_type_entry_nerve_pairs)} expected={EXPECTED_ORN_TYPES}"
+        )
+
+    # Actual induced visual-chain audit. Once the 16,669-node set is selected,
+    # measure whether retained primary photoreceptors have at least one retained
+    # visual relay that in turn reaches a retained turn DN and one that reaches a
+    # retained escape DN. This is stronger than checking source-level route scores:
+    # it validates the causal endpoints of the actual induced FBC103 subgraph.
+    selected_primary_mask = selected["is_primary_visual"].to_numpy(bool)
+    selected_channel_mask = selected["channel"].to_numpy(np.int8)
+    selected_desc_role = selected["descending_role"].to_numpy(np.int8)
+    selected_body_ids = selected.bodyId.to_numpy(np.int64)
+    selected_sorted_order = np.argsort(selected_body_ids)
+    selected_sorted_body_ids = selected_body_ids[selected_sorted_order]
+
+    selected_primary_ids = set(selected_body_ids[selected_primary_mask].astype(int).tolist())
+    retained_visual_in = np.zeros(len(selected), dtype=np.float64)
+    retained_visual_turn_out = np.zeros(len(selected), dtype=np.float64)
+    retained_visual_escape_out = np.zeros(len(selected), dtype=np.float64)
+
+    for bi in range(reader.num_record_batches):
+        b = reader.get_batch(bi)
+        pre = b.column(b.schema.get_field_index("body_pre")).to_numpy(zero_copy_only=False).astype(np.int64)
+        post = b.column(b.schema.get_field_index("body_post")).to_numpy(zero_copy_only=False).astype(np.int64)
+        w = b.column(b.schema.get_field_index("weight")).to_numpy(zero_copy_only=False).astype(np.float64)
+        pi = np.searchsorted(selected_sorted_body_ids, pre)
+        po = np.searchsorted(selected_sorted_body_ids, post)
+        pv = (pi < len(selected_sorted_body_ids)) & (selected_sorted_body_ids[np.minimum(pi, len(selected_sorted_body_ids)-1)] == pre)
+        qv = (po < len(selected_sorted_body_ids)) & (selected_sorted_body_ids[np.minimum(po, len(selected_sorted_body_ids)-1)] == post)
+        both = pv & qv & (w > 0)
+        if not both.any():
+            continue
+        ai_sorted = pi[both]
+        ci_sorted = po[both]
+        ai = selected_sorted_order[ai_sorted]
+        ci = selected_sorted_order[ci_sorted]
+        wd = w[both]
+
+        m = selected_primary_mask[ai] & (selected_channel_mask[ci] == 0)
+        if m.any():
+            np.add.at(retained_visual_in, ci[m], wd[m])
+
+        m = (selected_channel_mask[ai] == 0) & (selected_desc_role[ci] == 2)
+        if m.any():
+            np.add.at(retained_visual_turn_out, ai[m], wd[m])
+
+        m = (selected_channel_mask[ai] == 0) & (selected_desc_role[ci] == 4)
+        if m.any():
+            np.add.at(retained_visual_escape_out, ai[m], wd[m])
+
+    visual_relay_mask = (selected_channel_mask == 0) & (~selected_primary_mask)
+    visual_turn_bridges = int(np.sum(visual_relay_mask & (retained_visual_in > 0) & (retained_visual_turn_out > 0)))
+    visual_escape_bridges = int(np.sum(visual_relay_mask & (retained_visual_in > 0) & (retained_visual_escape_out > 0)))
+    selected_primary_to_turn_dn = int(np.sum(selected_primary_mask & (retained_visual_turn_out > 0)))
+    selected_primary_to_escape_dn = int(np.sum(selected_primary_mask & (retained_visual_escape_out > 0)))
+    if visual_turn_bridges <= 0 or visual_escape_bridges <= 0:
+        raise AssertionError(
+            "induced visual FBC103 has no retained PR->relay->DN bridge: "
+            f"turn={visual_turn_bridges} escape={visual_escape_bridges}"
         )
 
     # Stable anatomical ordering: sensory channels first, then descending,
@@ -1272,16 +1532,20 @@ def main(root: Path) -> None:
 
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
-    const val FLYBRAIN_VERSION = "1.19.15"
-    const val FLYBRAIN_VERSION_CODE = 156
-    const val APP_VERSION = "1.19.15"
-    const val APP_VERSION_CODE = 156
+    const val FLYBRAIN_VERSION = "1.19.16"
+    const val FLYBRAIN_VERSION_CODE = 157
+    const val APP_VERSION = "1.19.16"
+    const val APP_VERSION_CODE = 157
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = %d
     // 54 distinct published (type, entryNerve) combinations; 53 unique
     // non-null type strings because ORN_VA7l occurs under AN and MxLbN.
     const val RETAINED_OLFACTORY_ORN_TYPES = %d
     const val RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = %d
+    const val PRIMARY_VISUAL_RECEPTORS_SOURCE = %d
+    const val PRIMARY_VISUAL_RECEPTORS_RETAINED = %d
+    const val VISUAL_NEURONS_SOURCE = %d
+    const val VISUAL_NEURONS_RETAINED = %d
     const val BINARY_SHA256 = "%s"
     const val FORMAT_MAGIC = "FBC103"
     const val FORMAT_VERSION = 103
@@ -1326,7 +1590,9 @@ object GeneratedConnectomeMeta {
 }
 """
     meta.write_text(meta_template % (
-        TARGET_ORNS, retained_orn_types, len(retained_orn_type_entry_nerve_pairs), fbc_sha, TARGET, len(edges), contacts,
+        TARGET_ORNS, retained_orn_types, len(retained_orn_type_entry_nerve_pairs),
+        primary_visual_source_count, len(protected_visual_primary), visual_source_count, len(protected_visual),
+        fbc_sha, TARGET, len(edges), contacts,
         population_ranges["visual"][0], population_ranges["visual"][1], population_ranges["olfactory"][0], population_ranges["olfactory"][1],
         ranges["gustatory"][0], ranges["gustatory"][1], ranges["mechanosensory"][0], ranges["mechanosensory"][1],
         desc[0], desc[1], asc[0], asc[1], vmotor[0], vmotor[1], other[0], other[1]
@@ -1356,7 +1622,7 @@ object GeneratedConnectomeMeta {
         "sha256": fbc_sha,
         "node_record_bytes": NODE_SIZE,
         "edge_record_bytes": EDGE_SIZE,
-        "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), including explicit retention of the four official ORNs with NULL type (bodyIds 242812, 242908, 488209, 956041) without assigning synthetic labels; all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN), and measured ORN-driven forward/motor route cells receive explicit preservation quotas; remaining quota is stratified by superclass and ranked by measured route support and degree",
+        "selection": "exactly 16,669 annotated neurons with a MaleCNS superclass; all descending and VNC motor neurons are retained; exactly 264 real MaleCNS v1.0 ORNs are protected (10% of the 2,639 ORN census, rounded), including explicit retention of the four official ORNs with NULL type (bodyIds 242812, 242908, 488209, 956041) without assigning synthetic labels; all 54 published ORN type+entryNerve combinations are represented (53 unique type labels; ORN_VA7l is present under AN and MxLbN); primary visual photoreceptors are explicitly reserved at 10% of the pinned ~6.1k source population, balanced by R1-6/R7/R8 family and anatomical side, and the remaining visual budget is reserved for measured optic-lobe relay cells; remaining non-visual quota is stratified by superclass and ranked by measured route support and degree",
         "source": BASE,
         "neurons_source": int(total),
         "neurons_retained": TARGET,
@@ -1377,10 +1643,21 @@ object GeneratedConnectomeMeta {
         "olfactory_route_forward_selected_nonzero": int((route_olfactory_forward_selected > 0).sum()),
         "olfactory_route_motor_source_nonzero": int((route_olfactory_motor > 0).sum()),
         "olfactory_route_motor_selected_nonzero": int((route_olfactory_motor_selected > 0).sum()),
+        "visual_primary_source_count": primary_visual_source_count,
+        "visual_primary_target": TARGET_PRIMARY_VISUAL,
+        "visual_primary_retained": int(len(protected_visual_primary)),
+        "visual_source_count": visual_source_count,
+        "visual_target_total": TARGET_VISUAL_TOTAL,
+        "visual_retained_total": int(len(protected_visual)),
+        "visual_relay_retained": int(len(protected_visual_relay)),
+        "visual_induced_turn_bridges": visual_turn_bridges,
+        "visual_induced_escape_bridges": visual_escape_bridges,
+        "visual_primary_to_turn_dn_selected": selected_primary_to_turn_dn,
+        "visual_primary_to_escape_dn_selected": selected_primary_to_escape_dn,
         "visual_primary_to_turn_source_nonzero": int((primary_visual_in * cell_to_desc[2] > 0).sum()),
         "visual_primary_to_escape_source_nonzero": int((primary_visual_in * cell_to_desc[4] > 0).sum()),
-        "visual_primary_route_turn_selected_nonzero": int((selected["route_turn"] > 0).sum()),
-        "visual_primary_route_escape_selected_nonzero": int((selected["route_escape"] > 0).sum()),
+        "visual_primary_route_turn_selected_nonzero": int((selected["route_visual_turn"] > 0).sum()),
+        "visual_primary_route_escape_selected_nonzero": int((selected["route_visual_escape"] > 0).sum()),
         "olfactory_to_desc_source_nonzero": int((olfactory_to_desc_path > 0).sum()),
         "olfactory_to_desc_three_edge_source_nonzero": int((olfactory_three_edge > 0).sum()),
         "olfactory_to_desc_selected_nonzero": int((selected["route_olfactory_to_desc"] > 0).sum()),

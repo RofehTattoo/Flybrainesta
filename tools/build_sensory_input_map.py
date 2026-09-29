@@ -132,6 +132,15 @@ def main():
     visual_candidates = gust_candidates = mech_candidates = 0
     modality_overlaps = 0
 
+    # The visual runtime injects current only into real primary photoreceptors.
+    # The reducer is therefore required to retain the full 10% source quota; a
+    # silently tiny VIS map would make any downstream visual route untestable.
+    source_primary_visual_count = 0
+    for row in table.to_pylist():
+        if visual_receptor(row):
+            source_primary_visual_count += 1
+    expected_primary_visual = int(round(source_primary_visual_count * 0.10))
+
     for bid, node in by_id.items():
         r = by_ann.get(bid)
         if r is None:
@@ -207,6 +216,12 @@ def main():
         raise SystemExit("duplicate retained sensory receptor index")
     if any(counts[k] == 0 for k in counts):
         raise SystemExit(f"retained receptor population missing: {counts}")
+    if counts["VIS"] != expected_primary_visual:
+        raise SystemExit(
+            "primary visual receptor quota mismatch: "
+            f"source={source_primary_visual_count} expected_retained={expected_primary_visual} "
+            f"actual_retained={counts['VIS']}"
+        )
 
     p = Path(args.output)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -222,6 +237,8 @@ def main():
         "fbc103_sha256": sha256(fbc),
         "fbc103_neurons": len(nodes),
         "retained_receptor_counts": counts,
+        "primary_visual_source_count": source_primary_visual_count,
+        "primary_visual_expected_retained_10pct": expected_primary_visual,
         "retained_tarsal_gustatory_count": len(tarsal_gust),
         "retained_labellar_gustatory_count": len(labellar_gust),
         "retained_pharyngeal_gustatory_count": len(pharyngeal_gust),
