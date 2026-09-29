@@ -3,6 +3,7 @@ package com.example.flybrain
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sqrt
 

@@ -34,6 +34,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 
+private data class StartupEntry(val title: String, val body: String, val color: Int)
+
 class MainActivity : Activity() {
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).roundToInt()
 
@@ -210,7 +212,6 @@ class MainActivity : Activity() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val startAt = SystemClock.uptimeMillis()
 
-        private data class StartupEntry(val title: String, val body: String, val color: Int)
         private val entries = arrayOf<StartupEntry>(
             StartupEntry("Verde · Olfato", "Neuronas olfativas (ORN).", Color.rgb(45, 190, 105)),
             StartupEntry("Azul · Visión", "Neuronas visuales.", Color.rgb(55, 145, 235)),
@@ -650,7 +651,7 @@ class MainActivity : Activity() {
         private val BODY_MAX_Y = .945f
         // Small per-frame world-space collision recovery. It only acts during
         // actual wall contact and prevents corner clamping at zero velocity.
-        private const val WALL_POSITION_RECOVERY = .0035f
+        private val WALL_POSITION_RECOVERY = .0035f
         private var draggingStimulus = false
         private var lightX = .72f
         private var lightY = .72f
