@@ -14,7 +14,8 @@ for token in [
     assert token in MAIN, token
 assert 'visualReceptorIndices' in MAIN
 assert 'setMappedSensoryRate(' in MAIN
-assert 'visualReceptorIndices,' in MAIN
+assert 'setMappedVisualRate(' in MAIN
+assert 'visualSide' in MAIN
 
 # The old population-wide / cyclic encoder must be gone.
 for forbidden in [
@@ -37,7 +38,8 @@ for forbidden in [
 sense_start = MAIN.index('private fun sense(dt: Float)')
 sense_end = MAIN.index('private fun populationRate', sense_start)
 sense = MAIN[sense_start:sense_end]
-assert 'setMappedSensoryRate(' in sense and 'visualReceptorIndices' in sense
+assert 'setMappedVisualRate(' in sense
+assert 'visualReceptorIndices' in MAIN
 assert 'gustatoryTarsalReceptorIndices' in sense
 assert 'mechanosensorySide[i].toInt()' in sense and 'legActuator.proprioceptionLeft' in sense
 assert 'dangerPattern' not in sense

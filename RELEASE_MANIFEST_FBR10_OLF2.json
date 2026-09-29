@@ -1,5 +1,5 @@
 {
-  "release": "FlyBrain V1.19.14 / FBR-10-OLF2-MOTORROUTE",
+  "release": "FlyBrain V1.19.15 / FBR-10-OLF2-MOTORROUTE",
   "status": "source-baseline-for-CI-rebuild",
   "male_cns": "v1.0",
   "target_neurons": 16669,
@@ -12,7 +12,7 @@
   },
   "source_hashes": {
     "annotations": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
-    "neurotransmitters": "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621",
+    "neurotransmitters": "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15602cd08da8879621",
     "weights": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
   },
   "bootstrap_binary": {
@@ -26,6 +26,6 @@
     "Olfactory input is restricted to retained real MaleCNS ORNs",
     "Tarsal gustatory input is restricted to retained official `leg bristle` gustatory receptors; feeding motor output is read from retained official cb_motor types and never synthesized."
   ],
-  "version": "1.19.14",
-  "versionCode": 155
+  "version": "1.19.15",
+  "versionCode": 156
 }

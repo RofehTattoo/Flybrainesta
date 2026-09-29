@@ -484,6 +484,9 @@ class MainActivity : Activity() {
         // loaded from build-generated maps and are the only neurons allowed to receive
         // external sensory current in Phase 1. No synthetic neurons or edges are added.
         private var visualReceptorIndices = IntArray(0)
+        // Official side evidence for retained primary photoreceptors; -1=L, +1=R, 0=unknown.
+        // This is sensory-input metadata only: it never directly drives body mechanics.
+        private val visualSide = ByteArray(N)
         private var olfactoryNeuronIndices = IntArray(0)
         private var gustatoryReceptorIndices = IntArray(0)
         // Only primary gustatory receptors annotated as `leg bristle` may receive
@@ -737,7 +740,10 @@ class MainActivity : Activity() {
         private var olfInputFrontCache = 0f
         private var olfInputRearCache = 0f
         private var dangerLoom = 0f
+        private var dangerLoomMemory = 0f
+        private var dangerOnsetMemory = 0f
         private var previousDangerDistance = Float.NaN
+        private var previousDangerOn = false
 
         // V1.13: behaviour is separated into homeostatic pressure, arousal,
         // rest-state modulation, and *measured* locomotor pauses. A pause is no
@@ -1056,7 +1062,10 @@ class MainActivity : Activity() {
             olfInputFrontCache = 0f
             olfInputRearCache = 0f
             dangerLoom = 0f
+            dangerLoomMemory = 0f
+            dangerOnsetMemory = 0f
             previousDangerDistance = Float.NaN
+            previousDangerOn = false
             explorationState = .45f
             explorationPhase = 0f
             motorActivityMemory = 0f
@@ -1285,6 +1294,7 @@ class MainActivity : Activity() {
                         val photoreceptor = flywireType in setOf("R1-6", "R7", "R8") ||
                             type == "R1-R6" || type.startsWith("R7") || type.startsWith("R8")
                         if (!photoreceptor) throw IllegalStateException("SENSMAP VIS no photoreceptor bodyId=$bid type=$type flywireType=$flywireType")
+                        visualSide[idx] = side.toByte()
                         visual.add(idx)
                     }
                     "GUST" -> {
@@ -2077,6 +2087,65 @@ class MainActivity : Activity() {
             for (index in indices) externalRateHz[index] = bounded
         }
 
+        /**
+         * Convert the environmental visual field into a bilateral photoreceptor
+         * input. The previous encoder sent one identical rate to every retained
+         * R1-6/R7/R8 cell, which preserved luminance but destroyed azimuth.
+         *
+         * The only anatomical information used here is the official `sideCode`
+         * carried by sensory_input_map.tsv. Stimulus-to-body geometry determines
+         * whether the left or right eye receives the larger rate. No action score,
+         * DN readout or motor variable is consulted.
+         */
+        private fun setMappedVisualRate(
+            lightIntensity: Float,
+            dangerIntensity: Float,
+            dangerLoomLevel: Float,
+            dangerOnsetLevel: Float
+        ) {
+            if (visualReceptorIndices.isEmpty()) return
+
+            val fwdX = cos(heading)
+            val fwdY = sin(heading)
+            val rightX = -sin(heading)
+            val rightY = cos(heading)
+
+            fun bilateralGains(sx: Float, sy: Float): FloatArray {
+                val dx = sx - flyX
+                val dy = sy - flyY
+                val distance = hypot(dx, dy)
+                if (distance < .0001f) return floatArrayOf(.5f, .5f)
+                val lateral = dx * rightX + dy * rightY
+                // Bounded coarse azimuth. At broadside this approaches one-sided
+                // stimulation; directly ahead/behind remains approximately bilateral.
+                val angularSide = (lateral / max(distance, .055f)).coerceIn(-1f, 1f)
+                val leftGain = ((1f - angularSide) * .5f).coerceIn(0f, 1f)
+                val rightGain = ((1f + angularSide) * .5f).coerceIn(0f, 1f)
+                return floatArrayOf(leftGain, rightGain)
+            }
+
+            val lightGains = bilateralGains(lightX, lightY)
+            val dangerGains = bilateralGains(dangerX, dangerY)
+            val lightRate = (lightIntensity * SENSORY_VIS_MAX_HZ * .70f).coerceIn(0f, 260f)
+            // Danger has a sustained luminance component plus an onset/looming
+            // transient. This keeps a stationary threat visible while preserving
+            // the temporal signature produced when the object appears/approaches.
+            val dangerRate = (dangerIntensity * SENSORY_VIS_MAX_HZ *
+                (.82f + 1.20f * dangerLoomLevel + .70f * dangerOnsetLevel))
+                .coerceIn(0f, 260f)
+
+            for (index in visualReceptorIndices) {
+                val rate = when (visualSide[index].toInt()) {
+                    -1 -> lightRate * lightGains[0] + dangerRate * dangerGains[0]
+                    1 -> lightRate * lightGains[1] + dangerRate * dangerGains[1]
+                    else -> {
+                        (lightRate + dangerRate) * .5f
+                    }
+                }
+                externalRateHz[index] = rate.coerceIn(0f, 260f)
+            }
+        }
+
         private fun xorshiftUnit(index: Int): Float {
             var x = rngState[index]
             x = x xor (x shl 13)
@@ -2146,22 +2215,34 @@ class MainActivity : Activity() {
             val approachRate = if (dangerOn && previousDangerDistance.isFinite()) {
                 ((previousDangerDistance - dangerDistance) / dt.coerceAtLeast(.001f)).coerceAtLeast(0f)
             } else 0f
-            dangerLoom = if (dangerOn) (approachRate / .22f).coerceIn(0f, 1f) else 0f
+            val instantaneousLoom = if (dangerOn) (approachRate / .22f).coerceIn(0f, 1f) else 0f
+            dangerLoomMemory = if (dangerOn) {
+                max(instantaneousLoom, dangerLoomMemory * exp((-dt / .14f).toDouble()).toFloat())
+            } else 0f
+            dangerLoom = dangerLoomMemory
+            dangerOnsetMemory = if (!dangerOn) {
+                0f
+            } else {
+                val onset = if (!previousDangerOn) 1f else 0f
+                max(onset, dangerOnsetMemory * exp((-dt / .11f).toDouble()).toFloat())
+            }
             previousDangerDistance = if (dangerOn) dangerDistance else Float.NaN
+            previousDangerOn = dangerOn
 
             // Primary visual encoder:
             // - light is a sustained luminance field;
-            // - danger is a stronger local luminance/looming event.
-            // Both remain external input to the retained photoreceptors only.
-            val visualLightComponent = lightIntensity * 1.65f
-            val visualThreatComponent = dangerBaseIntensity *
-                (.70f + 1.45f * dangerLoom)
-            val combinedVisualIntensity = (visualLightComponent + visualThreatComponent)
-                .coerceIn(0f, 3.5f)
+            // - danger is a sustained local threat plus transient onset/looming;
+            // - left/right eye drive is resolved from official receptor side metadata.
+            // Nothing here bypasses the connectome into a motor/action command.
+            val visualThreatComponent = (dangerBaseIntensity *
+                (.82f + 1.20f * dangerLoom + .70f * dangerOnsetMemory))
+                .coerceIn(0f, 1f)
 
-            setMappedSensoryRate(
-                visualReceptorIndices,
-                combinedVisualIntensity / 3.5f * SENSORY_VIS_MAX_HZ
+            setMappedVisualRate(
+                lightIntensity,
+                dangerBaseIntensity,
+                dangerLoom,
+                dangerOnsetMemory
             )
             injectOlfactoryPopulation(foodOn, foodX, foodY, FOOD_OLF_MAX_HZ)
             for (i in gustatoryTarsalReceptorIndices) {

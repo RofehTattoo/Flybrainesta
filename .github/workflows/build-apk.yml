@@ -41,6 +41,7 @@ jobs:
           python tools/test_v119_sensorimotor_closed_loop.py
           python tools/test_v119_feeding_walkoff_gate.py
           python tools/test_sensory_input_purity.py
+          python tools/test_v11915_visual_encoder.py
           python tools/test_vnc_motor_semantics_logic.py
           python tools/test_motor_role_semantics_consistency.py
           python tools/test_motor_route_recruitment.py

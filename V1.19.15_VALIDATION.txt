@@ -1,0 +1,47 @@
+FlyBrain V1.19.15 — validation record
+Generated: 2026-09-29
+
+Scope:
+- Runtime visual encoder only.
+- FBR-10/FBC103 structural binary intentionally unchanged.
+
+FBC103:
+- neurons: 16,669
+- edges: 2,483,165
+- contacts: 20,992,679
+- SHA-256: 0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf
+
+Static validation:
+- test_fbc103_reader.py: PASS
+- test_food_function_audit.py: PASS
+- test_feeding_semantics_consistency.py: PASS
+- test_feeding_temporal_context.py: PASS
+- test_tarsal_gustation_contact.py: PASS
+- test_frozen_connectome_validator.py: PASS
+- test_neural_time_integration.py: PASS
+- test_olfactory_input_map.py: PASS
+- test_olfactory_route_reduction.py: PASS
+- test_phase2b_temporal_substepping.py: PASS
+- test_sensory_sample_hold.py: PASS
+- test_v119_sensorimotor_closed_loop.py: PASS
+- test_v119_feeding_walkoff_gate.py: PASS
+- test_sensory_input_purity.py: PASS
+- test_v11915_visual_encoder.py: PASS
+- test_vnc_motor_semantics_logic.py: PASS
+- test_motor_role_semantics_consistency.py: PASS
+- test_motor_route_recruitment.py: PASS
+- test_nt_resolution.py: PASS
+- validate_fbr10_olf2.py: PASS
+- test_release_provenance.py: PASS
+- validate_generated_connectome.py: PASS
+- test_food_response_chain.py: PASS
+- test_olfactory_sensor_model.py: PASS
+- test_synchronous_neural_update.py: PASS
+- test_reference_lif_dynamics.py: PASS
+
+Standalone Kotlin syntax check:
+- LeggedSensorimotorActuator.kt compiled with kotlinc: PASS
+
+Android/Gradle:
+- Full Android Gradle build was not executed in this environment.
+- GitHub Actions remains the authoritative APK compilation check.
