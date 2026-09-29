@@ -27,7 +27,11 @@ assert 'annotations[annotations["status"]' not in B
 assert 'pinned MaleCNS v1.0 release contains 166,700' in B
 assert 'len(annotated)' in B
 assert 'side_from_nerve' not in B
-assert 'sc == "ol_sensory"' not in B
+# The visual-response fix intentionally adds this predicate for primary
+# photoreceptors; it must remain separate from the olfactory ORN classifier.
+assert 'def is_primary_visual_receptor' in B
+assert 'sc == "ol_sensory"' in B
+assert 'sc == "cb_sensory"' in B
 assert 'edge_weight_definition' in B
 assert 'raw positive MaleCNS contact counts' in B
 assert 'NT_SIGN' not in B
