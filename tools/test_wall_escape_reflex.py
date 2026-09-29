@@ -28,7 +28,7 @@ assert "legActuator.applyWallConstraint(" in MAIN and "wallContactNow" in MAIN
 # Version sync.
 META=(ROOT/"app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text()
 GRADLE=(ROOT/"app/build.gradle.kts").read_text()
-assert 'APP_VERSION = "1.19.12"' in META and 'APP_VERSION_CODE = 153' in META
-assert 'versionName = "1.19.12"' in GRADLE and 'versionCode = 153' in GRADLE
+assert 'APP_VERSION = "1.19.13"' in META and 'APP_VERSION_CODE = 154' in META
+assert 'versionName = "1.19.13"' in GRADLE and 'versionCode = 154' in GRADLE
 
 print("WALL ESCAPE REFLEX AUDIT: PASS")

@@ -202,17 +202,16 @@ class MainActivity : Activity() {
 
 
     /**
-     * V1.19.12 startup observatory.
+     * V1.19.13 startup observatory.
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
      * It stays on screen for at least 4.5 s after the loader completes.
      */
-    private data class StartupEntry(val title: String, val body: String, val color: Int)
-
     inner class StartupView(private val sim: FlyView) : View(this) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val startAt = SystemClock.uptimeMillis()
 
-        private val entries = arrayOf(
+        private data class StartupEntry(val title: String, val body: String, val color: Int)
+        private val entries = arrayOf<StartupEntry>(
             StartupEntry("Verde · Olfato", "Neuronas olfativas (ORN).", Color.rgb(45, 190, 105)),
             StartupEntry("Azul · Visión", "Neuronas visuales.", Color.rgb(55, 145, 235)),
             StartupEntry("Amarillo · Gusto", "Neuronas gustativas.", Color.rgb(238, 190, 42)),
@@ -643,12 +642,15 @@ class MainActivity : Activity() {
         private val FOOD_PHARYNGEAL_CONTACT_RADIUS = .038f
         private val FOOD_INITIAL_AMOUNT = 1f
         private val FOOD_INGESTION_STEP = .10f
-        // V1.19.12: the white arena is the real locomotor workspace; keep only
+        // V1.19.13: the white arena is the real locomotor workspace; keep only
         // a narrow safety margin for the fly sprite and visible border.
         private val BODY_MIN_X = .045f
         private val BODY_MAX_X = .955f
         private val BODY_MIN_Y = .055f
         private val BODY_MAX_Y = .945f
+        // Small per-frame world-space collision recovery. It only acts during
+        // actual wall contact and prevents corner clamping at zero velocity.
+        private const val WALL_POSITION_RECOVERY = .0035f
         private var draggingStimulus = false
         private var lightX = .72f
         private var lightY = .72f
@@ -3228,8 +3230,22 @@ class MainActivity : Activity() {
                 worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
                 worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
             }
-            flyX = (flyX + worldVx * dt).coerceIn(BODY_MIN_X, BODY_MAX_X)
-            flyY = (flyY + worldVy * dt).coerceIn(BODY_MIN_Y, BODY_MAX_Y)
+            var nextFlyX = flyX + worldVx * dt
+            var nextFlyY = flyY + worldVy * dt
+
+            if (wallContactNow) {
+                val wallLen = hypot(wallNx, wallNy)
+                if (wallLen > .0001f) {
+                    val invLen = 1f / wallLen
+                    // Local collision resolution only. The vector comes from the
+                    // measured wall normal; no food/light/danger target is read.
+                    nextFlyX += wallNx * invLen * WALL_POSITION_RECOVERY
+                    nextFlyY += wallNy * invLen * WALL_POSITION_RECOVERY
+                }
+            }
+
+            flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)
+            flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)
 
             val dxPhysical = flyX - lastMotionX
             val dyPhysical = flyY - lastMotionY

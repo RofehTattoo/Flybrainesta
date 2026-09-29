@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.12 embodied sensorimotor actuator.
+ * V1.19.13 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -50,6 +50,8 @@ class LeggedSensorimotorActuator {
         private const val WALL_ESCAPE_RESPONSE_TAU = .085f
         private const val WALL_ESCAPE_DECAY_TAU = .34f
         private const val WALL_ESCAPE_PULSE_SECONDS = .65f
+        private const val WALL_STALL_RETRIGGER_SECONDS = .28f
+        private const val WALL_REPULSE_COOLDOWN_SECONDS = .42f
         // Small physical separation velocity prevents geometric corner locking;
         // it is a collision-resolution impulse, not a stimulus/goal command.
         private const val WALL_SEPARATION_SPEED = .030f
@@ -113,6 +115,8 @@ class LeggedSensorimotorActuator {
     private var wallEscapeDirection = 1f
     private var wallContactLatched = false
     private var wallEscapePulseRemaining = 0f
+    private var wallStallTimer = 0f
+    private var wallRepulseCooldown = 0f
     private var lastWallNx = 0f
     private var lastWallNy = 0f
 
@@ -138,6 +142,8 @@ class LeggedSensorimotorActuator {
         wallEscapeDirection = 1f
         wallContactLatched = false
         wallEscapePulseRemaining = 0f
+        wallStallTimer = 0f
+        wallRepulseCooldown = 0f
         lastWallNx = 0f
         lastWallNy = 0f
     }
@@ -318,6 +324,9 @@ class LeggedSensorimotorActuator {
         if (!contactActive) {
             wallContactLatched = false
             wallEscapePulseRemaining = 0f
+            wallStallTimer = 0f
+            wallRepulseCooldown = 0f
+            wallEscapeBias = 0f
             return
         }
 
@@ -355,12 +364,17 @@ class LeggedSensorimotorActuator {
         }
 
         val contactOnset = !wallContactLatched
+        val planarSpeed = hypot(vx, vy)
+
         if (contactOnset) {
-            // Choose one direction once per contact episode.
+            wallStallTimer = 0f
+            wallRepulseCooldown = 0f
+
+            // First choice comes from wall geometry and measured bilateral leg
+            // mechanics. The stimulus system is not consulted.
             val rightX = -s
             val rightY = c
             val wallRightProjection = nx * rightX + ny * rightY
-
             val sideByLegs = ((rightSupport - leftSupport) /
                 (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
 
@@ -369,18 +383,50 @@ class LeggedSensorimotorActuator {
                     -wallRightProjection.signOrZero()
                 abs(sideByLegs) > .10f ->
                     -sideByLegs.signOrZero()
-                else ->
-                    if (wallEscapeDirection == 0f) 1f else wallEscapeDirection
+                else -> {
+                    val cross = c * ny - s * nx
+                    if (abs(cross) > .06f) cross.signOrZero()
+                    else if (wallEscapeDirection == 0f) 1f else wallEscapeDirection
+                }
             }
 
             wallEscapeDirection = if (escapeSide == 0f) 1f else escapeSide
             wallContactLatched = true
             wallEscapePulseRemaining = WALL_ESCAPE_PULSE_SECONDS
+            wallRepulseCooldown = WALL_REPULSE_COOLDOWN_SECONDS
 
-            // Emit one bounded pulse at contact onset. Do not refresh it every
-            // frame: a persistent contact must not become a perpetual spin command.
             val contactGain = (0.72f + 0.28f * wallFacing).coerceIn(.72f, 1f)
             wallEscapeBias = wallEscapeDirection * contactGain
+        } else {
+            wallRepulseCooldown = max(0f, wallRepulseCooldown - dt)
+
+            // If the body remains truly stationary, a new bounded mechanosensory
+            // pulse is allowed after a cooldown. This avoids a permanent one-shot
+            // failure without turning the wall into an endless spin command.
+            if (planarSpeed < .045f && wallRepulseCooldown <= 0f) {
+                wallStallTimer += dt
+                if (wallStallTimer >= WALL_STALL_RETRIGGER_SECONDS) {
+                    wallStallTimer = 0f
+                    wallRepulseCooldown = WALL_REPULSE_COOLDOWN_SECONDS
+
+                    val cross = c * ny - s * nx
+                    val retrySide = when {
+                        abs(cross) > .05f -> cross.signOrZero()
+                        wallEscapeDirection == 0f -> 1f
+                        else -> -wallEscapeDirection
+                    }
+                    wallEscapeDirection = if (retrySide == 0f) 1f else retrySide
+                    wallEscapePulseRemaining = WALL_ESCAPE_PULSE_SECONDS
+                    wallEscapeBias = wallEscapeDirection *
+                        (0.70f + 0.30f * wallFacing).coerceIn(.70f, 1f)
+                }
+            } else if (planarSpeed >= .045f) {
+                wallStallTimer = 0f
+            }
+        }
+
+        // Apply the bounded wall yaw pulse immediately.
+        if (wallEscapePulseRemaining > 0f) {
             val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
             val yawAlpha = (1f - exp(
                 (-dt / WALL_ESCAPE_RESPONSE_TAU).toDouble()
@@ -389,13 +435,14 @@ class LeggedSensorimotorActuator {
             yawRate = yawRate.coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
         }
 
-        // Physical de-penetration pulse: move the body a small amount toward
-        // the interior of the environment. At a corner the combined normal points
-        // diagonally inward, so the fly cannot remain clamped forever at the corner.
+        // Physical de-penetration impulse in the same measured wall-normal direction.
         if (wallEscapePulseRemaining > 0f) {
             vx += nx * WALL_SEPARATION_SPEED
             vy += ny * WALL_SEPARATION_SPEED
             wallEscapePulseRemaining = max(0f, wallEscapePulseRemaining - dt)
+            if (wallEscapePulseRemaining <= 0f) {
+                wallEscapeBias = 0f
+            }
         }
 
         // Head-on contact briefly unloads propulsion, but never freezes the body.
