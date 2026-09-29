@@ -15,7 +15,15 @@ assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, dtRaw: Flo
 assert 'effectiveWalkOffActivation' in MAIN and 'legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)' in MAIN
 assert 'legActuator.proprioceptionLeft' in MAIN and 'legActuator.proprioceptionRight' in MAIN
 assert 'mechanosensorySide[idx] = side.toByte()' in MAIN
-assert 'flyX = (flyX + worldVx * dt)' in MAIN and 'flyY = (flyY + worldVy * dt)' in MAIN
+# Position integration may include wall-normal collision recovery before clamping.
+# Verify the current semi-implicit integration structure without pinning the test
+# to the old two-line spelling that predated V1.19.13 corner recovery.
+assert 'var nextFlyX = flyX + worldVx * dt' in MAIN
+assert 'var nextFlyY = flyY + worldVy * dt' in MAIN
+assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in MAIN
+assert 'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)' in MAIN
+assert 'WALL_POSITION_RECOVERY' in MAIN
+assert 'if (wallContactNow)' in MAIN
 assert 'heading += yawRate * dt' in MAIN
 assert MAIN.index('heading += yawRate * dt') < MAIN.index('var worldVx = cos(heading) * flySpeed')
 assert '* 60f' not in MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeuralSimulation')]
