@@ -6,6 +6,8 @@ META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.k
 GRADLE = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 
 assert 'primary_visual_source_count = int(is_primary_visual.sum())' in BUILD
+assert 'annotated["is_primary_visual"] = is_primary_visual' in BUILD
+assert 'selected["is_primary_visual"].to_numpy(bool)' in BUILD
 assert '5900 <= primary_visual_source_count <= 6200' in BUILD
 assert 'TARGET_PRIMARY_VISUAL = int(round(primary_visual_source_count * 0.10))' in BUILD
 assert 'TARGET_VISUAL_TOTAL = int(round(visual_source_count * 0.10))' in BUILD

@@ -413,6 +413,9 @@ def main(root: Path) -> None:
 
     is_sensory = annotated["channel"].to_numpy(np.int8) < 4
     is_primary_visual = annotated.apply(is_primary_visual_receptor, axis=1).to_numpy(bool)
+    # Persist the source-aligned classification in the dataframe so every
+    # downstream selection/concat retains it for the induced-graph audit.
+    annotated["is_primary_visual"] = is_primary_visual
     primary_visual_source_count = int(is_primary_visual.sum())
     if not (5900 <= primary_visual_source_count <= 6200):
         raise RuntimeError(
