@@ -3,6 +3,7 @@ package com.example.flybrain
 import android.app.Activity
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -12,6 +13,7 @@ import android.media.AudioAttributes
 import android.media.SoundPool
 import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -107,30 +109,6 @@ class MainActivity : Activity() {
         })
         root.addView(identity, LinearLayout.LayoutParams(-1, 44.dp()))
 
-        root.setOnApplyWindowInsetsListener { view, insets ->
-            // Android 15 (targetSdk 35) lays app content edge-to-edge by default.
-            // Apply system-bar/cutout insets to the content container itself and
-            // consume them so the custom-drawn brain panel cannot sit underneath
-            // the Android navigation controls.
-            if (Build.VERSION.SDK_INT >= 30) {
-                val insetTypes = android.view.WindowInsets.Type.systemBars() or
-                    android.view.WindowInsets.Type.displayCutout()
-                val safe = insets.getInsets(insetTypes)
-                // Keep the nav-bar inset in the measured content area. The extra
-                // 8dp protects the lowest custom-drawn brain nodes from gesture /
-                // three-button navigation overlays on OEM Android builds.
-                view.setPadding(safe.left, safe.top, safe.right, safe.bottom + 8.dp())
-                insets
-            } else {
-                val left = insets.systemWindowInsetLeft
-                val top = insets.systemWindowInsetTop
-                val right = insets.systemWindowInsetRight
-                val bottom = insets.systemWindowInsetBottom
-                view.setPadding(left, top, right, bottom + 8.dp())
-                insets
-            }
-        }
-
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(5.dp(), 2.dp(), 5.dp(), 2.dp())
@@ -180,9 +158,163 @@ class MainActivity : Activity() {
         sim.dangerButton = danger
         sim.resetButton = reset
 
-        setContentView(root)
-        root.requestApplyInsets()
+        val shell = FrameLayout(this).apply {
+            setBackgroundColor(Color.rgb(7, 11, 14))
+            clipToPadding = true
+            clipChildren = true
+            addView(root, FrameLayout.LayoutParams(-1, -1))
+        }
+
+        shell.setOnApplyWindowInsetsListener { view, insets ->
+            if (Build.VERSION.SDK_INT >= 30) {
+                val insetTypes = android.view.WindowInsets.Type.systemBars() or
+                    android.view.WindowInsets.Type.displayCutout()
+                val safe = insets.getInsets(insetTypes)
+                // Reserve the real system-bar area. The added 8dp safety band
+                // keeps the lower neural map clear of three-button navigation.
+                view.setPadding(safe.left, safe.top, safe.right, safe.bottom + 8.dp())
+                insets
+            } else {
+                view.setPadding(
+                    insets.systemWindowInsetLeft,
+                    insets.systemWindowInsetTop,
+                    insets.systemWindowInsetRight,
+                    insets.systemWindowInsetBottom + 8.dp()
+                )
+                insets
+            }
+        }
+
+        val startup = StartupView(sim)
+        shell.addView(
+            startup,
+            FrameLayout.LayoutParams(-1, -1).apply {
+                gravity = Gravity.CENTER
+            }
+        )
+
+        setContentView(shell)
+        shell.requestApplyInsets()
         refresh()
+        sim.startBrainLoading()
+        startup.postInvalidate()
+    }
+
+
+    /**
+     * V1.19.12 startup observatory.
+     * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
+     * It stays on screen for at least 4.5 s after the loader completes.
+     */
+    inner class StartupView(private val sim: FlyView) : View(this) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val startAt = SystemClock.uptimeMillis()
+
+        private data class Entry(val title: String, val body: String, val color: Int)
+        private val entries = arrayOf(
+            Entry("Verde · Olfato", "Neuronas olfativas (ORN).", Color.rgb(45, 190, 105)),
+            Entry("Azul · Visión", "Neuronas visuales.", Color.rgb(55, 145, 235)),
+            Entry("Amarillo · Gusto", "Neuronas gustativas.", Color.rgb(238, 190, 42)),
+            Entry("Naranja · Mecano", "Señales mecanosensoriales.", Color.rgb(238, 125, 48)),
+            Entry("Rosa · Descenso", "Neuronas descendentes.", Color.rgb(218, 75, 175)),
+            Entry("Cian · Ascenso", "Neuronas ascendentes.", Color.rgb(55, 190, 210)),
+            Entry("Rojo · Motor", "Neuronas motoras.", Color.rgb(235, 70, 75)),
+            Entry("Gris · Central", "Otras poblaciones centrales.", Color.rgb(150, 160, 170))
+        )
+
+        override fun onDraw(c: Canvas) {
+            super.onDraw(c)
+            val d = resources.displayMetrics.density
+            val s = resources.displayMetrics.scaledDensity
+            val dp = { v: Float -> v * d }
+            val sp = { v: Float -> v * s }
+
+            c.drawColor(Color.rgb(4, 6, 8))
+            val margin = dp(16f)
+            val top = dp(18f)
+            val bottom = height - dp(18f)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(12, 17, 21)
+            c.drawRoundRect(margin, top, width - margin, bottom, dp(18f), dp(18f), paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = dp(1.2f)
+            paint.color = Color.rgb(48, 58, 64)
+            c.drawRoundRect(margin, top, width - margin, bottom, dp(18f), dp(18f), paint)
+            paint.style = Paint.Style.FILL
+
+            paint.textAlign = Paint.Align.LEFT
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = sp(17f)
+            paint.color = Color.WHITE
+            c.drawText("Código de colores del cerebro", margin + dp(18f), top + dp(32f), paint)
+
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = sp(9f)
+            paint.color = Color.rgb(166, 178, 185)
+            c.drawText(
+                "Aprende a interpretar la actividad neuronal antes de entrar en la simulación.",
+                margin + dp(18f), top + dp(50f), paint
+            )
+
+            val innerW = width - 2f * margin - dp(32f)
+            val colW = innerW / 2f
+            val rowH = dp(66f)
+            val startY = top + dp(82f)
+
+            for (i in entries.indices) {
+                val row = i / 2
+                val col = i % 2
+                val x = margin + dp(18f) + colW * col
+                val y = startY + row * rowH
+
+                paint.color = entries[i].color
+                c.drawCircle(x + dp(5f), y + dp(5f), dp(6f), paint)
+
+                paint.typeface = Typeface.DEFAULT_BOLD
+                paint.textSize = sp(11f)
+                paint.color = Color.WHITE
+                c.drawText(entries[i].title, x + dp(17f), y + dp(9f), paint)
+
+                paint.typeface = Typeface.DEFAULT
+                paint.textSize = sp(8.2f)
+                paint.color = Color.rgb(181, 190, 196)
+                c.drawText(entries[i].body, x + dp(17f), y + dp(27f), paint)
+            }
+
+            val noteY = startY + 4f * rowH + dp(4f)
+            paint.color = Color.rgb(139, 151, 158)
+            paint.textSize = sp(8.3f)
+            c.drawText("El color identifica la población; el brillo y la intensidad", margin + dp(18f), noteY, paint)
+            c.drawText("representan su actividad en la simulación. No todas las neuronas", margin + dp(18f), noteY + dp(16f), paint)
+            c.drawText("de un mismo grupo tienen que estar activas simultáneamente.", margin + dp(18f), noteY + dp(32f), paint)
+
+            val ready = sim.brainLoadFinished && sim.brainLoadOk
+            val failed = sim.brainLoadFinished && !sim.brainLoadOk
+            paint.typeface = Typeface.DEFAULT_BOLD
+            paint.textSize = sp(8.5f)
+            paint.color = when {
+                failed -> Color.rgb(235, 85, 85)
+                ready -> Color.rgb(70, 205, 120)
+                else -> Color.rgb(210, 218, 222)
+            }
+            val status = when {
+                failed -> "ERROR DE CARGA · revisa FBR-10 / FBD105"
+                ready -> "CONNECTOME + DYNAMICS OK"
+                else -> "CARGANDO MaleCNS v1.0 · FBR-10 · DINÁMICA FBD105…"
+            }
+            c.drawText(status, margin + dp(18f), bottom - dp(32f), paint)
+
+            if (ready) {
+                val elapsed = SystemClock.uptimeMillis() - sim.brainLoadFinishedAt
+                if (elapsed >= 4500L && SystemClock.uptimeMillis() - startAt >= 4500L) {
+                    visibility = View.GONE
+                    return
+                }
+            }
+
+            // Keep the splash alive until the substrate is both loaded and readable.
+            postInvalidateDelayed(100L)
+        }
     }
 
     inner class FlyView : View(this) {
@@ -510,10 +642,12 @@ class MainActivity : Activity() {
         private val FOOD_PHARYNGEAL_CONTACT_RADIUS = .038f
         private val FOOD_INITIAL_AMOUNT = 1f
         private val FOOD_INGESTION_STEP = .10f
-        private val BODY_MIN_X = .12f
-        private val BODY_MAX_X = .88f
-        private val BODY_MIN_Y = .16f
-        private val BODY_MAX_Y = .84f
+        // V1.19.12: the white arena is the real locomotor workspace; keep only
+        // a narrow safety margin for the fly sprite and visible border.
+        private val BODY_MIN_X = .045f
+        private val BODY_MAX_X = .955f
+        private val BODY_MIN_Y = .055f
+        private val BODY_MAX_Y = .945f
         private var draggingStimulus = false
         private var lightX = .72f
         private var lightY = .72f
@@ -675,8 +809,35 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(250, 250, 250))
             explorationState = .45f
             checkTemporalConfiguration()
-            buildBrain()
-            setupBuzzSound()
+        }
+
+        @Volatile private var brainLoadFinished = false
+        @Volatile private var brainLoadOk = false
+        @Volatile private var brainLoadingStarted = false
+        @Volatile private var brainLoadFinishedAt = 0L
+
+        fun startBrainLoading() {
+            if (brainLoadingStarted) return
+            brainLoadingStarted = true
+            Thread {
+                val ok = try {
+                    buildBrain()
+                    connectomeLoaded && dynamicsLoaded
+                } catch (_: Throwable) {
+                    false
+                }
+                post {
+                    brainLoadOk = ok
+                    brainLoadFinished = true
+                    brainLoadFinishedAt = SystemClock.uptimeMillis()
+                    if (ok) setupBuzzSound()
+                    invalidate()
+                }
+            }.apply {
+                name = "flybrain-connectome-loader"
+                isDaemon = true
+                start()
+            }
         }
 
         private fun checkTemporalConfiguration() {
@@ -1011,11 +1172,11 @@ class MainActivity : Activity() {
             invalidate()
         }
 
-        private var connectomeLoaded = false
+        @Volatile private var connectomeLoaded = false
         private var connectomeError = ""
         private var loadedEdgeCount = 0
         private var loadedDynamicsEdgeCount = 0
-        private var dynamicsLoaded = false
+        @Volatile private var dynamicsLoaded = false
 
         private fun buildBrain() {
             connectomeLoaded = loadMeasuredConnectome()
@@ -3239,14 +3400,14 @@ class MainActivity : Activity() {
 
         // UI-only layout: give the neural observatory more vertical space while
         // keeping enough room above for the interactive stimulus scene.
-        private fun brainPanelHeight(): Float = min(height * .40f, 460.dp().toFloat())
+        private fun brainPanelHeight(): Float = min(height * .32f, 390.dp().toFloat())
 
         private fun drawScene(c: Canvas) {
             val bottom = sceneBottom()
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 2f
             paint.color = Color.rgb(190, 190, 190)
-            c.drawRect(8f, 8f, width - 8f, bottom - 6f, paint)
+            c.drawRect(3f, 3f, width - 3f, bottom - 3f, paint)
             paint.style = Paint.Style.FILL
 
             if (foodOn && foodAmount > 0f) {

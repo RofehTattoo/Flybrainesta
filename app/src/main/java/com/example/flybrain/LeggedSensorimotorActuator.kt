@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.11 embodied sensorimotor actuator.
+ * V1.19.12 embodied sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -49,6 +49,10 @@ class LeggedSensorimotorActuator {
         private const val WALL_ESCAPE_MAX_YAW_RATE = 3.10f
         private const val WALL_ESCAPE_RESPONSE_TAU = .085f
         private const val WALL_ESCAPE_DECAY_TAU = .34f
+        private const val WALL_ESCAPE_PULSE_SECONDS = .65f
+        // Small physical separation velocity prevents geometric corner locking;
+        // it is a collision-resolution impulse, not a stimulus/goal command.
+        private const val WALL_SEPARATION_SPEED = .030f
         private const val YAW_RESPONSE_TAU = .16f
         private const val LINEAR_RESPONSE_MIN_DT = .0005f
         private const val FOOT_STROKE = .065f
@@ -108,6 +112,7 @@ class LeggedSensorimotorActuator {
         private set
     private var wallEscapeDirection = 1f
     private var wallContactLatched = false
+    private var wallEscapePulseRemaining = 0f
     private var lastWallNx = 0f
     private var lastWallNy = 0f
 
@@ -132,6 +137,7 @@ class LeggedSensorimotorActuator {
         wallEscapeBias = 0f
         wallEscapeDirection = 1f
         wallContactLatched = false
+        wallEscapePulseRemaining = 0f
         lastWallNx = 0f
         lastWallNy = 0f
     }
@@ -311,6 +317,7 @@ class LeggedSensorimotorActuator {
 
         if (!contactActive) {
             wallContactLatched = false
+            wallEscapePulseRemaining = 0f
             return
         }
 
@@ -368,6 +375,7 @@ class LeggedSensorimotorActuator {
 
             wallEscapeDirection = if (escapeSide == 0f) 1f else escapeSide
             wallContactLatched = true
+            wallEscapePulseRemaining = WALL_ESCAPE_PULSE_SECONDS
 
             // Emit one bounded pulse at contact onset. Do not refresh it every
             // frame: a persistent contact must not become a perpetual spin command.
@@ -379,6 +387,15 @@ class LeggedSensorimotorActuator {
             ).toFloat()).coerceIn(0f, 1f)
             yawRate += (wallYawTarget - yawRate) * yawAlpha
             yawRate = yawRate.coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
+        }
+
+        // Physical de-penetration pulse: move the body a small amount toward
+        // the interior of the environment. At a corner the combined normal points
+        // diagonally inward, so the fly cannot remain clamped forever at the corner.
+        if (wallEscapePulseRemaining > 0f) {
+            vx += nx * WALL_SEPARATION_SPEED
+            vy += ny * WALL_SEPARATION_SPEED
+            wallEscapePulseRemaining = max(0f, wallEscapePulseRemaining - dt)
         }
 
         // Head-on contact briefly unloads propulsion, but never freezes the body.
