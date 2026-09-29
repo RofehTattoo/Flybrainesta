@@ -49,7 +49,7 @@ def main():
     d=json.loads(rep.read_text(encoding='utf-8'))
     assert d.get('reduction') == 'FBR-10-OLF2-MOTORROUTE', d.get('reduction')
     assert d.get('neurons_retained') == TARGET
-    assert d.get('edge_weight_definition') == 'raw positive MaleCNS contact counts; neurotransmitter sign and FBD104 normalization are applied only in the separate dynamics layer'
+    assert d.get('edge_weight_definition') == 'raw positive MaleCNS contact counts; neurotransmitter sign is applied only in FBD105'
     assert d.get('candidate_edges_between_retained_neurons') == e
     assert d.get('contacts_retained') == contact_total
     assert d.get('olfactory_orns_source') == 2639
