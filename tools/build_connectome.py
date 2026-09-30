@@ -1541,7 +1541,7 @@ def main(root: Path) -> None:
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
     const val FLYBRAIN_VERSION = "1.19.19"
-    const val FLYBRAIN_VERSION_CODE = 159
+    const val FLYBRAIN_VERSION_CODE = 160
     const val APP_VERSION = "1.19.19"
     const val APP_VERSION_CODE = 160
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
