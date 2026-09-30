@@ -2176,15 +2176,22 @@ class MainActivity : Activity() {
             }
             val left = antennaOdorConcentration(sx, sy, -1)
             val right = antennaOdorConcentration(sx, sy, 1)
-            val center = (left + right) * .5f
+            // Use the same bounded bilateral encoder covered by unit tests.
+            // Its output is a sensory firing-rate input, never a motor command.
+            val encoded = OlfactoryInputEncoder.encode(
+                left = left,
+                right = right,
+                gain = maxRateHz,
+                limit = 260f
+            )
             for (i in olfactoryNeuronIndices) {
-                val concentration = when (olfactorySide[i].toInt()) {
-                    -1 -> left
-                    1 -> right
-                    else -> center
+                externalRateHz[i] = when (olfactorySide[i].toInt()) {
+                    -1 -> encoded.left
+                    1 -> encoded.right
+                    else -> encoded.center
                 }
-                externalRateHz[i] = (concentration * maxRateHz).coerceIn(0f, 260f)
             }
+            val center = encoded.center / 260f
             olfInputLeftCache = left
             olfInputCenterCache = center
             olfInputRightCache = right
@@ -3279,10 +3286,10 @@ class MainActivity : Activity() {
             // V1.19.4: closed-loop sensorimotor body mechanics. The actuator sees
             // only the six measured leg-MN subgroup activations and the measured
             // walk-OFF output. No sensory stimulus or action/goal variable enters.
-            val effectiveWalkOffActivation = max(
-                walkOffActivationState, feedingPauseActivation
-            )
-            legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)
+            // Feeding-related neural readouts remain diagnostic only. Locomotor
+            // inhibition reaches the actuator exclusively through retained
+            // walk-OFF neural activity measured above.
+            legActuator.step(legGroupActivation, walkOffActivationState, dt)
             flySpeed = legActuator.forwardVelocity
             bodyLateralSpeed = legActuator.lateralVelocity
             yawRate = legActuator.yawRate

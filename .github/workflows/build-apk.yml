@@ -46,6 +46,7 @@ jobs:
           python tools/test_sensory_input_purity.py
           python tools/test_v11915_visual_encoder.py
           python tools/test_v11916_visual_fbr10_rebuild.py
+          python tools/test_v11917_olfactory_runtime_and_walkoff.py
           python tools/test_visual_three_edge_score_order.py
           python tools/test_vnc_motor_semantics_logic.py
           python tools/test_motor_role_semantics_consistency.py

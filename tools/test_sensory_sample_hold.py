@@ -5,5 +5,5 @@ assert 'externalRateHz' in MAIN
 assert 'poissonEvent(i, dt)' in MAIN
 assert 'private fun forceExternalSpike(index: Int)' in MAIN
 assert 'sensoryCurrent' not in MAIN
-assert 'OlfactoryInputEncoder.encode(' not in MAIN
+assert 'OlfactoryInputEncoder.encode(' in MAIN
 print('SENSORY POISSON RATE-ENCODER AUDIT: PASS')

@@ -11,7 +11,7 @@ for token in (
     "FEEDING_PROBOSCIS_HOLD_SECONDS = 2.40f",
     "FEEDING_INGESTION_HOLD_SECONDS = 3.00f",
     "FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.80f",
-    "pharyngealContextAgeSeconds", "effectiveWalkOffActivation",
+    "pharyngealContextAgeSeconds",
 ):
     assert token in MAIN, token
 
@@ -22,7 +22,7 @@ assert "proboscisContextActive" in ing
 assert "ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN" in ing
 assert "gustatorySpikeEventsFrame >= FEEDING_TASTE_NEURON_SPIKE_MIN" not in ing
 
-assert "legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)" in MAIN
+assert "legActuator.step(legGroupActivation, walkOffActivationState, dt)" in MAIN
 assert "WALK_OFF_BRAKE_ACCEL = 7.0f" in ACT
 assert "val walkGateBase = (1f - .97f * walkOffActivation.coerceIn(0f, 1f))" in ACT
 assert "val walkGate = walkGateBase * walkGateBase" in ACT

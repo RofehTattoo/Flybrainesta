@@ -28,25 +28,25 @@ assert 'expected_primary_visual = int(round(source_primary_visual_count * 0.10))
 assert 'counts["VIS"] != expected_primary_visual' in SENS
 assert 'const val RETAINED_OLFACTORY_ORNS = 264' in META
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION_CODE = 157' in META
-assert 'versionName = "1.19.16"' in GRADLE
-assert 'versionCode = 157' in GRADLE
-print('V1.19.16 VISUAL FBR-10 RECONSTRUCTION CONTRACT: PASS')
+assert 'const val APP_VERSION_CODE = 159' in META
+assert 'versionName = "1.19.18"' in GRADLE
+assert 'versionCode = 159' in GRADLE
+print('V1.19.19 VISUAL FBR-10 RECONSTRUCTION CONTRACT: PASS')
 
 # When run after build_connectome.py in CI, verify the generated report itself.
 REPORT = ROOT / "app/src/main/res/raw/malecns_reduced_report.json"
-if REPORT.exists():
-    import json
-    rep = json.loads(REPORT.read_text(encoding="utf-8"))
-    if "visual_primary_source_count" not in rep:
-        print("V1.19.16 GENERATED VISUAL FBR-10 REPORT: SKIP (bootstrap report will be regenerated in CI)")
-        raise SystemExit(0)
-    src = int(rep["visual_primary_source_count"])
-    expected = int(round(src * 0.10))
-    assert 5900 <= src <= 6200
-    assert int(rep["visual_primary_target"]) == expected
-    assert int(rep["visual_primary_retained"]) == expected
-    assert int(rep["visual_target_total"]) == int(round(int(rep["visual_source_count"]) * 0.10))
-    assert int(rep["visual_primary_route_turn_selected_nonzero"]) > 0
-    assert int(rep["visual_primary_route_escape_selected_nonzero"]) > 0
-    print("V1.19.16 GENERATED VISUAL FBR-10 REPORT: PASS")
+if not REPORT.exists():
+    raise AssertionError("Canonical generated report is missing; release validation must not SKIP")
+import json
+rep = json.loads(REPORT.read_text(encoding="utf-8"))
+if "visual_primary_source_count" not in rep:
+    raise AssertionError("Report is a bootstrap/non-canonical report; release validation must not SKIP")
+src = int(rep["visual_primary_source_count"])
+expected = int(round(src * 0.10))
+assert 5900 <= src <= 6200
+assert int(rep["visual_primary_target"]) == expected
+assert int(rep["visual_primary_retained"]) == expected
+assert int(rep["visual_target_total"]) == int(round(int(rep["visual_source_count"]) * 0.10))
+assert int(rep["visual_primary_route_turn_selected_nonzero"]) > 0
+assert int(rep["visual_primary_route_escape_selected_nonzero"]) > 0
+print("V1.19.19 GENERATED VISUAL FBR-10 REPORT: PASS")
