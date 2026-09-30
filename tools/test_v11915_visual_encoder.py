@@ -20,7 +20,7 @@ assert 'setMappedSensoryRate(\n                visualReceptorIndices,' not in MA
 # The body method also contains read-only action telemetry after the mechanical
 # integration. The protected causal region ends at the measured leg actuator call.
 drive_start = MAIN.index('private fun driveBody(dt: Float) {')
-actuator_end = MAIN.index('legActuator.step(legGroupActivation, effectiveWalkOffActivation, dt)', drive_start)
+actuator_end = MAIN.index('legActuator.step(legGroupActivation, walkOffActivationState, dt)', drive_start)
 causal_body = MAIN[drive_start:actuator_end]
 for token in ('approachAction', 'escapeAction', 'orientAction', 'lightDrive', 'dangerDrive', 'lightOn', 'dangerOn'):
     assert token not in causal_body, token
