@@ -18,4 +18,4 @@ assert 'fun applyWallConstraint(' in ACT
 assert 'wallPressure' in ACT
 assert 'wallEscapeBias' not in ACT
 assert 'phase[' not in ACT[ACT.index('fun applyWallConstraint('):ACT.index('private fun bilateralMechanicalMean', ACT.index('fun applyWallConstraint('))]
-print("V1.19.20 STARTUP / ARENA / WALL CONTACT AUDIT: PASS")
+print("V1.19.21 STARTUP / ARENA / WALL CONTACT AUDIT: PASS")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.20 wall-contact purity audit.
+"""V1.19.21 wall-contact purity audit.
 
 Wall contact is physical collision handling plus mechanosensory feedback. It is
 not allowed to inject a turn or gait-phase command directly into the actuator.
@@ -22,6 +22,6 @@ assert "WALL_SEPARATION_SPEED" not in ACT
 assert "exploratoryTurn" not in MAIN and "locomotionRng" not in MAIN
 assert "heading += yawRate * dt" in MAIN
 assert "legActuator.applyWallConstraint(" in MAIN and "wallContactNow" in MAIN
-assert 'APP_VERSION = "1.19.20"' in META and 'APP_VERSION_CODE = 161' in META
-assert 'versionName = "1.19.20"' in GRADLE and 'versionCode = 161' in GRADLE
-print("V1.19.20 WALL CONTACT / NO DIRECT TURN AUDIT: PASS")
+assert 'APP_VERSION = "1.19.21"' in META and 'APP_VERSION_CODE = 162' in META
+assert 'versionName = "1.19.21"' in GRADLE and 'versionCode = 162' in GRADLE
+print("V1.19.21 WALL CONTACT / NO DIRECT TURN AUDIT: PASS")

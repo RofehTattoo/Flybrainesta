@@ -49,6 +49,7 @@ jobs:
           python tools/test_v11916_visual_fbr10_rebuild.py
           python tools/test_v11917_olfactory_runtime_and_walkoff.py
           python tools/test_visual_three_edge_score_order.py
+          python tools/test_anatomical_visual_map.py
           python tools/test_vnc_motor_semantics_logic.py
           python tools/test_motor_role_semantics_consistency.py
           python tools/test_motor_route_recruitment.py
@@ -82,6 +83,14 @@ jobs:
             --fbc103 app/src/main/res/raw/malecns_reduced.bin \
             --output app/src/main/assets/feeding_motor_semantics.tsv \
             --report build/FEEDING_MOTOR_SEMANTICS_REPORT.json
+          python tools/build_anatomical_visual_map.py \
+            --annotations build/malecns_raw/body-annotations-male-cns-v1.0-minconf-0.5.feather \
+            --fbc103 app/src/main/res/raw/malecns_reduced.bin \
+            --output app/src/main/assets/anatomical_visual_map.tsv \
+            --report build/ANATOMICAL_VISUAL_MAP_REPORT.json
+
+      - name: Validate generated anatomical visual map
+        run: python tools/test_anatomical_visual_map.py --map app/src/main/assets/anatomical_visual_map.tsv
 
       - name: Build FBD105
         run: |

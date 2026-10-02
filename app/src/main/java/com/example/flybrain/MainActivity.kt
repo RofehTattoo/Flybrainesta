@@ -498,8 +498,12 @@ class MainActivity : Activity() {
         // Official side evidence for retained mechanosensory/proprioceptive
         // receptors;  -1=L, +1=R, 0=unknown. The side is metadata only.
         private val mechanosensorySide = ByteArray(N)
-        // Official side evidence: -1=L, +1=R, 0=bilateral/unknown.
-        // This is sensory-input metadata only, never a behavioral command.
+        // Presentation-only anatomical map generated from official MaleCNS annotations.
+        // It never participates in neural dynamics, sensory injection, or body mechanics.
+        private val anatomicalRegion = ByteArray(N)
+        private val anatomicalSide = ByteArray(N)
+        private val anatomicalConfidence = ByteArray(N)
+        // -1/L, +1/R, 0 unknown.
         private val olfactorySide = ByteArray(N)
         private val topDnIds = IntArray(6) { -1 }
         private val topDnHz = FloatArray(6)
@@ -1345,6 +1349,39 @@ class MainActivity : Activity() {
             mechanosensoryReceptorIndices = mechanosensory.toIntArray().also { it.sort() }
         }
 
+        private fun loadAnatomicalVisualMap() {
+            val parsed = assets.open("anatomical_visual_map.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
+                val header = reader.readLine() ?: throw IllegalStateException("ANATOMY cabecera ausente")
+                val expectedHeader = "index\tbodyId\tregion\tsideCode\tsubregion\ttype\tsuperclass\tclass\tsubclass\tsomaNeuromere\tconfidence"
+                if (header != expectedHeader) throw IllegalStateException("ANATOMY cabecera inesperada")
+                reader.readLines()
+            }
+            if (parsed.size != N) throw IllegalStateException("ANATOMY filas=${parsed.size} esperado=$N")
+            val seen = BooleanArray(N)
+            val regionCode = mapOf(
+                "EYE" to 1, "OPTIC_LOBE" to 2, "ANTENNA" to 3, "ANTENNAL_LOBE" to 4,
+                "MUSHROOM_BODY" to 5, "CENTRAL_COMPLEX" to 6, "SEZ" to 7, "AMMC" to 8,
+                "VNC" to 9, "ASCENDING" to 10, "DESCENDING" to 11, "CENTRAL_BRAIN" to 12,
+                "TARSAL" to 13, "MAXILLARY_PALP" to 14, "LABELLUM" to 15, "PHARYNX" to 16
+            )
+            for (line in parsed) {
+                val c = line.split('\t')
+                if (c.size != 11) throw IllegalStateException("ANATOMY esquema inesperado: ${c.size} columnas")
+                val idx = c[0].toInt()
+                if (idx !in 0 until N || seen[idx]) throw IllegalStateException("ANATOMY índice inválido/duplicado=$idx")
+                val region = regionCode[c[2]] ?: throw IllegalStateException("ANATOMY región desconocida=${c[2]}")
+                val side = c[3].toInt()
+                val confidence = c[10].toInt()
+                if (side !in -1..1) throw IllegalStateException("ANATOMY lado inválido idx=$idx")
+                if (confidence !in 1..3) throw IllegalStateException("ANATOMY confianza inválida idx=$idx")
+                seen[idx] = true
+                anatomicalRegion[idx] = region.toByte()
+                anatomicalSide[idx] = side.toByte()
+                anatomicalConfidence[idx] = confidence.toByte()
+            }
+            if (seen.any { !it }) throw IllegalStateException("ANATOMY faltan índices")
+        }
+
         private fun loadOlfactoryInputMap() {
             val parsed = assets.open("olfactory_input_map.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
                 val header = reader.readLine() ?: throw IllegalStateException("OLFMAP cabecera ausente")
@@ -1673,6 +1710,7 @@ class MainActivity : Activity() {
                 loadSensoryInputMap()
                 loadOlfactoryInputMap()
                 loadVncMotorSemantics()
+                loadAnatomicalVisualMap()
                 loadFeedingMotorSemantics()
 
                 // Build fixed VNC motor-role denominators from the official-annotation-derived VNC semantics layer.
@@ -1899,11 +1937,21 @@ class MainActivity : Activity() {
             // Balanced anatomical sample plus explicit diagnostic coverage of the
             // VNC/halting populations. This is presentation only: every displayed
             // neuron and every displayed edge still comes from the real graph.
-            addPopulation(VIS_START, VIS_END, 42)
+            // Prioritize real primary sensory receptors so their anatomical-organ
+            // placement is visible during stimulation, then fill the remaining
+            // representative graph with retained relay neurons.
+            for (j in 0 until min(24, visualReceptorIndices.size)) {
+                addId(visualReceptorIndices[j * visualReceptorIndices.size / min(24, visualReceptorIndices.size)])
+            }
+            addPopulation(VIS_START, VIS_END, 24)
             for (j in 0 until min(20, olfactoryNeuronIndices.size)) addId(olfactoryNeuronIndices[j * olfactoryNeuronIndices.size / min(20, olfactoryNeuronIndices.size)])
-            addPopulation(GUST_START, GUST_END, 12)
-            addPopulation(MECH_START, MECH_END, 12, excludeOlfactory = true)
-            addPopulation(OTHER_START, OTHER_END, 92)
+            for (j in 0 until min(6, gustatoryLabellarReceptorIndices.size)) addId(gustatoryLabellarReceptorIndices[j * gustatoryLabellarReceptorIndices.size / min(6, gustatoryLabellarReceptorIndices.size)])
+            for (j in 0 until min(6, gustatoryPharyngealReceptorIndices.size)) addId(gustatoryPharyngealReceptorIndices[j * gustatoryPharyngealReceptorIndices.size / min(6, gustatoryPharyngealReceptorIndices.size)])
+            for (j in 0 until min(12, gustatoryTarsalReceptorIndices.size)) addId(gustatoryTarsalReceptorIndices[j * gustatoryTarsalReceptorIndices.size / min(12, gustatoryTarsalReceptorIndices.size)])
+            for (j in 0 until min(16, mechanosensoryReceptorIndices.size)) addId(mechanosensoryReceptorIndices[j * mechanosensoryReceptorIndices.size / min(16, mechanosensoryReceptorIndices.size)])
+            addPopulation(GUST_START, GUST_END, 6)
+            addPopulation(MECH_START, MECH_END, 8, excludeOlfactory = true)
+            addPopulation(OTHER_START, OTHER_END, 86)
             addPopulation(DESC_START, DESC_END, 28)
             addPopulation(ASC_START, ASC_END, 18)
             addPopulation(MOTOR_START, MOTOR_END, 40)
@@ -3279,7 +3327,7 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19.20: isolated physical/mechanical integration boundary.
+            // V1.19.21: isolated physical/mechanical integration boundary.
             // The method below consumes only measured VNC leg activity + walk-OFF.
             applyMechanicalBodyState(dt)
 
@@ -3356,7 +3404,7 @@ class MainActivity : Activity() {
         }
 
         /**
-         * V1.19.20 physical/mechanical body boundary.
+         * V1.19.21 physical/mechanical body boundary.
          *
          * This function deliberately receives no food, light, danger or action
          * variables. It consumes only measured VNC motor state already reduced into
@@ -3693,121 +3741,204 @@ class MainActivity : Activity() {
             c.drawRoundRect(x, y, x + w, y + h, 14f, 14f, paint)
 
             val cx = x + w * .50f
-            val cy = y + h * .43f
+            val density = resources.displayMetrics.density
+            val labelPaintSize = (6.2f * density).coerceAtLeast(5f)
 
-            // Simplified Drosophila CNS silhouette: bilateral optic lobes,
-            // central brain and a short ventral nerve cord. It is a visual map,
-            // while the nodes/links over it come from the retained connectome.
-            paint.color = Color.argb(48, 55, 145, 235)
-            c.drawOval(x + w * .055f, y + h * .18f, x + w * .29f, y + h * .73f, paint)
-            c.drawOval(x + w * .71f, y + h * .18f, x + w * .945f, y + h * .73f, paint)
-
-            paint.color = Color.argb(45, 150, 160, 170)
-            c.drawOval(x + w * .27f, y + h * .22f, x + w * .73f, y + h * .70f, paint)
-
-            val visGlow = (visualRateDisplay * 255f).toInt().coerceIn(18, 105)
-            val olfGlow = (olfactoryRateDisplay * 255f).toInt().coerceIn(18, 105)
-            val gustGlow = (gustatoryRateDisplay * 255f).toInt().coerceIn(18, 105)
-            val mechGlow = (mechanosensoryRateDisplay * 255f).toInt().coerceIn(18, 105)
-            val dnGlow = (descendingRateDisplay * 255f).toInt().coerceIn(18, 105)
-            val ascGlow = (ascendingRateDisplay * 255f).toInt().coerceIn(18, 105)
-            val motorGlow = (motorRateDisplay * 255f).toInt().coerceIn(18, 105)
-            paint.color = Color.argb(visGlow, 55, 145, 235)
-            c.drawOval(x + w * .055f, y + h * .18f, x + w * .29f, y + h * .73f, paint)
-            c.drawOval(x + w * .71f, y + h * .18f, x + w * .945f, y + h * .73f, paint)
-            paint.color = Color.argb(olfGlow, 45, 190, 105)
-            c.drawOval(x + w * .35f, y + h * .43f, x + w * .45f, y + h * .64f, paint)
-            c.drawOval(x + w * .55f, y + h * .43f, x + w * .65f, y + h * .64f, paint)
-            paint.color = Color.argb(gustGlow, 238, 190, 42)
-            c.drawCircle(x + w * .40f, y + h * .60f, min(w, h) * .045f, paint)
-            c.drawCircle(x + w * .60f, y + h * .60f, min(w, h) * .045f, paint)
-            paint.color = Color.argb(mechGlow, 238, 125, 48)
-            c.drawOval(x + w * .31f, y + h * .52f, x + w * .41f, y + h * .76f, paint)
-            c.drawOval(x + w * .59f, y + h * .52f, x + w * .69f, y + h * .76f, paint)
-            paint.color = Color.argb(dnGlow, 218, 75, 175)
-            c.drawOval(x + w * .43f, y + h * .58f, x + w * .57f, y + h * .76f, paint)
-            paint.color = Color.argb(ascGlow, 55, 190, 210)
-            c.drawOval(x + w * .44f, y + h * .62f, x + w * .56f, y + h * .84f, paint)
-            paint.color = Color.argb(motorGlow, 235, 70, 75)
-            c.drawRoundRect(cx - w * .055f, y + h * .66f, cx + w * .055f, y + h * .92f, w * .025f, w * .025f, paint)
-
-            // Mushroom-body / central-complex hints.
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = max(1f, w * .002f)
-            paint.color = Color.argb(80, 175, 185, 193)
-            c.drawOval(x + w * .36f, y + h * .29f, x + w * .47f, y + h * .62f, paint)
-            c.drawOval(x + w * .53f, y + h * .29f, x + w * .64f, y + h * .62f, paint)
-            c.drawOval(x + w * .44f, y + h * .34f, x + w * .56f, y + h * .56f, paint)
-
-            // Antennal lobes and a compact central-complex marker.
+            // The drawing below is a 2D anatomical schematic, not a literal 3D brain.
+            // Primary sensory neurons are anchored at their receptor organ (eye,
+            // antenna, tarsus, labellum/pharynx); central cells are placed by the
+            // source-derived anatomical family map. Actual retained connectome edges
+            // are still drawn separately and are never invented by this map.
             paint.style = Paint.Style.FILL
-            paint.color = Color.rgb(83, 91, 98)
-            c.drawCircle(x + w * .40f, y + h * .60f, min(w, h) * .045f, paint)
-            c.drawCircle(x + w * .60f, y + h * .60f, min(w, h) * .045f, paint)
-            c.drawCircle(cx, y + h * .45f, min(w, h) * .038f, paint)
 
-            // Ventral nerve cord.
-            paint.color = Color.rgb(48, 55, 61)
-            c.drawRoundRect(
-                cx - w * .055f, y + h * .66f,
-                cx + w * .055f, y + h * .92f,
-                w * .025f, w * .025f, paint
-            )
+            // Compound eyes -> optic lobes.
+            paint.color = Color.rgb(20, 27, 32)
+            c.drawOval(x + w * .025f, y + h * .17f, x + w * .19f, y + h * .56f, paint)
+            c.drawOval(x + w * .81f, y + h * .17f, x + w * .975f, y + h * .56f, paint)
+            paint.color = Color.argb(58, 55, 145, 235)
+            c.drawOval(x + w * .20f, y + h * .20f, x + w * .34f, y + h * .60f, paint)
+            c.drawOval(x + w * .66f, y + h * .20f, x + w * .80f, y + h * .60f, paint)
+
+            // Central brain silhouette.
+            paint.color = Color.argb(48, 150, 160, 170)
+            c.drawOval(x + w * .29f, y + h * .15f, x + w * .71f, y + h * .69f, paint)
+
+            // Anatomical neuropil hints: MB, AL, CX, AMMC, SEZ and VNC.
+            paint.color = Color.argb(24, 205, 175, 95)
+            c.drawOval(x + w * .33f, y + h * .20f, x + w * .47f, y + h * .42f, paint)
+            c.drawOval(x + w * .53f, y + h * .20f, x + w * .67f, y + h * .42f, paint)
+            paint.color = Color.argb(38, 75, 105, 135)
+            c.drawCircle(x + w * .40f, y + h * .44f, min(w, h) * .042f, paint)
+            c.drawCircle(x + w * .60f, y + h * .44f, min(w, h) * .042f, paint)
+            paint.color = Color.argb(28, 60, 185, 205)
+            c.drawOval(x + w * .33f, y + h * .46f, x + w * .43f, y + h * .59f, paint)
+            c.drawOval(x + w * .57f, y + h * .46f, x + w * .67f, y + h * .59f, paint)
+            paint.color = Color.argb(42, 238, 190, 42)
+            c.drawOval(x + w * .41f, y + h * .55f, x + w * .59f, y + h * .69f, paint)
+            paint.color = Color.argb(38, 55, 190, 210)
+            c.drawRoundRect(cx - w * .028f, y + h * .68f, cx + w * .028f, y + h * .95f,
+                w * .014f, w * .014f, paint)
+
+            // Peripheral sensory organs. These are anatomical landmarks only; they
+            // are not extra neurons or synthetic synapses.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(1f, density * 0.8f)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.color = Color.argb(110, 190, 200, 205)
+            val leftAntennaX = x + w * .37f
+            val rightAntennaX = x + w * .63f
+            c.drawLine(leftAntennaX, y + h * .22f, x + w * .33f, y + h * .09f, paint)
+            c.drawLine(rightAntennaX, y + h * .22f, x + w * .67f, y + h * .09f, paint)
+            c.drawCircle(x + w * .33f, y + h * .09f, density * 2f, paint)
+            c.drawCircle(x + w * .67f, y + h * .09f, density * 2f, paint)
+            // Maxillary palps and proboscis/labellum.
+            c.drawOval(x + w * .405f, y + h * .67f, x + w * .435f, y + h * .75f, paint)
+            c.drawOval(x + w * .565f, y + h * .67f, x + w * .595f, y + h * .75f, paint)
+            c.drawOval(x + w * .46f, y + h * .67f, x + w * .54f, y + h * .77f, paint)
+            paint.style = Paint.Style.FILL
+
+            fun drawText(text: String, px: Float, py: Float, alpha: Int = 155) {
+                paint.typeface = Typeface.DEFAULT_BOLD
+                paint.textSize = labelPaintSize
+                paint.textAlign = Paint.Align.CENTER
+                paint.color = Color.argb(alpha, 190, 198, 202)
+                c.drawText(text, px, py, paint)
+            }
+            drawText("OJO", x + w * .10f, y + h * .15f, 170)
+            drawText("OJO", x + w * .90f, y + h * .15f, 170)
+            drawText("LÓBULO ÓPTICO", x + w * .27f, y + h * .65f, 135)
+            drawText("LÓBULO ÓPTICO", x + w * .73f, y + h * .65f, 135)
+            drawText("MB", x + w * .40f, y + h * .25f, 135)
+            drawText("MB", x + w * .60f, y + h * .25f, 135)
+            drawText("AL", x + w * .40f, y + h * .50f, 180)
+            drawText("AL", x + w * .60f, y + h * .50f, 180)
+            drawText("CX", cx, y + h * .42f, 180)
+            drawText("SEZ", cx, y + h * .64f, 175)
+            drawText("VNC", cx, y + h * .97f, 180)
+            drawText("PALPOS", x + w * .50f, y + h * .76f, 120)
+            drawText("LABELLUM", cx, y + h * .71f, 120)
+            drawText("AMMC", x + w * .29f, y + h * .61f, 135)
+            drawText("AMMC", x + w * .71f, y + h * .61f, 135)
 
             fun posForNeuron(id: Int): FloatArray {
-                val side = nodeSide[id].toInt()
                 val u = ((id * 1103515245L + 12345L) and 0x7fffffffL) / 2147483647f
                 val v2 = ((id * 1664525L + 1013904223L) and 0x7fffffffL) / 2147483647f
-                return when {
-                    isOlfactoryNeuron(id) -> {
-                        val olfSide = olfactorySide[id].toInt()
+                val aSide = anatomicalSide[id].toInt().let { if (it == 0) nodeSide[id].toInt() else it }
+                val region = anatomicalRegion[id].toInt()
+                return when (region) {
+                    1 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .10f else .90f) + (u - .5f) * w * .055f,
+                        y + h * (.25f + v2 * .25f)
+                    )
+                    2 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .27f else .73f) + (u - .5f) * w * .095f,
+                        y + h * (.28f + v2 * .27f)
+                    )
+                    3 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .36f else .64f) + (u - .5f) * w * .035f,
+                        y + h * (.10f + v2 * .16f)
+                    )
+                    14 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .41f else .59f) + (u - .5f) * w * .025f,
+                        y + h * (.69f + v2 * .055f)
+                    )
+                    15 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .475f else .525f) + (u - .5f) * w * .035f,
+                        y + h * (.69f + v2 * .055f)
+                    )
+                    16 -> floatArrayOf(
+                        x + w * (.50f + (u - .5f) * .035f),
+                        y + h * (.73f + v2 * .045f)
+                    )
+                    4 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .40f else .60f) + (u - .5f) * w * .055f,
+                        y + h * (.40f + v2 * .10f)
+                    )
+                    5 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .40f else .60f) + (u - .5f) * w * .085f,
+                        y + h * (.25f + v2 * .16f)
+                    )
+                    6 -> floatArrayOf(
+                        x + w * (.50f + (u - .5f) * .16f),
+                        y + h * (.32f + v2 * .18f)
+                    )
+                    7 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .43f else .57f) + (u - .5f) * w * .075f,
+                        y + h * (.57f + v2 * .12f)
+                    )
+                    8 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .34f else .66f) + (u - .5f) * w * .045f,
+                        y + h * (.48f + v2 * .11f)
+                    )
+                    13 -> {
+                        // Tarsal gustatory receptors are peripheral taste sensilla on
+                        // the six feet. Spread them over the three leg levels on the
+                        // appropriate side rather than placing them in the brain core.
+                        val left = aSide < 0
+                        val seg = ((u * 3f).toInt()).coerceIn(0, 2)
                         floatArrayOf(
-                            x + w * (if (olfSide < 0) .40f else if (olfSide > 0) .60f else .50f) + (u - .5f) * w * .07f,
-                            y + h * (.48f + v2 * .18f)
+                            x + w * (if (left) (.43f - seg * .045f) else (.57f + seg * .045f)) + (v2 - .5f) * w * .018f,
+                            y + h * (.79f + seg * .055f)
                         )
                     }
-                    id in VIS_START until VIS_END -> {
-                        val left = side < 0
-                        floatArrayOf(
-                            x + w * (if (left) .16f else .84f) + (u - .5f) * w * .14f,
-                            y + h * (.28f + v2 * .38f)
-                        )
+                    9 -> {
+                        val group = motorLegGroup[id].toInt()
+                        if (group in 1..6) {
+                            val left = group <= 3
+                            val seg = when (group) { 1,4 -> 0f; 2,5 -> .5f; else -> 1f }
+                            floatArrayOf(
+                                x + w * (if (left) .46f else .54f) + (u - .5f) * w * .028f,
+                                y + h * (.75f + seg * .16f + (v2 - .5f) * .035f)
+                            )
+                        } else {
+                            floatArrayOf(cx + (u - .5f) * w * .075f, y + h * (.75f + v2 * .18f))
+                        }
                     }
-                    id in OLF_START until OLF_END -> floatArrayOf(
-                        x + w * (if (side < 0) .40f else .60f) + (u - .5f) * w * .07f,
-                        y + h * (.48f + v2 * .18f)
+                    10 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .47f else .53f) + (u - .5f) * w * .022f,
+                        y + h * (.72f + v2 * .20f)
                     )
-                    id in GUST_START until GUST_END -> floatArrayOf(
-                        x + w * (if (side < 0) .44f else .56f) + (u - .5f) * w * .10f,
-                        y + h * (.55f + v2 * .16f)
+                    11 -> floatArrayOf(
+                        x + w * (if (aSide < 0) .46f else .54f) + (u - .5f) * w * .10f,
+                        y + h * (.50f + v2 * .15f)
                     )
-                    id in MECH_START until MECH_END -> floatArrayOf(
-                        x + w * (if (side < 0) .35f else .65f) + (u - .5f) * w * .10f,
-                        y + h * (.55f + v2 * .23f)
+                    12 -> floatArrayOf(
+                        x + w * (.30f + u * .40f),
+                        y + h * (.26f + v2 * .34f)
                     )
-                    id in DESC_START until DESC_END -> floatArrayOf(
-                        x + w * (if (side < 0) .46f else .54f) + (u - .5f) * w * .16f,
-                        y + h * (.62f + v2 * .12f)
-                    )
-                    id in ASC_START until ASC_END -> floatArrayOf(
-                        x + w * (if (side < 0) .47f else .53f) + (u - .5f) * w * .18f,
-                        y + h * (.65f + v2 * .12f)
-                    )
-                    id in MOTOR_START until MOTOR_END -> floatArrayOf(
-                        cx + (u - .5f) * w * .07f,
-                        y + h * (.73f + v2 * .16f)
-                    )
-                    else -> floatArrayOf(
-                        cx + (u - .5f) * w * .34f,
-                        y + h * (.28f + v2 * .42f)
-                    )
+                    else -> {
+                        // Safe fallback for old/generated assets: use the canonical
+                        // block semantics until the anatomical map is loaded.
+                        when {
+                            isOlfactoryNeuron(id) -> floatArrayOf(
+                                x + w * (if (aSide < 0) .36f else .64f), y + h * (.12f + v2 * .13f)
+                            )
+                            id in VIS_START until VIS_END -> floatArrayOf(
+                                x + w * (if (aSide < 0) .27f else .73f), y + h * (.28f + v2 * .27f)
+                            )
+                            id in GUST_START until GUST_END -> floatArrayOf(
+                                x + w * (if (aSide < 0) .43f else .57f), y + h * (.57f + v2 * .12f)
+                            )
+                            id in MECH_START until MECH_END -> floatArrayOf(
+                                x + w * (if (aSide < 0) .34f else .66f), y + h * (.48f + v2 * .15f)
+                            )
+                            id in DESC_START until DESC_END -> floatArrayOf(
+                                x + w * (if (aSide < 0) .46f else .54f), y + h * (.50f + v2 * .15f)
+                            )
+                            id in ASC_START until ASC_END -> floatArrayOf(
+                                x + w * (if (aSide < 0) .47f else .53f), y + h * (.72f + v2 * .20f)
+                            )
+                            id in MOTOR_START until MOTOR_END -> floatArrayOf(
+                                cx + (u - .5f) * w * .07f, y + h * (.75f + v2 * .18f)
+                            )
+                            else -> floatArrayOf(cx + (u - .5f) * w * .30f, y + h * (.26f + v2 * .34f))
+                        }
+                    }
                 }
             }
 
-            // Real retained edges between representative neurons. Presentation only.
-            // V1.14.3: links are deliberately thin and low-alpha so dense regions remain
-            // legible. Activity is encoded primarily by brightness, not diameter.
-            val lineDp = resources.displayMetrics.density
+            // Actual retained connectome edges among the representative sample.
+            val lineDp = density
             paint.style = Paint.Style.STROKE
             paint.strokeCap = Paint.Cap.ROUND
             for ((sourceRep, targetRep) in brainDisplayLinks) {
@@ -3819,14 +3950,10 @@ class MainActivity : Activity() {
                 val regional = max(regionRateForId(sourceId), regionRateForId(targetId))
                 val signal = max(activity, regional * .14f)
                 val base = regionColor(sourceId)
-
-                // Thin baseline for all represented real edges.
                 paint.strokeWidth = (0.16f + 0.24f * signal) * lineDp
                 val baseAlpha = (6f + 32f * signal).toInt().coerceIn(6, 38)
                 paint.color = Color.argb(baseAlpha, Color.red(base), Color.green(base), Color.blue(base))
                 c.drawLine(a[0], a[1], b[0], b[1], paint)
-
-                // Active edge highlight: still thin; brightness/alpha carries the signal.
                 if (activity > .06f) {
                     paint.strokeWidth = (0.24f + 0.32f * activity) * lineDp
                     val activeAlpha = (32f + 105f * activity).toInt().coerceIn(32, 140)
@@ -3835,8 +3962,7 @@ class MainActivity : Activity() {
                 }
             }
 
-            // Representative neurons: inactive = small/dim; active = larger,
-            // brighter and surrounded by a visible halo.
+            // Representative nodes.
             paint.style = Paint.Style.FILL
             for (rep in brainDisplayIds.indices) {
                 val id = brainDisplayIds[rep]
@@ -3847,58 +3973,55 @@ class MainActivity : Activity() {
                 val visibleBaseline = (regional * .12f).coerceIn(0f, .12f)
                 val intensity = max(activity, visibleBaseline)
                 val radius = 1.25f + 6.8f * activity
-
                 if (activity > .035f) {
-                    paint.color = Color.argb((22f + 55f * activity).toInt().coerceIn(22, 80),
-                        Color.red(base), Color.green(base), Color.blue(base))
+                    paint.color = Color.argb((22f + 55f * activity).toInt().coerceIn(22, 80), Color.red(base), Color.green(base), Color.blue(base))
                     c.drawCircle(p[0], p[1], radius * 2.7f, paint)
-                    paint.color = Color.argb((42f + 95f * activity).toInt().coerceIn(42, 145),
-                        Color.red(base), Color.green(base), Color.blue(base))
+                    paint.color = Color.argb((42f + 95f * activity).toInt().coerceIn(42, 145), Color.red(base), Color.green(base), Color.blue(base))
                     c.drawCircle(p[0], p[1], radius * 1.65f, paint)
                 }
-
-                val alpha = if (activity > .02f) {
-                    (85f + 170f * intensity).toInt().coerceIn(85, 255)
-                } else 72
+                val alpha = if (activity > .02f) (85f + 170f * intensity).toInt().coerceIn(85, 255) else 72
                 paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
                 c.drawCircle(p[0], p[1], radius, paint)
-
                 if (activity > .25f) {
                     paint.color = Color.argb((120f + 120f * activity).toInt().coerceIn(120, 240), 255, 255, 255)
                     c.drawCircle(p[0], p[1], max(1.0f, radius * .25f), paint)
                 }
             }
 
-            paint.textAlign = Paint.Align.LEFT
-            paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = 7f
-            paint.color = Color.rgb(205, 212, 216)
-            c.drawText("TAMAÑO = actividad · BRILLO = actividad · HALO = pico reciente", x + 12f, y + 15f, paint)
-
-            paint.textSize = 6.5f
-            paint.typeface = Typeface.DEFAULT
-            paint.textAlign = Paint.Align.RIGHT
-            paint.color = Color.rgb(185, 192, 196)
-            c.drawText("actividad baja", x + w - 55f, y + h - 12f, paint)
-            paint.textAlign = Paint.Align.LEFT
-            for (i in 0..4) {
-                val t = i / 4f
-                val rr = 2f + 3.5f * t
-                paint.color = Color.rgb(65 + (190f * t).toInt(), 90 + (120f * t).toInt(), 210 - (70f * t).toInt())
-                c.drawCircle(x + w - 48f + i * 9f, y + h - 13f, rr, paint)
+            // Every currently active retained neuron is allowed to appear at its
+            // anatomical position even when it is outside the 320-node representative
+            // graph sample. This removes the old ambiguity where an active receptor
+            // could fire but simply not be visible in the map.
+            var activeExtra = 0
+            for (id in 0 until N) {
+                if (brainDisplayLookup[id] >= 0) continue
+                val activity = visualActivity[id].coerceIn(0f, 1f)
+                if (activity <= .08f) continue
+                val p = posForNeuron(id)
+                val base = regionColor(id)
+                val radius = 1.1f + 3.3f * activity
+                paint.style = Paint.Style.FILL
+                paint.color = Color.argb((70f + 135f * activity).toInt().coerceIn(70, 205), Color.red(base), Color.green(base), Color.blue(base))
+                c.drawCircle(p[0], p[1], radius, paint)
+                if (activity > .45f) {
+                    paint.color = Color.argb((75f + 100f * activity).toInt().coerceIn(75, 175), Color.red(base), Color.green(base), Color.blue(base))
+                    c.drawCircle(p[0], p[1], radius * 2.1f, paint)
+                }
+                activeExtra++
             }
-            paint.color = Color.rgb(240, 240, 240)
-            paint.textAlign = Paint.Align.LEFT
-            c.drawText("alta", x + w - 8f, y + h - 12f, paint)
 
-            paint.color = Color.rgb(190, 198, 202)
-            paint.textSize = 7f
-            paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textAlign = Paint.Align.CENTER
-            c.drawText("ÓPTICO", x + w * .16f, y + h * .88f, paint)
-            c.drawText("ÓPTICO", x + w * .84f, y + h * .88f, paint)
-            c.drawText("CENTRAL", cx, y + h * .18f, paint)
-            c.drawText("VNC", cx, y + h * .97f, paint)
+            // Anatomical labels + display contract.
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = 6.4f
+            paint.textAlign = Paint.Align.LEFT
+            paint.color = Color.rgb(178, 187, 192)
+            c.drawText("NEURONAS ACTIVAS → posición anatómica de referencia", x + 12f, y + 15f, paint)
+            paint.textAlign = Paint.Align.RIGHT
+            c.drawText("sensores primarios en órgano · relés en SNC", x + w - 12f, y + 15f, paint)
+            paint.textAlign = Paint.Align.LEFT
+            paint.textSize = 5.8f
+            paint.color = Color.rgb(130, 142, 149)
+            c.drawText("nodos extra activos: $activeExtra", x + 12f, y + h - 9f, paint)
             paint.textAlign = Paint.Align.LEFT
         }
 
