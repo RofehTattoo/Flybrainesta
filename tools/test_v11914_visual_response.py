@@ -16,10 +16,10 @@ assert '"visual_primary_to_turn_source_nonzero"' in BC
 assert '"visual_primary_to_escape_source_nonzero"' in BC
 assert 'val lightIntensity = stimulusIntensity(lightOn, lightX, lightY, .42f)' in MAIN
 assert 'val dangerBaseIntensity = stimulusIntensity(dangerOn, dangerX, dangerY, .38f)' in MAIN
-assert 'val visualThreatComponent = dangerBaseIntensity *' in MAIN
+assert 'val visualThreatComponent = (dangerBaseIntensity *' in MAIN
 assert 'setMappedSensoryRate(' in MAIN
 assert 'visualReceptorIndices' in MAIN
 assert 'visualRateDisplay = .72f * visualRateDisplay + .28f * visualRate' in MAIN
-assert 'const val APP_VERSION = "1.19.14"' in META
-assert 'const val APP_VERSION_CODE = 155' in META
-print("V1.19.14 VISUAL PHOTORECEPTOR ROUTE / LIGHT-LOOM ENCODER AUDIT: PASS")
+assert 'const val APP_VERSION = "1.19.20"' in META
+assert 'const val APP_VERSION_CODE = 161' in META
+print("V1.19.20 VISUAL PHOTORECEPTOR ROUTE / LIGHT-LOOM ENCODER AUDIT: PASS")

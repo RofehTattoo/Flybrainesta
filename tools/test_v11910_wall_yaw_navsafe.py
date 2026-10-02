@@ -5,11 +5,13 @@ ACT = (ROOT / "app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator
 assert "MIN_TRANSLATION_FOR_NEURAL_YAW" in ACT
 assert "PAUSE_YAW_CUTOFF" in ACT
 assert "YAW_STOP_RESPONSE_TAU" in ACT
-assert "val contactOnset = !wallContactLatched" in ACT
-assert "wallEscapeBias = wallEscapeDirection * contactGain" in ACT
-assert "wallEscapePulseRemaining" in ACT
-assert "vx += nx * WALL_SEPARATION_SPEED" in ACT
-assert "vy += ny * WALL_SEPARATION_SPEED" in ACT
+assert "turnBalance * MAX_YAW_RATE" in ACT
+wall = ACT[ACT.index("fun applyWallConstraint("):ACT.index("private fun bilateralMechanicalMean", ACT.index("fun applyWallConstraint("))]
+assert "wallPressure" in wall
+assert "wallEscapeBias" not in wall
+assert "yawRate =" not in wall
+assert "phase[" not in wall
+assert "vx -= outward * nx" in wall and "vy -= outward * ny" in wall
 assert "window.setDecorFitsSystemWindows(true)" in MAIN
 assert "safe.bottom + 8.dp()" in MAIN
-print("V1.19.10 WALL-YAW / NAVIGATION REGRESSION: PASS")
+print("V1.19.20 WALL-YAW / NAVIGATION PURITY REGRESSION: PASS")

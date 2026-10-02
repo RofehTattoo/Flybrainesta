@@ -49,20 +49,10 @@ class LeggedSensorimotorActuator {
         private const val MIN_TRANSLATION_FOR_NEURAL_YAW = .18f
         private const val PAUSE_YAW_CUTOFF = .20f
         private const val YAW_STOP_RESPONSE_TAU = .075f
-        private const val WALL_ESCAPE_MAX_YAW_RATE = 3.10f
-        private const val WALL_ESCAPE_RESPONSE_TAU = .085f
-        private const val WALL_ESCAPE_DECAY_TAU = .34f
-        private const val WALL_ESCAPE_PULSE_SECONDS = .65f
-        private const val WALL_STALL_RETRIGGER_SECONDS = .28f
-        private const val WALL_REPULSE_COOLDOWN_SECONDS = .42f
-        // Small physical separation velocity prevents geometric corner locking;
-        // it is a collision-resolution impulse, not a stimulus/goal command.
-        private const val WALL_SEPARATION_SPEED = .030f
         private const val YAW_RESPONSE_TAU = .16f
         private const val LINEAR_RESPONSE_MIN_DT = .0005f
         private const val FOOT_STROKE = .065f
         private const val WALL_TANGENTIAL_FRICTION = .94f
-        private const val WALL_ESCAPE_MIN_PRESSURE = .055f
     }
 
     val phase = FloatArray(LEG_COUNT)
@@ -120,24 +110,15 @@ class LeggedSensorimotorActuator {
     /** 0..1 bilateral mechanical symmetry; 1 means equal left/right support. */
     var bilateralMechanicalSymmetry = 0f
         private set
+    private var bilateralSymmetryFiltered = 0f
+    private var leftPropulsionFiltered = 0f
+    private var rightPropulsionFiltered = 0f
     /** 0..1 coherence of the imposed modified-tripod mechanical phase relationship. */
     var tripodPhaseCoherence = 0f
         private set
     var wallPressure = 0f
         private set
 
-    /** Signed low-level reorientation drive produced by physical wall contact.
-     *  +1 turns left, -1 turns right. It is deterministic and decays; no RNG.
-     */
-    var wallEscapeBias = 0f
-        private set
-    private var wallEscapeDirection = 1f
-    private var wallContactLatched = false
-    private var wallEscapePulseRemaining = 0f
-    private var wallStallTimer = 0f
-    private var wallRepulseCooldown = 0f
-    private var lastWallNx = 0f
-    private var lastWallNy = 0f
 
     private val previousStride = FloatArray(LEG_COUNT)
     private var initializedStride = false
@@ -161,16 +142,11 @@ class LeggedSensorimotorActuator {
         yawForceProxy = 0f
         supportCoverage = 0f
         bilateralMechanicalSymmetry = 0f
+        bilateralSymmetryFiltered = 0f
+        leftPropulsionFiltered = 0f
+        rightPropulsionFiltered = 0f
         tripodPhaseCoherence = 0f
         wallPressure = 0f
-        wallEscapeBias = 0f
-        wallEscapeDirection = 1f
-        wallContactLatched = false
-        wallEscapePulseRemaining = 0f
-        wallStallTimer = 0f
-        wallRepulseCooldown = 0f
-        lastWallNx = 0f
-        lastWallNy = 0f
     }
 
     /**
@@ -257,8 +233,17 @@ class LeggedSensorimotorActuator {
         rightSupport = (rightLoad / 3f).coerceIn(0f, 1f)
         supportBalance = ((rightSupport - leftSupport) / (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
         supportCoverage = (totalContact / LEG_COUNT.toFloat()).coerceIn(0f, 1f)
-        bilateralMechanicalSymmetry = (1f - abs(leftSupport - rightSupport) /
-            (leftSupport + rightSupport + .001f)).coerceIn(0f, 1f)
+        // Instantaneous tripod support is intentionally asymmetric (two legs on
+        // one side can be in stance while one is on the other). For diagnostics,
+        // bilateral symmetry therefore compares left/right propulsive impulse
+        // accumulated over time rather than treating each frame as a standing
+        // posture. This metric never feeds back into dynamics.
+        val symmetryAlpha = (1f - exp((-dt / .20f).toDouble()).toFloat()).coerceIn(0f, 1f)
+        leftPropulsionFiltered += (leftPropulsion - leftPropulsionFiltered) * symmetryAlpha
+        rightPropulsionFiltered += (rightPropulsion - rightPropulsionFiltered) * symmetryAlpha
+        bilateralSymmetryFiltered = (1f - abs(leftPropulsionFiltered - rightPropulsionFiltered) /
+            (leftPropulsionFiltered + rightPropulsionFiltered + .001f)).coerceIn(0f, 1f)
+        bilateralMechanicalSymmetry = bilateralSymmetryFiltered
 
         // The modified tripod is a mechanical coordination constraint rather than
         // a behavioral command. Telemetry compares the actual phase-plus-offset
@@ -293,38 +278,38 @@ class LeggedSensorimotorActuator {
             WALK_OFF_BRAKE_ACCEL * walkOff
         forwardVelocity = (forwardVelocity + forwardAcceleration * dt).coerceIn(0f, MAX_FORWARD_SPEED)
 
-        lateralAcceleration = LATERAL_ACCEL * supportBalance - LATERAL_DAMPING * lateralVelocity
-        lateralVelocity = (lateralVelocity + lateralAcceleration * dt)
-            .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
-
         val totalTurnPropulsion = (rightPropulsion + leftPropulsion).coerceAtLeast(0f)
         val turnBalance = ((rightPropulsion - leftPropulsion) /
             (totalTurnPropulsion + .0005f)).coerceIn(-1f, 1f)
-        // Ramp turn authority up only when real stance propulsion exists. This
-        // preserves a genuine pivot (one side propelling) but removes the
-        // ratio-amplification that caused in-place spinning from near-zero force.
+        // Turn authority exists only when real stance propulsion exists. This
+        // preserves a genuine asymmetric gait response while preventing residual
+        // one-sided activity from spinning a stationary body.
         val turnDrive = ((totalTurnPropulsion - TURN_PROPULSION_DEADZONE) /
             (TURN_PROPULSION_FULL_SCALE - TURN_PROPULSION_DEADZONE))
             .coerceIn(0f, 1f)
         yawForceProxy = (turnBalance * turnDrive).coerceIn(-1f, 1f)
-        // Neural steering must be supported by actual body translation. This
-        // prevents residual one-sided leg activity from spinning a stationary fly.
-        // A genuine wall-contact reflex is handled separately below.
+        // A load imbalance can bias lateral motion only while the stance gait is
+        // actually producing propulsive force. Static asymmetry alone cannot move
+        // the body sideways.
+        lateralAcceleration = LATERAL_ACCEL * supportBalance * turnDrive -
+            LATERAL_DAMPING * lateralVelocity
+        lateralVelocity = (lateralVelocity + lateralAcceleration * dt)
+            .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
+
         val translationYawGate = (forwardVelocity / MIN_TRANSLATION_FOR_NEURAL_YAW)
             .coerceIn(0f, 1f)
         val pauseYawGate = if (walkOff >= PAUSE_YAW_CUTOFF) 0f else
             (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
+        // Yaw is generated exclusively by the measured bilateral leg-motor
+        // imbalance. Wall contact never writes yaw or gait phase; it only changes
+        // the physical velocity and feeds mechanosensory pressure back upstream.
         val neuralYawTarget = turnBalance * MAX_YAW_RATE * turnDrive *
             translationYawGate * pauseYawGate
-        // Wall escape is a brief onset reflex, not a continuous turn command
-        // while the body remains pinned against the boundary.
-        val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
-        val yawTarget = (neuralYawTarget + wallYawTarget)
-            .coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
-        val yawTau = when {
-            abs(wallEscapeBias) > .06f -> WALL_ESCAPE_RESPONSE_TAU
-            walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f -> YAW_STOP_RESPONSE_TAU
-            else -> YAW_RESPONSE_TAU
+        val yawTarget = neuralYawTarget.coerceIn(-MAX_YAW_RATE, MAX_YAW_RATE)
+        val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f) {
+            YAW_STOP_RESPONSE_TAU
+        } else {
+            YAW_RESPONSE_TAU
         }
         val yawAlpha = (1f - exp((-dt / yawTau).toDouble()).toFloat()).coerceIn(0f, 1f)
         val oldYaw = yawRate
@@ -340,28 +325,18 @@ class LeggedSensorimotorActuator {
         mechanicalActivity = ((totalContact / LEG_COUNT) * .60f +
             (forwardVelocity / MAX_FORWARD_SPEED) * .40f).coerceIn(0f, 1f)
         wallPressure = (wallPressure * exp((-dt / .14f).toDouble()).toFloat()).coerceIn(0f, 1f)
-        // The wall reflex is a decaying pulse even if contact remains latched.
-        // Holding this bias at full strength caused endless in-place rotation
-        // whenever the body stayed against a boundary.
-        wallEscapeBias = (wallEscapeBias *
-            exp((-dt / WALL_ESCAPE_DECAY_TAU).toDouble()).toFloat())
-            .coerceIn(-1f, 1f)
     }
 
     /**
-     * Physical wall response. This is a local mechanosensory reflex, not an
-     * external "go around the wall" command:
+     * Resolve physical contact with the arena boundary.
      *
-     * 1) remove the velocity component directed into the wall;
-     * 2) detect whether the body is actually facing the wall;
-     * 3) on contact onset choose one escape side from geometry / bilateral leg
-     *    imbalance and latch it for that contact episode;
-     * 4) immediately drive the existing actuator yaw state toward that escape
-     *    side, with a short time constant;
-     * 5) let the drive decay once contact ends.
-     *
-     * Crucially, the escape drive is NOT normalized by current forward speed.
-     * A fly that has already slowed to nearly zero at the wall must still turn.
+     * This function is deliberately NOT a locomotor controller. It performs only
+     * collision mechanics: remove velocity directed into the wall, preserve a
+     * bounded tangential slip, and expose wall pressure through the existing
+     * mechanosensory/proprioceptive feedback channel. It never writes yaw, gait
+     * phase, leg activation, or body position. Any turn/escape response must
+     * therefore come from the retained neural circuit on a subsequent simulation
+     * step.
      */
     fun applyWallConstraint(
         heading: Float,
@@ -371,24 +346,12 @@ class LeggedSensorimotorActuator {
         contactActive: Boolean
     ) {
         val dt = dtRaw.coerceAtLeast(LINEAR_RESPONSE_MIN_DT)
-
-        if (!contactActive) {
-            wallContactLatched = false
-            wallEscapePulseRemaining = 0f
-            wallStallTimer = 0f
-            wallRepulseCooldown = 0f
-            wallEscapeBias = 0f
-            return
-        }
+        if (!contactActive) return
 
         val nLen = sqrt(normalX * normalX + normalY * normalY)
         if (nLen <= .00001f) return
-
         val nx = normalX / nLen
         val ny = normalY / nLen
-        lastWallNx = nx
-        lastWallNy = ny
-
         val c = kotlin.math.cos(heading)
         val s = kotlin.math.sin(heading)
         var vx = c * forwardVelocity - s * lateralVelocity
@@ -396,133 +359,26 @@ class LeggedSensorimotorActuator {
 
         val outward = vx * nx + vy * ny
         val forwardIntoWall = (-outward / MAX_FORWARD_SPEED).coerceIn(0f, 1f)
+        val wallFacing = (-c * nx - s * ny).coerceIn(0f, 1f)
 
-        // Geometry-based "facing the wall" signal. 1 = face-on, 0 = parallel/away.
-        val headingDotNormal = (c * nx + s * ny)
-        val wallFacing = (-headingDotNormal).coerceIn(0f, 1f)
-
+        // Pure contact mechanics: remove only penetration and retain tangential
+        // motion. No heading reflection and no synthetic escape turn are applied.
         if (outward < 0f) {
-            // Remove only the penetrating component and preserve tangential slip.
             vx -= outward * nx
             vy -= outward * ny
-            wallPressure = max(wallPressure, max(forwardIntoWall, .10f * wallFacing))
             vx *= WALL_TANGENTIAL_FRICTION
             vy *= WALL_TANGENTIAL_FRICTION
-        } else {
-            // A fly can remain at the boundary after penetration velocity was
-            // already removed. Keep the reflex alive from geometry/contact.
-            wallPressure = max(wallPressure, .08f * wallFacing)
         }
 
-        val contactOnset = !wallContactLatched
-        val planarSpeed = hypot(vx, vy)
-
-        if (contactOnset) {
-            wallStallTimer = 0f
-            wallRepulseCooldown = 0f
-
-            // First choice comes from wall geometry and measured bilateral leg
-            // mechanics. The stimulus system is not consulted.
-            val rightX = -s
-            val rightY = c
-            val wallRightProjection = nx * rightX + ny * rightY
-            val sideByLegs = ((rightSupport - leftSupport) /
-                (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
-
-            val escapeSide = when {
-                abs(wallRightProjection) > .45f ->
-                    -wallRightProjection.signOrZero()
-                abs(sideByLegs) > .10f ->
-                    -sideByLegs.signOrZero()
-                else -> {
-                    val cross = c * ny - s * nx
-                    if (abs(cross) > .06f) cross.signOrZero()
-                    else if (wallEscapeDirection == 0f) 1f else wallEscapeDirection
-                }
-            }
-
-            wallEscapeDirection = if (escapeSide == 0f) 1f else escapeSide
-            wallContactLatched = true
-            wallEscapePulseRemaining = WALL_ESCAPE_PULSE_SECONDS
-            wallRepulseCooldown = WALL_REPULSE_COOLDOWN_SECONDS
-
-            val contactGain = (0.72f + 0.28f * wallFacing).coerceIn(.72f, 1f)
-            wallEscapeBias = wallEscapeDirection * contactGain
-        } else {
-            wallRepulseCooldown = max(0f, wallRepulseCooldown - dt)
-
-            // If the body remains truly stationary, a new bounded mechanosensory
-            // pulse is allowed after a cooldown. This avoids a permanent one-shot
-            // failure without turning the wall into an endless spin command.
-            if (planarSpeed < .045f && wallRepulseCooldown <= 0f) {
-                wallStallTimer += dt
-                if (wallStallTimer >= WALL_STALL_RETRIGGER_SECONDS) {
-                    wallStallTimer = 0f
-                    wallRepulseCooldown = WALL_REPULSE_COOLDOWN_SECONDS
-
-                    val cross = c * ny - s * nx
-                    val retrySide = when {
-                        abs(cross) > .05f -> cross.signOrZero()
-                        wallEscapeDirection == 0f -> 1f
-                        else -> -wallEscapeDirection
-                    }
-                    wallEscapeDirection = if (retrySide == 0f) 1f else retrySide
-                    wallEscapePulseRemaining = WALL_ESCAPE_PULSE_SECONDS
-                    wallEscapeBias = wallEscapeDirection *
-                        (0.70f + 0.30f * wallFacing).coerceIn(.70f, 1f)
-                }
-            } else if (planarSpeed >= .045f) {
-                wallStallTimer = 0f
-            }
-        }
-
-        // Apply the bounded wall yaw pulse immediately.
-        if (wallEscapePulseRemaining > 0f) {
-            val wallYawTarget = wallEscapeBias * WALL_ESCAPE_MAX_YAW_RATE
-            val yawAlpha = (1f - exp(
-                (-dt / WALL_ESCAPE_RESPONSE_TAU).toDouble()
-            ).toFloat()).coerceIn(0f, 1f)
-            yawRate += (wallYawTarget - yawRate) * yawAlpha
-            yawRate = yawRate.coerceIn(-WALL_ESCAPE_MAX_YAW_RATE, WALL_ESCAPE_MAX_YAW_RATE)
-        }
-
-        // Physical de-penetration impulse in the same measured wall-normal direction.
-        if (wallEscapePulseRemaining > 0f) {
-            vx += nx * WALL_SEPARATION_SPEED
-            vy += ny * WALL_SEPARATION_SPEED
-            wallEscapePulseRemaining = max(0f, wallEscapePulseRemaining - dt)
-            if (wallEscapePulseRemaining <= 0f) {
-                wallEscapeBias = 0f
-            }
-        }
-
-        // Head-on contact briefly unloads propulsion, but never freezes the body.
-        if (wallFacing > .55f) {
-            val unload = (.22f + .24f * wallFacing).coerceIn(.22f, .46f)
-            forwardVelocity *= (1f - unload)
-        }
+        wallPressure = max(
+            wallPressure * exp((-dt / .14f).toDouble()).toFloat(),
+            max(forwardIntoWall, .10f * wallFacing)
+        ).coerceIn(0f, 1f)
 
         forwardVelocity = (vx * c + vy * s).coerceAtLeast(0f)
             .coerceIn(0f, MAX_FORWARD_SPEED)
         lateralVelocity = (-vx * s + vy * c)
             .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
-
-        // Small bilateral gait phase offset makes the escape visible in the same
-        // six-leg mechanics instead of looking like a direct heading command.
-        if (wallFacing > .35f) {
-            val phaseKick = (0.028f * wallEscapeDirection * wallFacing)
-                .coerceIn(-.028f, .028f)
-            for (g in 0 until LEG_COUNT) {
-                phase[g] = (phase[g] +
-                    if (g < 3) -phaseKick else phaseKick).mod(TWO_PI)
-            }
-        }
-    }
-
-    private fun Float.signOrZero(): Float = when {
-        this > 0f -> 1f
-        this < 0f -> -1f
-        else -> 0f
     }
 
     private fun bilateralMechanicalMean(start: Int, end: Int): Float {

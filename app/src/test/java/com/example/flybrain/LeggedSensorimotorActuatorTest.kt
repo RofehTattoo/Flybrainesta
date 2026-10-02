@@ -60,6 +60,7 @@ class LeggedSensorimotorActuatorTest {
         assertTrue(abs(averageYaw) < .03f)
         assertTrue(averageSupport > .10f)
         assertTrue(averageForce > .20f)
+        assertTrue(a.bilateralMechanicalSymmetry > .90f)
         assertTrue(a.tripodPhaseCoherence > .99f)
     }
 
@@ -87,4 +88,26 @@ class LeggedSensorimotorActuatorTest {
         assertTrue(a.forwardVelocity < walking)
         assertTrue(a.forwardVelocity < .03f)
     }
+    @Test
+    fun wallContact_isCollisionAndSensoryFeedback_only() {
+        val a = LeggedSensorimotorActuator()
+        val motor = FloatArray(6) { .45f }
+        repeat(120) { a.step(motor, 0f, .02f) }
+        val yawBefore = a.yawRate
+        val phaseBefore = a.phase.clone()
+        val speedBefore = a.forwardVelocity
+
+        // Left wall normal points into the arena; heading=0 means the fly is
+        // moving into that wall. Contact must remove penetration and expose
+        // pressure, but it must not synthesize a turn or phase kick.
+        a.applyWallConstraint(0f, -1f, 0f, .02f, true)
+
+        assertEquals(yawBefore, a.yawRate, 1e-6f)
+        for (i in phaseBefore.indices) {
+            assertEquals(phaseBefore[i], a.phase[i], 1e-6f)
+        }
+        assertTrue(a.wallPressure > .05f)
+        assertTrue(a.forwardVelocity <= speedBefore + 1e-6f)
+    }
+
 }

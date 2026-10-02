@@ -45,11 +45,20 @@ for token in [
     'supportCoverage',
     'bilateralMechanicalSymmetry',
     'tripodPhaseCoherence',
+    'lateralAcceleration = LATERAL_ACCEL * supportBalance * turnDrive',
 ]:
     assert token in ACT, token
 
 # The actuator receives only measured neural leg groups + walk-off.
 assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, dtRaw: Float)' in ACT
+wall_start = ACT.index('fun applyWallConstraint(')
+wall_end = ACT.index('private fun bilateralMechanicalMean', wall_start)
+wall_body = ACT[wall_start:wall_end]
+assert 'wallPressure' in wall_body
+assert 'vx -= outward * nx' in wall_body and 'vy -= outward * ny' in wall_body
+assert 'yawRate =' not in wall_body
+assert 'phase[' not in wall_body
+assert 'wallEscapeBias' not in ACT
 def kotlin_function_span(source: str, signature: str) -> str:
     start = source.index(signature)
     brace = source.index('{', start)

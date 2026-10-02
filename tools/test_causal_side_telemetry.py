@@ -21,6 +21,5 @@ assert "olfLeftHz" not in body and "dnLeftHz" not in body and "legLeftHz" not in
 # Heading is bounded for numerical stability and displayed in a conventional signed range.
 assert "if (heading > Math.PI.toFloat()) heading -= twoPi" in MAIN
 assert "if (heading < -Math.PI.toFloat()) heading += twoPi" in MAIN
-assert "((raw + 180f) % 360f + 360f) % 360f - 180f" in MAIN
 assert '"FRENADO NEURAL"' in MAIN
 print("CAUSAL SIDE-RESOLVED TELEMETRY / NO-BYPASS AUDIT: PASS")

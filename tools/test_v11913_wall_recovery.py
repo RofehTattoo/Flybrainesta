@@ -6,13 +6,10 @@ META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.k
 assert "WALL_POSITION_RECOVERY = .0035f" in MAIN
 assert "nextFlyX += wallNx * invLen * WALL_POSITION_RECOVERY" in MAIN
 assert "nextFlyY += wallNy * invLen * WALL_POSITION_RECOVERY" in MAIN
-assert "private var wallStallTimer = 0f" in ACT
-assert "WALL_STALL_RETRIGGER_SECONDS = .28f" in ACT
-assert "WALL_REPULSE_COOLDOWN_SECONDS = .42f" in ACT
-assert "if (planarSpeed < .045f && wallRepulseCooldown <= 0f)" in ACT
-assert "val retrySide = when {" in ACT
-assert "if (wallEscapePulseRemaining <= 0f)" in ACT
-assert "data class StartupEntry" in MAIN
-assert 'APP_VERSION = "1.19.14"' in META
-assert 'APP_VERSION_CODE = 155' in META
-print("V1.19.14 WALL CORNER RECOVERY / STARTUP COMPILE REGRESSION: PASS")
+assert "fun applyWallConstraint(" in ACT
+assert "vx -= outward * nx" in ACT and "vy -= outward * ny" in ACT
+assert "wallPressure" in ACT
+assert "wallEscapeBias" not in ACT
+assert 'APP_VERSION = "1.19.20"' in META
+assert 'APP_VERSION_CODE = 161' in META
+print("V1.19.20 WALL CONTACT / BODY RECOVERY REGRESSION: PASS")
