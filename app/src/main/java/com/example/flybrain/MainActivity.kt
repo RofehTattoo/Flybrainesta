@@ -391,10 +391,6 @@ class MainActivity : Activity() {
         private val LEG_STANCE_DUTY = 0.62f
         private val LEG_WALK_THRESHOLD = 0.025f
         private val WALKOFF_RATE_REFERENCE_HZ = 10f
-        private val BODY_FORWARD_SPEED_MAX = 0.018f
-        private val BODY_LATERAL_SPEED_MAX = 0.004f
-        private val BODY_SPEED_TAU_SECONDS = 0.075f
-        private val BODY_YAW_TAU_SECONDS = 0.090f
 
         private val VIS_START = GeneratedConnectomeMeta.VIS_START
         private val VIS_END = GeneratedConnectomeMeta.VIS_END
@@ -3283,86 +3279,9 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19.4: closed-loop sensorimotor body mechanics. The actuator sees
-            // only the six measured leg-MN subgroup activations and the measured
-            // walk-OFF output. No sensory stimulus or action/goal variable enters.
-            // Feeding-related neural readouts remain diagnostic only. Locomotor
-            // inhibition reaches the actuator exclusively through retained
-            // walk-OFF neural activity measured above.
-            legActuator.step(legGroupActivation, walkOffActivationState, dt)
-            flySpeed = legActuator.forwardVelocity
-            bodyLateralSpeed = legActuator.lateralVelocity
-            yawRate = legActuator.yawRate
-
-            // V1.19.4: yaw is part of the mechanical body state. Integrate the
-            // actuator-produced angular velocity before resolving body velocity
-            // into world coordinates. No stimulus/action variable writes heading.
-            heading += yawRate * dt
-            val twoPi = (Math.PI * 2.0).toFloat()
-            if (heading > Math.PI.toFloat()) heading -= twoPi
-            if (heading < -Math.PI.toFloat()) heading += twoPi
-
-            var worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
-            var worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
-
-            // Physical wall envelope. The constraint feeds back into the actuator;
-            // there is no heading reflection/bounce.
-            wallContactNow = false
-            var wallNx = 0f
-            var wallNy = 0f
-            val predictedX = flyX + worldVx * dt
-            val predictedY = flyY + worldVy * dt
-            if (predictedX < BODY_MIN_X && worldVx < 0f) { wallContactNow = true; wallNx += 1f }
-            if (predictedX > BODY_MAX_X && worldVx > 0f) { wallContactNow = true; wallNx -= 1f }
-            if (predictedY < BODY_MIN_Y && worldVy < 0f) { wallContactNow = true; wallNy += 1f }
-            if (predictedY > BODY_MAX_Y && worldVy > 0f) { wallContactNow = true; wallNy -= 1f }
-            if (flyX <= BODY_MIN_X + .014f) { wallContactNow = true; wallNx += 1f }
-            if (flyX >= BODY_MAX_X - .014f) { wallContactNow = true; wallNx -= 1f }
-            if (flyY <= BODY_MIN_Y + .014f) { wallContactNow = true; wallNy += 1f }
-            if (flyY >= BODY_MAX_Y - .014f) { wallContactNow = true; wallNy -= 1f }
-            legActuator.applyWallConstraint(
-                heading, wallNx, wallNy, dt, wallContactNow
-            )
-            if (wallContactNow) {
-                flySpeed = legActuator.forwardVelocity
-                bodyLateralSpeed = legActuator.lateralVelocity
-                yawRate = legActuator.yawRate
-                worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
-                worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
-            }
-            var nextFlyX = flyX + worldVx * dt
-            var nextFlyY = flyY + worldVy * dt
-
-            if (wallContactNow) {
-                val wallLen = hypot(wallNx, wallNy)
-                if (wallLen > .0001f) {
-                    val invLen = 1f / wallLen
-                    // Local collision resolution only. The vector comes from the
-                    // measured wall normal; no food/light/danger target is read.
-                    nextFlyX += wallNx * invLen * WALL_POSITION_RECOVERY
-                    nextFlyY += wallNy * invLen * WALL_POSITION_RECOVERY
-                }
-            }
-
-            flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)
-            flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)
-
-            val dxPhysical = flyX - lastMotionX
-            val dyPhysical = flyY - lastMotionY
-            physicalSpeed = hypot(dxPhysical, dyPhysical) / dt.coerceAtLeast(.001f)
-            // Pause detection must consume the speed measured from the just-finished
-            // physical frame. Calling this before physicalSpeed was updated made the
-            // UI one frame late and, more importantly, could prevent a true arrest
-            // from ever reaching the pause timer at low-speed boundaries.
-            updateMeasuredPauseState(dt, wallContactNow)
-            physicalAcceleration = (physicalSpeed - previousPhysicalSpeed) / dt.coerceAtLeast(.001f)
-            previousPhysicalSpeed = physicalSpeed
-            displacementPerSecond = physicalSpeed
-            pathLength += hypot(dxPhysical, dyPhysical)
-            val movementEvidence = (physicalSpeed / .18f).coerceIn(0f, 1f)
-            physicalMovementMemory = .94f * physicalMovementMemory + .06f * movementEvidence
-            lastMotionX = flyX
-            lastMotionY = flyY
+            // V1.19.20: isolated physical/mechanical integration boundary.
+            // The method below consumes only measured VNC leg activity + walk-OFF.
+            applyMechanicalBodyState(dt)
 
             // Feeding/spatial actions do not directly command motion. Wing phase is
             // likewise driven only by measured wing/jump motor output.
@@ -3435,6 +3354,98 @@ class MainActivity : Activity() {
             wingBeatPhase += dt * (8f + 11f * wingVisualIntensity) * (Math.PI.toFloat() * 2f)
             updateBuzzSound()
         }
+
+        /**
+         * V1.19.20 physical/mechanical body boundary.
+         *
+         * This function deliberately receives no food, light, danger or action
+         * variables. It consumes only measured VNC motor state already reduced into
+         * six leg groups and retained walk-OFF neural activity. The resulting actuator
+         * velocities, yaw and wall response are then integrated into body position.
+         */
+        private fun applyMechanicalBodyState(dt: Float) {
+
+            // V1.19.4: closed-loop sensorimotor body mechanics. The actuator sees
+            // only the six measured leg-MN subgroup activations and the measured
+            // walk-OFF output. No sensory stimulus or action/goal variable enters.
+            // Feeding-related neural readouts remain diagnostic only. Locomotor
+            // inhibition reaches the actuator exclusively through retained
+            // walk-OFF neural activity measured above.
+            legActuator.step(legGroupActivation, walkOffActivationState, dt)
+            flySpeed = legActuator.forwardVelocity
+            bodyLateralSpeed = legActuator.lateralVelocity
+            yawRate = legActuator.yawRate
+
+            // V1.19.4: yaw is part of the mechanical body state. Integrate the
+            // actuator-produced angular velocity before resolving body velocity
+            // into world coordinates. No stimulus/action variable writes heading.
+            heading += yawRate * dt
+            val twoPi = (Math.PI * 2.0).toFloat()
+            if (heading > Math.PI.toFloat()) heading -= twoPi
+            if (heading < -Math.PI.toFloat()) heading += twoPi
+
+            var worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
+            var worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
+
+            // Physical wall envelope. The constraint feeds back into the actuator;
+            // there is no heading reflection/bounce.
+            wallContactNow = false
+            var wallNx = 0f
+            var wallNy = 0f
+            val predictedX = flyX + worldVx * dt
+            val predictedY = flyY + worldVy * dt
+            if (predictedX < BODY_MIN_X && worldVx < 0f) { wallContactNow = true; wallNx += 1f }
+            if (predictedX > BODY_MAX_X && worldVx > 0f) { wallContactNow = true; wallNx -= 1f }
+            if (predictedY < BODY_MIN_Y && worldVy < 0f) { wallContactNow = true; wallNy += 1f }
+            if (predictedY > BODY_MAX_Y && worldVy > 0f) { wallContactNow = true; wallNy -= 1f }
+            if (flyX <= BODY_MIN_X + .014f) { wallContactNow = true; wallNx += 1f }
+            if (flyX >= BODY_MAX_X - .014f) { wallContactNow = true; wallNx -= 1f }
+            if (flyY <= BODY_MIN_Y + .014f) { wallContactNow = true; wallNy += 1f }
+            if (flyY >= BODY_MAX_Y - .014f) { wallContactNow = true; wallNy -= 1f }
+            legActuator.applyWallConstraint(
+            heading, wallNx, wallNy, dt, wallContactNow
+            )
+            if (wallContactNow) {
+            flySpeed = legActuator.forwardVelocity
+            bodyLateralSpeed = legActuator.lateralVelocity
+            yawRate = legActuator.yawRate
+            worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
+            worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
+            }
+            var nextFlyX = flyX + worldVx * dt
+            var nextFlyY = flyY + worldVy * dt
+
+            if (wallContactNow) {
+            val wallLen = hypot(wallNx, wallNy)
+            if (wallLen > .0001f) {
+            val invLen = 1f / wallLen
+            // Local collision resolution only. The vector comes from the
+            // measured wall normal; no food/light/danger target is read.
+            nextFlyX += wallNx * invLen * WALL_POSITION_RECOVERY
+            nextFlyY += wallNy * invLen * WALL_POSITION_RECOVERY
+            }
+            }
+
+            flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)
+            flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)
+
+            val dxPhysical = flyX - lastMotionX
+            val dyPhysical = flyY - lastMotionY
+            physicalSpeed = hypot(dxPhysical, dyPhysical) / dt.coerceAtLeast(.001f)
+            // Pause detection must consume the speed measured from the just-finished
+            // physical frame. Calling this before physicalSpeed was updated made the
+            // UI one frame late and, more importantly, could prevent a true arrest
+            // from ever reaching the pause timer at low-speed boundaries.
+            updateMeasuredPauseState(dt, wallContactNow)
+            physicalAcceleration = (physicalSpeed - previousPhysicalSpeed) / dt.coerceAtLeast(.001f)
+            previousPhysicalSpeed = physicalSpeed
+            displacementPerSecond = physicalSpeed
+            pathLength += hypot(dxPhysical, dyPhysical)
+            val movementEvidence = (physicalSpeed / .18f).coerceIn(0f, 1f)
+            physicalMovementMemory = .94f * physicalMovementMemory + .06f * movementEvidence
+            lastMotionX = flyX
+            lastMotionY = flyY
+            }
 
         private fun updateMeasuredPauseState(dt: Float, wallContact: Boolean) {
             val stillThreshold = .0075f

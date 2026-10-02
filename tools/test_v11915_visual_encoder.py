@@ -17,15 +17,27 @@ assert 'dangerLoomMemory' in MAIN
 assert 'dangerOnsetMemory' in MAIN
 assert 'previousDangerOn' in MAIN
 assert 'setMappedSensoryRate(\n                visualReceptorIndices,' not in MAIN
-# The body method also contains read-only action telemetry after the mechanical
-# integration. The protected causal region ends at the measured leg actuator call.
-drive_start = MAIN.index('private fun driveBody(dt: Float) {')
-actuator_end = MAIN.index('legActuator.step(legGroupActivation, walkOffActivationState, dt)', drive_start)
-causal_body = MAIN[drive_start:actuator_end]
-for token in ('approachAction', 'escapeAction', 'orientAction', 'lightDrive', 'dangerDrive', 'lightOn', 'dangerOn'):
+# V1.19.20 isolates the physical/mechanical body integration in its own function.
+# That function is the protected causal boundary: it may consume only measured
+# VNC leg motor groups and walk-OFF neural output.
+def kotlin_function_span(source: str, signature: str) -> str:
+    start = source.index(signature)
+    brace = source.index('{', start)
+    depth = 0
+    for i in range(brace, len(source)):
+        if source[i] == '{': depth += 1
+        elif source[i] == '}':
+            depth -= 1
+            if depth == 0: return source[start:i + 1]
+    raise AssertionError(f'unclosed function: {signature}')
+
+causal_body = kotlin_function_span(MAIN, 'private fun applyMechanicalBodyState(dt: Float)')
+drive_body = kotlin_function_span(MAIN, 'private fun driveBody(dt: Float)')
+for token in ('approachAction', 'escapeAction', 'orientAction', 'lightDrive', 'dangerDrive', 'lightOn', 'dangerOn', 'foodOn', 'foodX', 'foodY'):
     assert token not in causal_body, token
-assert causal_body.count('legActuator.step') == 0
-# V1.19.19 explicitly reconstructs the visual slice of FBR-10 while keeping the
+assert 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in causal_body
+assert 'applyMechanicalBodyState(dt)' in drive_body
+# V1.19.20 explicitly reconstructs the visual slice of FBR-10 while keeping the
 # global 16,669-node target and the induced-edge rule. The primary receptor quota
 # must be derived from the pinned MaleCNS source, never from the old selected graph.
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in BUILD
@@ -36,8 +48,8 @@ assert 'annotated["channel"] != 0' in BUILD
 assert 'route_visual_turn' in BUILD and 'route_visual_escape' in BUILD
 assert 'visual_three_turn' in BUILD and 'visual_three_escape' in BUILD
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.19.19"' in META
-assert 'const val APP_VERSION_CODE = 160' in META
-assert 'versionName = "1.19.19"' in GRADLE
-assert 'versionCode = 160' in GRADLE
-print('V1.19.19 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')
+assert 'const val APP_VERSION = "1.19.20"' in META
+assert 'const val APP_VERSION_CODE = 161' in META
+assert 'versionName = "1.19.20"' in GRADLE
+assert 'versionCode = 161' in GRADLE
+print('V1.19.20 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')

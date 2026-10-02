@@ -36,6 +36,47 @@ class LeggedSensorimotorActuatorTest {
         assertTrue(a.supportBalance > 0f)
     }
 
+
+    @Test
+    fun symmetricMotorOutput_hasNoPersistentYawBias() {
+        val a = LeggedSensorimotorActuator()
+        val motor = FloatArray(6) { .45f }
+        var yawSum = 0f
+        var supportSum = 0f
+        var forceSum = 0f
+        var samples = 0
+        repeat(2500) { step ->
+            a.step(motor, 0f, .02f)
+            if (step >= 500) {
+                yawSum += a.yawRate
+                supportSum += a.supportCoverage
+                forceSum += a.forwardForceProxy
+                samples++
+            }
+        }
+        val averageYaw = yawSum / samples.toFloat()
+        val averageSupport = supportSum / samples.toFloat()
+        val averageForce = forceSum / samples.toFloat()
+        assertTrue(abs(averageYaw) < .03f)
+        assertTrue(averageSupport > .10f)
+        assertTrue(averageForce > .20f)
+        assertTrue(a.tripodPhaseCoherence > .99f)
+    }
+
+    @Test
+    fun legPhasesFreezeWhenMotorOutputStops() {
+        val a = LeggedSensorimotorActuator()
+        val motor = FloatArray(6) { .42f }
+        repeat(60) { a.step(motor, 0f, .02f) }
+        val phaseBefore = a.phase.clone()
+        repeat(50) { a.step(FloatArray(6), 0f, .02f) }
+        for (i in phaseBefore.indices) {
+            assertEquals(phaseBefore[i], a.phase[i], 1e-5f)
+        }
+        assertTrue(a.forwardVelocity < .05f)
+        assertTrue(a.yawRate < .08f)
+    }
+
     @Test
     fun walkOff_reducesMechanicalDrive() {
         val a = LeggedSensorimotorActuator()

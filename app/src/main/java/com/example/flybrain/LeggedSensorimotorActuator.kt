@@ -26,6 +26,8 @@ class LeggedSensorimotorActuator {
         // Modified tripod: RF→LM→RH and LF→RM→LH, with ~0.5-cycle opposition.
         // Group order: LF, LM, LH, RF, RM, RH.
         private val TRIPOD_OFFSETS = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)
+        private val TRIPOD_A = intArrayOf(3, 1, 5) // RF -> LM -> RH
+        private val TRIPOD_B = intArrayOf(0, 4, 2) // LF -> RM -> LH
         private const val STANCE_DUTY = .62f
         private const val MIN_PHASE_HZ = 1.20f
         private const val MAX_PHASE_HZ = 16.0f
@@ -105,6 +107,22 @@ class LeggedSensorimotorActuator {
         private set
     var mechanicalActivity = 0f
         private set
+
+    /** Dimensionless forward ground-force proxy produced by stance legs. */
+    var forwardForceProxy = 0f
+        private set
+    /** Signed dimensionless left/right force imbalance used by the physical yaw model. */
+    var yawForceProxy = 0f
+        private set
+    /** Fraction of the six legs carrying measurable stance contact. */
+    var supportCoverage = 0f
+        private set
+    /** 0..1 bilateral mechanical symmetry; 1 means equal left/right support. */
+    var bilateralMechanicalSymmetry = 0f
+        private set
+    /** 0..1 coherence of the imposed modified-tripod mechanical phase relationship. */
+    var tripodPhaseCoherence = 0f
+        private set
     var wallPressure = 0f
         private set
 
@@ -138,7 +156,13 @@ class LeggedSensorimotorActuator {
         forwardAcceleration = 0f; lateralAcceleration = 0f; yawAcceleration = 0f
         proprioceptionLeft = 0f; proprioceptionRight = 0f; proprioceptionGlobal = 0f
         supportMean = 0f; leftSupport = 0f; rightSupport = 0f; supportBalance = 0f
-        mechanicalActivity = 0f; wallPressure = 0f
+        mechanicalActivity = 0f
+        forwardForceProxy = 0f
+        yawForceProxy = 0f
+        supportCoverage = 0f
+        bilateralMechanicalSymmetry = 0f
+        tripodPhaseCoherence = 0f
+        wallPressure = 0f
         wallEscapeBias = 0f
         wallEscapeDirection = 1f
         wallContactLatched = false
@@ -232,12 +256,37 @@ class LeggedSensorimotorActuator {
         leftSupport = (leftLoad / 3f).coerceIn(0f, 1f)
         rightSupport = (rightLoad / 3f).coerceIn(0f, 1f)
         supportBalance = ((rightSupport - leftSupport) / (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
+        supportCoverage = (totalContact / LEG_COUNT.toFloat()).coerceIn(0f, 1f)
+        bilateralMechanicalSymmetry = (1f - abs(leftSupport - rightSupport) /
+            (leftSupport + rightSupport + .001f)).coerceIn(0f, 1f)
+
+        // The modified tripod is a mechanical coordination constraint rather than
+        // a behavioral command. Telemetry compares the actual phase-plus-offset
+        // of each leg with the fixed front->middle->hind lag used by this actuator.
+        var phaseError = 0f
+        var phaseChecks = 0
+        fun accumulateTripodPhaseError(group: IntArray) {
+            val reference = (phase[group[0]] / TWO_PI + TRIPOD_OFFSETS[group[0]]) % 1f
+            for (j in 1 until group.size) {
+                val expected = (reference + TRIPOD_OFFSETS[group[j]] -
+                    TRIPOD_OFFSETS[group[0]]) % 1f
+                val actual = (phase[group[j]] / TWO_PI + TRIPOD_OFFSETS[group[j]]) % 1f
+                val d = abs(actual - expected) % 1f
+                phaseError += minOf(d, 1f - d)
+                phaseChecks++
+            }
+        }
+        accumulateTripodPhaseError(TRIPOD_A)
+        accumulateTripodPhaseError(TRIPOD_B)
+        tripodPhaseCoherence = (1f - phaseError / phaseChecks.coerceAtLeast(1).toFloat() / .25f)
+            .coerceIn(0f, 1f)
 
         // Each stance foot contributes to the body's net propulsive force.
         // Summing then saturating preserves the contribution of multiple legs;
         // averaging by LEG_COUNT incorrectly diluted the total force sixfold.
         // Propulsion still comes only from backward foot motion during stance.
         val propulsive = totalPropulsion.coerceIn(0f, .66f)
+        forwardForceProxy = propulsive
         val walkOff = walkOffActivation.coerceIn(0f, 1f)
         forwardAcceleration = FORWARD_ACCEL * propulsive -
             FORWARD_DAMPING * forwardVelocity -
@@ -257,6 +306,7 @@ class LeggedSensorimotorActuator {
         val turnDrive = ((totalTurnPropulsion - TURN_PROPULSION_DEADZONE) /
             (TURN_PROPULSION_FULL_SCALE - TURN_PROPULSION_DEADZONE))
             .coerceIn(0f, 1f)
+        yawForceProxy = (turnBalance * turnDrive).coerceIn(-1f, 1f)
         // Neural steering must be supported by actual body translation. This
         // prevents residual one-sided leg activity from spinning a stationary fly.
         // A genuine wall-contact reflex is handled separately below.

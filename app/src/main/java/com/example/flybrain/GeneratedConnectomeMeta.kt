@@ -2,10 +2,10 @@ package com.example.flybrain
 
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
-    const val FLYBRAIN_VERSION = "1.19.19"
-    const val FLYBRAIN_VERSION_CODE = 160
-    const val APP_VERSION = "1.19.19"
-    const val APP_VERSION_CODE = 160
+    const val FLYBRAIN_VERSION = "1.19.20"
+    const val FLYBRAIN_VERSION_CODE = 161
+    const val APP_VERSION = "1.19.20"
+    const val APP_VERSION_CODE = 161
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = 264
     // 54 distinct published (type, entryNerve) combinations; 53 unique
@@ -14,7 +14,7 @@ object GeneratedConnectomeMeta {
     const val RETAINED_OLFACTORY_ORN_TYPE_ENTRY_NERVE_PAIRS = 54
     const val BINARY_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"
     const val SOURCE_ANNOTATIONS_SHA256 = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
-    const val SOURCE_NEUROTRANSMITTERS_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15602cd08da8879621"
+    const val SOURCE_NEUROTRANSMITTERS_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
     const val SOURCE_WEIGHTS_SHA256 = "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
     const val DYNAMICS_FORMAT = "FBD105"
     const val DYNAMICS_NORMALIZATION_SCALE = 1.0f
