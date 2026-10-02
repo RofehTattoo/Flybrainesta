@@ -187,11 +187,43 @@ class MainActivity : Activity() {
             }
         }
 
+        lateinit var startButton: Button
         val startup = StartupView(sim)
+        startButton = Button(this).apply {
+            text = "▶  INICIAR SIMULACIÓN"
+            textSize = 11.5f
+            isAllCaps = false
+            minHeight = 0
+            minWidth = 0
+            setTextColor(Color.rgb(160, 170, 175))
+            setPadding(8.dp(), 0, 8.dp(), 0)
+            stateListAnimator = null
+            isEnabled = false
+            background = GradientDrawable().apply {
+                cornerRadius = 14.dp().toFloat()
+                setColor(Color.rgb(28, 36, 41))
+                setStroke(1, Color.rgb(66, 78, 85))
+            }
+        }
+        startButton.setOnClickListener {
+            if (!sim.brainLoadOk) return@setOnClickListener
+            sim.startSimulation()
+            startup.visibility = View.GONE
+            startButton.visibility = View.GONE
+        }
         shell.addView(
             startup,
             FrameLayout.LayoutParams(-1, -1).apply {
                 gravity = Gravity.CENTER
+            }
+        )
+        shell.addView(
+            startButton,
+            FrameLayout.LayoutParams(-1, 48.dp()).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                leftMargin = 28.dp()
+                rightMargin = 28.dp()
+                bottomMargin = 44.dp()
             }
         )
 
@@ -204,13 +236,12 @@ class MainActivity : Activity() {
 
 
     /**
-     * V1.19.14 startup observatory.
+     * V1.19.22 startup observatory.
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
-     * It stays on screen for at least 4.5 s after the loader completes.
+     * It remains on screen after loading until the user explicitly starts the simulation.
      */
     inner class StartupView(private val sim: FlyView) : View(this) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val startAt = SystemClock.uptimeMillis()
 
         private val entries = arrayOf<StartupEntry>(
             StartupEntry("Verde · Olfato", "Neuronas olfativas (ORN).", Color.rgb(45, 190, 105)),
@@ -300,20 +331,32 @@ class MainActivity : Activity() {
             }
             val status = when {
                 failed -> "ERROR DE CARGA · revisa FBR-10 / FBD105"
-                ready -> "CONNECTOME + DYNAMICS OK"
+                ready -> "CONNECTOME + DYNAMICS OK · LISTO PARA INICIAR"
                 else -> "CARGANDO MaleCNS v1.0 · FBR-10 · DINÁMICA FBD105…"
             }
             c.drawText(status, margin + dp(18f), bottom - dp(32f), paint)
 
-            if (ready) {
-                val elapsed = SystemClock.uptimeMillis() - sim.brainLoadFinishedAt
-                if (elapsed >= 4500L && SystemClock.uptimeMillis() - startAt >= 4500L) {
-                    visibility = View.GONE
-                    return
+            // The simulation never auto-starts. The external Android Button is enabled
+            // only after the connectome/dynamics loader reports success.
+            startButton.isEnabled = ready
+            startButton.alpha = when {
+                ready -> 1f
+                failed -> .45f
+                else -> .58f
+            }
+            startButton.setTextColor(if (ready) Color.WHITE else Color.rgb(160, 170, 175))
+            startButton.background = GradientDrawable().apply {
+                cornerRadius = dp(14f)
+                if (ready) {
+                    setColor(Color.rgb(30, 58, 49))
+                    setStroke(dp(1f).toInt().coerceAtLeast(1), Color.rgb(45, 170, 105))
+                } else {
+                    setColor(Color.rgb(28, 36, 41))
+                    setStroke(dp(1f).toInt().coerceAtLeast(1), Color.rgb(66, 78, 85))
                 }
             }
 
-            // Keep the splash alive until the substrate is both loaded and readable.
+            // Keep the splash alive while the user is deciding when to enter.
             postInvalidateDelayed(100L)
         }
     }
@@ -825,6 +868,15 @@ class MainActivity : Activity() {
         @Volatile var brainLoadOk = false
         @Volatile private var brainLoadingStarted = false
         @Volatile var brainLoadFinishedAt = 0L
+        @Volatile private var simulationStarted = false
+
+        fun startSimulation() {
+            if (!brainLoadOk) return
+            simulationStarted = true
+            // Prevent a long splash/loading interval from becoming a large first frame.
+            lastNs = System.nanoTime()
+            invalidate()
+        }
 
         fun startBrainLoading() {
             if (brainLoadingStarted) return
@@ -3327,7 +3379,7 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19.21: isolated physical/mechanical integration boundary.
+            // V1.19.22: isolated physical/mechanical integration boundary.
             // The method below consumes only measured VNC leg activity + walk-OFF.
             applyMechanicalBodyState(dt)
 
@@ -3404,7 +3456,7 @@ class MainActivity : Activity() {
         }
 
         /**
-         * V1.19.21 physical/mechanical body boundary.
+         * V1.19.22 physical/mechanical body boundary.
          *
          * This function deliberately receives no food, light, danger or action
          * variables. It consumes only measured VNC motor state already reduced into
@@ -3558,10 +3610,14 @@ class MainActivity : Activity() {
             // Public neural clock at 50 Hz, independent of display refresh rate; each public frame resolves 40 internal 0.5 ms substeps.
             neuralAccumulator += frameDt
             var steps = 0
-            while (neuralAccumulator >= NEURAL_FRAME_DT_SECONDS && steps < 5) {
+            while (simulationStarted && neuralAccumulator >= NEURAL_FRAME_DT_SECONDS && steps < 5) {
                 runNeuralSimulation(NEURAL_FRAME_DT_SECONDS)
                 neuralAccumulator -= NEURAL_FRAME_DT_SECONDS
                 steps++
+            }
+            if (!simulationStarted) {
+                neuralAccumulator = 0f
+                neuralStepsLastFrame = 0
             }
             neuralStepsLastFrame = steps
             neuralBacklogSeconds = neuralAccumulator
@@ -3950,12 +4006,12 @@ class MainActivity : Activity() {
                 val regional = max(regionRateForId(sourceId), regionRateForId(targetId))
                 val signal = max(activity, regional * .14f)
                 val base = regionColor(sourceId)
-                paint.strokeWidth = (0.16f + 0.24f * signal) * lineDp
+                paint.strokeWidth = (0.11f + 0.17f * signal) * lineDp
                 val baseAlpha = (6f + 32f * signal).toInt().coerceIn(6, 38)
                 paint.color = Color.argb(baseAlpha, Color.red(base), Color.green(base), Color.blue(base))
                 c.drawLine(a[0], a[1], b[0], b[1], paint)
                 if (activity > .06f) {
-                    paint.strokeWidth = (0.24f + 0.32f * activity) * lineDp
+                    paint.strokeWidth = (0.18f + 0.23f * activity) * lineDp
                     val activeAlpha = (32f + 105f * activity).toInt().coerceIn(32, 140)
                     paint.color = Color.argb(activeAlpha, Color.red(base), Color.green(base), Color.blue(base))
                     c.drawLine(a[0], a[1], b[0], b[1], paint)
@@ -3972,12 +4028,12 @@ class MainActivity : Activity() {
                 val base = regionColor(id)
                 val visibleBaseline = (regional * .12f).coerceIn(0f, .12f)
                 val intensity = max(activity, visibleBaseline)
-                val radius = 1.25f + 6.8f * activity
+                val radius = 0.90f + 4.4f * activity
                 if (activity > .035f) {
                     paint.color = Color.argb((22f + 55f * activity).toInt().coerceIn(22, 80), Color.red(base), Color.green(base), Color.blue(base))
-                    c.drawCircle(p[0], p[1], radius * 2.7f, paint)
+                    c.drawCircle(p[0], p[1], radius * 2.15f, paint)
                     paint.color = Color.argb((42f + 95f * activity).toInt().coerceIn(42, 145), Color.red(base), Color.green(base), Color.blue(base))
-                    c.drawCircle(p[0], p[1], radius * 1.65f, paint)
+                    c.drawCircle(p[0], p[1], radius * 1.38f, paint)
                 }
                 val alpha = if (activity > .02f) (85f + 170f * intensity).toInt().coerceIn(85, 255) else 72
                 paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
@@ -3999,14 +4055,18 @@ class MainActivity : Activity() {
                 if (activity <= .08f) continue
                 val p = posForNeuron(id)
                 val base = regionColor(id)
-                val radius = 1.1f + 3.3f * activity
-                paint.style = Paint.Style.FILL
-                paint.color = Color.argb((70f + 135f * activity).toInt().coerceIn(70, 205), Color.red(base), Color.green(base), Color.blue(base))
-                c.drawCircle(p[0], p[1], radius, paint)
-                if (activity > .45f) {
-                    paint.color = Color.argb((75f + 100f * activity).toInt().coerceIn(75, 175), Color.red(base), Color.green(base), Color.blue(base))
-                    c.drawCircle(p[0], p[1], radius * 2.1f, paint)
+                val isDenseCentral = anatomicalRegion[id].toInt() == 12 && base == Color.rgb(150, 160, 170)
+                val radius = if (isDenseCentral) 0.28f + 0.95f * activity else 0.45f + 1.35f * activity
+                val alpha = if (isDenseCentral) {
+                    (36f + 104f * activity).toInt().coerceIn(36, 140)
+                } else {
+                    (70f + 135f * activity).toInt().coerceIn(70, 205)
                 }
+                paint.style = Paint.Style.FILL
+                paint.color = Color.argb(alpha, Color.red(base), Color.green(base), Color.blue(base))
+                c.drawCircle(p[0], p[1], radius, paint)
+                // Dense central populations are rendered as micro-nodes without halos so
+                // simultaneous activity remains spatially legible on phone-sized screens.
                 activeExtra++
             }
 
