@@ -1555,6 +1555,9 @@ object GeneratedConnectomeMeta {
     const val VISUAL_NEURONS_SOURCE = %d
     const val VISUAL_NEURONS_RETAINED = %d
     const val BINARY_SHA256 = "%s"
+    const val SOURCE_ANNOTATIONS_SHA256 = "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2"
+    const val SOURCE_NEUROTRANSMITTERS_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"
+    const val SOURCE_WEIGHTS_SHA256 = "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1"
     const val FORMAT_MAGIC = "FBC103"
     const val FORMAT_VERSION = 103
     const val NEURONS = %d
