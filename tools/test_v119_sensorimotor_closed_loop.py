@@ -17,7 +17,7 @@ assert 'legActuator.proprioceptionLeft' in MAIN and 'legActuator.proprioceptionR
 assert 'mechanosensorySide[idx] = side.toByte()' in MAIN
 # Position integration may include wall-normal collision recovery before clamping.
 # Verify the current semi-implicit integration structure without pinning the test
-# to the old two-line spelling that predated V1.19.22 corner recovery.
+# to the old two-line spelling that predated V1.19.23 corner recovery.
 assert 'var nextFlyX = flyX + worldVx * dt' in MAIN
 assert 'var nextFlyY = flyY + worldVy * dt' in MAIN
 assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in MAIN
@@ -31,6 +31,6 @@ assert 'wingActivity * .010f' not in MAIN and 'flightMotor * .010f' not in MAIN
 assert 'approachAction' not in ACT and 'foodOn' not in ACT and 'lightOn' not in ACT and 'dangerOn' not in ACT
 assert 'heading = Math.PI.toFloat() - heading' not in MAIN and 'heading = -heading' not in MAIN
 assert 'exploratoryTurn' not in MAIN and 'locomotionRng' not in MAIN
-assert 'const val APP_VERSION = "1.19.22"' in META and 'const val APP_VERSION_CODE = 163' in META
-assert 'versionName = "1.19.22"' in GRADLE and 'versionCode = 163' in GRADLE
+assert 'const val APP_VERSION = "1.19.23"' in META and 'const val APP_VERSION_CODE = 164' in META
+assert 'versionName = "1.19.23"' in GRADLE and 'versionCode = 164' in GRADLE
 print('V1.19.8 SENSORIMOTOR CLOSED LOOP STATIC AUDIT: PASS')

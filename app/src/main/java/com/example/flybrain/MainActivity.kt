@@ -37,6 +37,8 @@ import java.security.MessageDigest
 private data class StartupEntry(val title: String, val body: String, val color: Int)
 
 class MainActivity : Activity() {
+    private lateinit var startButton: Button
+
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).roundToInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -187,7 +189,6 @@ class MainActivity : Activity() {
             }
         }
 
-        lateinit var startButton: Button
         val startup = StartupView(sim)
         startButton = Button(this).apply {
             text = "▶  INICIAR SIMULACIÓN"
@@ -236,7 +237,7 @@ class MainActivity : Activity() {
 
 
     /**
-     * V1.19.22 startup observatory.
+     * V1.19.23 startup observatory.
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
      * It remains on screen after loading until the user explicitly starts the simulation.
      */
@@ -3379,7 +3380,7 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19.22: isolated physical/mechanical integration boundary.
+            // V1.19.23: isolated physical/mechanical integration boundary.
             // The method below consumes only measured VNC leg activity + walk-OFF.
             applyMechanicalBodyState(dt)
 
@@ -3456,7 +3457,7 @@ class MainActivity : Activity() {
         }
 
         /**
-         * V1.19.22 physical/mechanical body boundary.
+         * V1.19.23 physical/mechanical body boundary.
          *
          * This function deliberately receives no food, light, danger or action
          * variables. It consumes only measured VNC motor state already reduced into

@@ -1,5 +1,5 @@
 {
-  "release": "FlyBrain V1.19.22 / FBR-10-OLF2-MOTORROUTE",
+  "release": "FlyBrain V1.19.23 / FBR-10-OLF2-MOTORROUTE",
   "status": "source-baseline-for-CI-rebuild-with-visual-and-anatomical-observatory",
   "male_cns": "v1.0",
   "target_neurons": 16669,
@@ -26,14 +26,14 @@
     "Olfactory input is restricted to retained real MaleCNS ORNs",
     "Tarsal gustatory input is restricted to retained official `leg bristle` gustatory receptors; feeding motor output is read from retained official cb_motor types and never synthesized."
   ],
-  "version": "1.19.22",
-  "versionCode": 163,
+  "version": "1.19.23",
+  "versionCode": 164,
   "visual_reconstruction": {
     "status": "enabled",
     "primary_photoreceptor_source": "MaleCNS v1.0 annotations (R1-6/R7/R8, ol_sensory/visual)",
     "primary_photoreceptor_target_fraction": 0.1,
     "target_neurons_total": 16669,
-    "note": "The canonical 16,669-node FBC103 is rebuilt from the pinned MaleCNS v1.0 source in CI; the checked-in binary is only a bootstrap asset and must not be interpreted as the V1.19.22 visual reconstruction."
+    "note": "The canonical 16,669-node FBC103 is rebuilt from the pinned MaleCNS v1.0 source in CI; the checked-in binary is only a bootstrap asset and must not be interpreted as the V1.19.23 visual reconstruction."
   },
   "anatomical_visual_map": {
     "status": "enabled",
