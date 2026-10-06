@@ -17,8 +17,10 @@ assert 'val rightProjection = nx * rightX + ny * rightY' in MAIN
 assert 'val forwardProjection = nx * fwdX + ny * fwdY' in MAIN
 assert 'wallPressureLeft = max(wallPressureLeft, value * rightProjection.coerceAtLeast(0f))' in MAIN
 assert 'wallPressureRight = max(wallPressureRight, value * (-rightProjection).coerceAtLeast(0f))' in MAIN
-assert 'val local = when (mechanosensorySide[i].toInt())' in MAIN
-assert 'externalRateHz[i] = (local * 110f + mechGlobal * 15f).coerceIn(0f, 150f)' in MAIN
+assert 'val side = mechanosensorySide[i].toInt()' in MAIN
+assert 'val site = mechanosensorySite[i].toInt()' in MAIN
+assert 'val local = when (site)' in MAIN
+assert 'externalRateHz[i] = (local * 130f + mechGlobal * 12f).coerceIn(0f, 150f)' in MAIN
 assert 'setMappedSensoryRate(mechanosensoryReceptorIndices, wallSignal * 80f)' not in MAIN
 assert 'olfactoryPopulationRate()' in MAIN
 assert 'mechanosensoryPopulationRate()' in MAIN
