@@ -11,7 +11,7 @@ assert 'const val APP_VERSION_CODE = 170' in META
 assert 'versionName = "1.19.29"' in GRADLE
 assert 'versionCode = 170' in GRADLE
 assert '"versionCode": 164' in (ROOT / 'RELEASE_MANIFEST_FBR10_OLF2.json').read_text(encoding='utf-8')
-assert 'android:label="FlyBrain V1.19.28"' in MANIFEST
+assert 'android:label="FlyBrain V1.19.29"' in MANIFEST
 
 startup = MAIN[MAIN.index('inner class StartupView'):MAIN.index('inner class FlyView')]
 assert 'visibility = View.GONE' not in startup

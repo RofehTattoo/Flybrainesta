@@ -58,7 +58,7 @@ assert 'const val APP_VERSION = "1.19.29"' in META
 assert 'const val APP_VERSION_CODE = 170' in META
 assert 'versionName = "1.19.29"' in GRADLE
 assert 'versionCode = 170' in GRADLE
-assert 'android:label="FlyBrain V1.19.28"' in MANIFEST
+assert 'android:label="FlyBrain V1.19.29"' in MANIFEST
 
 if args.map_path:
     mp = Path(args.map_path)
