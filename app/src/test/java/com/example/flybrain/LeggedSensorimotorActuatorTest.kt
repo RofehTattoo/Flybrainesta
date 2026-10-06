@@ -13,7 +13,8 @@ class LeggedSensorimotorActuatorTest {
         assertTrue(a.forwardVelocity < 1e-5f)
         assertTrue(a.lateralVelocity < 1e-5f)
         assertTrue(a.yawRate < 1e-5f)
-        assertEquals(0f, a.phase.sum(), 1e-5f)
+        val initialPhaseSum = (.50f + .08f + .66f + 0f + .58f + .16f) * (Math.PI.toFloat() * 2f)
+        assertEquals(initialPhaseSum, a.phase.sum(), 1e-5f)
     }
 
     @Test
@@ -61,7 +62,7 @@ class LeggedSensorimotorActuatorTest {
         assertTrue(averageSupport > .10f)
         assertTrue(averageForce > .20f)
         assertTrue(a.bilateralMechanicalSymmetry > .90f)
-        assertTrue(a.tripodPhaseCoherence > .99f)
+        assertTrue(a.legPhaseSpread > .10f)
     }
 
     @Test
@@ -76,6 +77,19 @@ class LeggedSensorimotorActuatorTest {
         }
         assertTrue(a.forwardVelocity < .05f)
         assertTrue(a.yawRate < .08f)
+    }
+
+
+    @Test
+    fun unequalNeuralLegDrive_changesInterLegTiming() {
+        val a = LeggedSensorimotorActuator()
+        val before = a.phase.clone()
+        val motor = FloatArray(6) { i -> if (i == 0) .12f else .55f }
+        repeat(180) { a.step(motor, 0f, .02f) }
+        val phaseDeltaBefore = (before[0] - before[1])
+        val phaseDeltaAfter = (a.phase[0] - a.phase[1])
+        assertTrue(abs(phaseDeltaAfter - phaseDeltaBefore) > .05f)
+        assertTrue(a.legPhaseSpread > .05f)
     }
 
     @Test

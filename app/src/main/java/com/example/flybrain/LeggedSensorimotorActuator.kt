@@ -8,7 +8,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.14 embodied sensorimotor actuator.
+ * V1.19.28 adaptive six-leg sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -23,11 +23,12 @@ class LeggedSensorimotorActuator {
     companion object {
         const val LEG_COUNT = 6
         private const val TWO_PI = (PI * 2.0).toFloat()
-        // Modified tripod: RF→LM→RH and LF→RM→LH, with ~0.5-cycle opposition.
         // Group order: LF, LM, LH, RF, RM, RH.
-        private val TRIPOD_OFFSETS = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)
-        private val TRIPOD_A = intArrayOf(3, 1, 5) // RF -> LM -> RH
-        private val TRIPOD_B = intArrayOf(0, 4, 2) // LF -> RM -> LH
+        // These are startup phases only. They are NOT re-applied as a permanent
+        // tripod constraint: each leg subsequently advances from its own measured
+        // neural motor drive. This lets neural activity and proprioceptive state
+        // change the inter-leg timing instead of forcing a perpetual tripod.
+        private val INITIAL_PHASES = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)
         private const val STANCE_DUTY = .62f
         private const val MIN_PHASE_HZ = 1.20f
         private const val MAX_PHASE_HZ = 16.0f
@@ -103,6 +104,9 @@ class LeggedSensorimotorActuator {
     /** Signed dimensionless left/right force imbalance used by the physical yaw model. */
     var yawForceProxy = 0f
         private set
+    /** Signed body-yaw torque proxy from the six individual stance-foot force vectors. */
+    var yawTorqueProxy = 0f
+        private set
     /** Fraction of the six legs carrying measurable stance contact. */
     var supportCoverage = 0f
         private set
@@ -112,8 +116,8 @@ class LeggedSensorimotorActuator {
     private var bilateralSymmetryFiltered = 0f
     private var leftPropulsionFiltered = 0f
     private var rightPropulsionFiltered = 0f
-    /** 0..1 coherence of the imposed modified-tripod mechanical phase relationship. */
-    var tripodPhaseCoherence = 0f
+    /** 0..1 spread of the six independent leg phases; diagnostic only. */
+    var legPhaseSpread = 0f
         private set
     var wallPressure = 0f
         private set
@@ -127,7 +131,8 @@ class LeggedSensorimotorActuator {
     private val baseLateral = floatArrayOf(-.058f, -.065f, -.058f, .058f, .065f, .058f)
 
     fun reset() {
-        phase.fill(0f); contact.fill(0f); load.fill(0f); stance.fill(0f); swing.fill(0f)
+        for (g in 0 until LEG_COUNT) phase[g] = INITIAL_PHASES[g] * TWO_PI
+        contact.fill(0f); load.fill(0f); stance.fill(0f); swing.fill(0f)
         stride.fill(0f); lift.fill(0f); extension.fill(0f)
         footForward.fill(0f); footLateral.fill(0f); footLift.fill(0f)
         previousStride.fill(0f)
@@ -139,12 +144,13 @@ class LeggedSensorimotorActuator {
         mechanicalActivity = 0f
         forwardForceProxy = 0f
         yawForceProxy = 0f
+        yawTorqueProxy = 0f
         supportCoverage = 0f
         bilateralMechanicalSymmetry = 0f
         bilateralSymmetryFiltered = 0f
         leftPropulsionFiltered = 0f
         rightPropulsionFiltered = 0f
-        tripodPhaseCoherence = 0f
+        legPhaseSpread = 0f
         wallPressure = 0f
     }
 
@@ -170,6 +176,7 @@ class LeggedSensorimotorActuator {
         var totalLoad = 0f
         var totalContact = 0f
         var totalPropulsion = 0f
+        var yawTorque = 0f
 
         for (g in 0 until LEG_COUNT) {
             val a = (legActivation[g].coerceIn(0f, 1f) * walkGate).coerceIn(0f, 1f)
@@ -180,7 +187,11 @@ class LeggedSensorimotorActuator {
             while (phase[g] >= TWO_PI) phase[g] -= TWO_PI
             while (phase[g] < 0f) phase[g] += TWO_PI
 
-            var cycle = (phase[g] / TWO_PI + TRIPOD_OFFSETS[g]) % 1f
+            // The phase is now the leg's own state. There is no per-frame
+            // tripod offset imposed here. Different neural drives can therefore
+            // advance the six legs at different rates and let their coordination
+            // drift from the startup condition.
+            var cycle = (phase[g] / TWO_PI) % 1f
             if (cycle < 0f) cycle += 1f
             val s = cycle < STANCE_DUTY
             val u = if (s) (cycle / STANCE_DUTY).coerceIn(0f, 1f) else
@@ -217,6 +228,14 @@ class LeggedSensorimotorActuator {
             // Normalize the foot stroke velocity so it becomes a bounded force proxy.
             val force = (propulsive * .055f * (0.55f + .45f * a)).coerceIn(0f, .22f)
             totalPropulsion += force
+            // Use the actual lateral location of each stance foot to form a
+            // signed torque proxy. This is still downstream mechanics: no wall,
+            // food or action variable enters. A side imbalance is therefore
+            // weighted by where the force is applied, rather than collapsing the
+            // six legs immediately into one left/right scalar.
+            if (s && force > 0f) {
+                yawTorque += footLateral[g] * force
+            }
             totalLoad += load[g]
             totalContact += contact[g]
             if (g < 3) {
@@ -244,26 +263,19 @@ class LeggedSensorimotorActuator {
             (leftPropulsionFiltered + rightPropulsionFiltered + .001f)).coerceIn(0f, 1f)
         bilateralMechanicalSymmetry = bilateralSymmetryFiltered
 
-        // The modified tripod is a mechanical coordination constraint rather than
-        // a behavioral command. Telemetry compares the actual phase-plus-offset
-        // of each leg with the fixed front->middle->hind lag used by this actuator.
-        var phaseError = 0f
-        var phaseChecks = 0
-        fun accumulateTripodPhaseError(group: IntArray) {
-            val reference = (phase[group[0]] / TWO_PI + TRIPOD_OFFSETS[group[0]]) % 1f
-            for (j in 1 until group.size) {
-                val expected = (reference + TRIPOD_OFFSETS[group[j]] -
-                    TRIPOD_OFFSETS[group[0]]) % 1f
-                val actual = (phase[group[j]] / TWO_PI + TRIPOD_OFFSETS[group[j]]) % 1f
-                val d = abs(actual - expected) % 1f
-                phaseError += minOf(d, 1f - d)
-                phaseChecks++
-            }
+        // Inter-leg timing is intentionally no longer forced back toward a
+        // modified-tripod reference. The six phases are independent state variables;
+        // the only coordination available to them is the neural drive and the
+        // proprioceptive feedback returned through MainActivity.
+
+        var phaseMeanX = 0f
+        var phaseMeanY = 0f
+        for (g in 0 until LEG_COUNT) {
+            phaseMeanX += kotlin.math.cos(phase[g].toDouble()).toFloat()
+            phaseMeanY += kotlin.math.sin(phase[g].toDouble()).toFloat()
         }
-        accumulateTripodPhaseError(TRIPOD_A)
-        accumulateTripodPhaseError(TRIPOD_B)
-        tripodPhaseCoherence = (1f - phaseError / phaseChecks.coerceAtLeast(1).toFloat() / .25f)
-            .coerceIn(0f, 1f)
+        val phaseConcentration = hypot(phaseMeanX, phaseMeanY) / LEG_COUNT.toFloat()
+        legPhaseSpread = (1f - phaseConcentration).coerceIn(0f, 1f)
 
         // Each stance foot contributes to the body's net propulsive force.
         // Summing then saturating preserves the contribution of multiple legs;
@@ -280,6 +292,9 @@ class LeggedSensorimotorActuator {
         val totalTurnPropulsion = (rightPropulsion + leftPropulsion).coerceAtLeast(0f)
         val turnBalance = ((rightPropulsion - leftPropulsion) /
             (totalTurnPropulsion + .0005f)).coerceIn(-1f, 1f)
+        val torqueScale = (.065f * .22f * 2f).coerceAtLeast(.0001f)
+        val normalizedYawTorque = (yawTorque / torqueScale).coerceIn(-1f, 1f)
+        yawTorqueProxy = normalizedYawTorque
         // Turn authority exists only when real stance propulsion exists. This
         // preserves a genuine asymmetric gait response while preventing residual
         // one-sided activity from spinning a stationary body.
@@ -304,7 +319,12 @@ class LeggedSensorimotorActuator {
         // yaw creates a deadlock in which a real asymmetric neural gait can no
         // longer reorient the body. Wall contact itself still never writes yaw
         // or gait phase; it only changes physical velocity and sensory feedback.
-        val neuralYawTarget = turnBalance * MAX_YAW_RATE * turnDrive * pauseYawGate
+        // Primary steering signal is now the six-leg force moment. The old
+        // bilateral scalar remains only as a bounded fallback when the instantaneous
+        // foot-force moment is numerically tiny. Both signals originate exclusively
+        // from measured leg-MN-driven mechanics.
+        val steeringSignal = if (abs(normalizedYawTorque) > .015f) normalizedYawTorque else turnBalance
+        val neuralYawTarget = steeringSignal * MAX_YAW_RATE * turnDrive * pauseYawGate
         val yawTarget = neuralYawTarget.coerceIn(-MAX_YAW_RATE, MAX_YAW_RATE)
         val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f) {
             YAW_STOP_RESPONSE_TAU

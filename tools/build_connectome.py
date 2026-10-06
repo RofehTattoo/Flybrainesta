@@ -25,7 +25,7 @@ import pyarrow.ipc as ipc
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
 FLYBRAIN_RELEASE = "1.19.27"
-APP_VERSION_CODE = 168
+APP_VERSION_CODE = 169
 REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
@@ -1543,7 +1543,7 @@ object GeneratedConnectomeMeta {
     const val FLYBRAIN_VERSION = "1.19.27"
     const val FLYBRAIN_VERSION_CODE = 166
     const val APP_VERSION = "1.19.27"
-    const val APP_VERSION_CODE = 168
+    const val APP_VERSION_CODE = 169
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = %d
     // 54 distinct published (type, entryNerve) combinations; 53 unique
