@@ -237,7 +237,7 @@ class MainActivity : Activity() {
 
 
     /**
-     * V1.19.23 startup observatory.
+     * V1.19.24 startup observatory.
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
      * It remains on screen after loading until the user explicitly starts the simulation.
      */
@@ -390,14 +390,6 @@ class MainActivity : Activity() {
         private val FEEDING_PROBOSCIS_NEURON_SPIKE_MIN = 1
         private val FEEDING_INGESTION_NEURON_SPIKE_MIN = 1
         private val FEEDING_TASTE_NEURON_SPIKE_MIN = 1
-        // Read-only temporal association window for the measured feeding route.
-        // It allows delayed MN9/MN11/CEM spikes to be recognized as one neural
-        // feeding episode without issuing any motor command or changing the graph.
-        private val FEEDING_TASTE_HOLD_SECONDS = 1.20f
-        private val FEEDING_PROBOSCIS_HOLD_SECONDS = 2.40f
-        private val FEEDING_INGESTION_HOLD_SECONDS = 3.00f
-        private val FEEDING_PAUSE_ATTACK_TAU = 0.055f
-        private val FEEDING_PAUSE_RELEASE_TAU = 0.75f
         private val FEEDING_CONTEXT_WINDOW_SECONDS = 0.75f
         private val FEEDING_PHARYNGEAL_CONTEXT_WINDOW_SECONDS = 0.80f
 
@@ -500,9 +492,6 @@ class MainActivity : Activity() {
         private var tasteContactNeuralNow = false
         private var proboscisNeuralNow = false
         private var ingestionNeuralNow = false
-        private var feedingPauseActivation = 0f
-        private var feedingPauseHoldSeconds = 0f
-        private var feedingPausePeak = 0f
         private var haltDuringFoodContactNow = false
         private var tasteContactEpisodes = 0
         private var proboscisEpisodes = 0
@@ -1064,9 +1053,6 @@ class MainActivity : Activity() {
             tasteContactNeuralNow = false
             proboscisNeuralNow = false
             ingestionNeuralNow = false
-            feedingPauseActivation = 0f
-            feedingPauseHoldSeconds = 0f
-            feedingPausePeak = 0f
             haltDuringFoodContactNow = false
             tasteContactEpisodes = 0
             proboscisEpisodes = 0
@@ -2933,45 +2919,10 @@ class MainActivity : Activity() {
                 proboscisContextActive &&
                 ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN
 
-            // Neural feeding events renew a finite dwell. Gustatory, proboscis and
-            // ingestion outputs can be separated by neural propagation delays; the
-            // temporal context above associates them without synthesizing spikes.
-            // Only this measured neural state reaches the locomotor walk-off gate.
-            if (tasteNeural) {
-                feedingPauseHoldSeconds = max(
-                    feedingPauseHoldSeconds, FEEDING_TASTE_HOLD_SECONDS
-                )
-                feedingPausePeak = max(feedingPausePeak, .72f)
-            }
-            if (proboscisNeural) {
-                feedingPauseHoldSeconds = max(
-                    feedingPauseHoldSeconds, FEEDING_PROBOSCIS_HOLD_SECONDS
-                )
-                feedingPausePeak = max(feedingPausePeak, .94f)
-            }
-            if (ingestionNeural) {
-                feedingPauseHoldSeconds = max(
-                    feedingPauseHoldSeconds, FEEDING_INGESTION_HOLD_SECONDS
-                )
-                feedingPausePeak = 1f
-            }
-
-            val feedingPauseTarget = if (feedingPauseHoldSeconds > 0f) {
-                feedingPausePeak.coerceIn(0f, 1f)
-            } else 0f
-            val pauseTau = if (feedingPauseTarget > feedingPauseActivation) {
-                FEEDING_PAUSE_ATTACK_TAU
-            } else {
-                FEEDING_PAUSE_RELEASE_TAU
-            }
-            feedingPauseActivation = relaxMotorActivation(
-                feedingPauseActivation, feedingPauseTarget,
-                dt.coerceAtLeast(.001f), pauseTau
-            )
-            feedingPauseHoldSeconds = (feedingPauseHoldSeconds - dt).coerceAtLeast(0f)
-            if (feedingPauseHoldSeconds <= 0f && feedingPauseTarget <= 0f) {
-                feedingPausePeak = 0f
-            }
+            // Feeding semantics are read-only. Gustatory/proboscis/ingestion
+            // events are acknowledged from measured spikes and temporal context;
+            // they do not synthesize a locomotor pause. Any locomotor stop must
+            // come from the retained neural walk-off populations measured above.
 
             tasteContactNeuralNow = tasteNeural
             proboscisNeuralNow = proboscisNeural
@@ -3380,7 +3331,7 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19.23: isolated physical/mechanical integration boundary.
+            // V1.19.24: isolated physical/mechanical integration boundary.
             // The method below consumes only measured VNC leg activity + walk-OFF.
             applyMechanicalBodyState(dt)
 
@@ -3457,7 +3408,7 @@ class MainActivity : Activity() {
         }
 
         /**
-         * V1.19.23 physical/mechanical body boundary.
+         * V1.19.24 physical/mechanical body boundary.
          *
          * This function deliberately receives no food, light, danger or action
          * variables. It consumes only measured VNC motor state already reduced into

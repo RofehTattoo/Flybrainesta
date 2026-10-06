@@ -54,11 +54,11 @@ assert 'for (id in 0 until N)' in MAIN and 'brainDisplayLookup[id] >= 0' in MAIN
 assert 'loadAnatomicalVisualMap()' in MAIN
 assert 'anatomical_visual_map.tsv' in WF
 assert 'python tools/test_anatomical_visual_map.py' in WF
-assert 'const val APP_VERSION = "1.19.23"' in META
-assert 'const val APP_VERSION_CODE = 164' in META
-assert 'versionName = "1.19.23"' in GRADLE
-assert 'versionCode = 164' in GRADLE
-assert 'android:label="FlyBrain V1.19.23"' in MANIFEST
+assert 'const val APP_VERSION = "1.19.24"' in META
+assert 'const val APP_VERSION_CODE = 165' in META
+assert 'versionName = "1.19.24"' in GRADLE
+assert 'versionCode = 165' in GRADLE
+assert 'android:label="FlyBrain V1.19.24"' in MANIFEST
 
 if args.map_path:
     mp = Path(args.map_path)
@@ -89,4 +89,4 @@ for forbidden in (
 ):
     assert forbidden not in MAIN[MAIN.find('private fun drawBrainMap'):MAIN.find('private fun drawFly')]
 
-print("V1.19.23 ANATOMICAL VISUAL MAP / SENSOR-ORGAN PLACEMENT AUDIT: PASS")
+print("V1.19.24 ANATOMICAL VISUAL MAP / SENSOR-ORGAN PLACEMENT AUDIT: PASS")

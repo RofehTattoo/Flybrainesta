@@ -1,4 +1,4 @@
-# FlyBrain — V1.19.23 / FBR-10-OLF2-MOTORROUTE
+# FlyBrain — V1.19.24 / FBR-10-OLF2-MOTORROUTE
 
 FlyBrain is an Android simulation built from the published MaleCNS v1.0 connectome of the male *Drosophila* central nervous system.
 
@@ -64,9 +64,9 @@ The feeding chain is measured rather than hard-coded as a body controller:
 
 Body movement is driven from measured retained VNC motor activity. The body mechanics are an engineering readout layer; they are not claimed to be a full biomechanical model of *Drosophila*.
 
-## V1.19.23 stabilization boundary
+## V1.19.24 stabilization boundary
 
-V1.19.23 is a stabilization and validation release, not a connectome expansion.
+V1.19.24 is a stabilization and validation release, not a connectome expansion.
 The release adds explicit locomotion observability and CI checks for three layers:
 
 - neural: six leg groups are derived from measured retained VNC motor-neuron output and walk-OFF from retained halt neurons;
@@ -124,7 +124,7 @@ FBD105 validation requires the generated `malecns_fbr10_dynamics.bin` and its bu
 Previous V1.12–V1.16 audits and changelogs are preserved under `docs/history/`. They describe historical states and are not current runtime specifications.
 
 
-## V1.19.23 anatomical visual placement
+## V1.19.24 anatomical visual placement
 
 The neural observatory now uses a source-derived anatomical placement map. Primary
 sensory receptors are anchored to their receptor organs, VNC motor neurons to the
