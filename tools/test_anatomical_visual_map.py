@@ -55,9 +55,9 @@ assert 'loadAnatomicalVisualMap()' in MAIN
 assert 'anatomical_visual_map.tsv' in WF
 assert 'python tools/test_anatomical_visual_map.py' in WF
 assert 'const val APP_VERSION = "1.19.27"' in META
-assert 'const val APP_VERSION_CODE = 167' in META
+assert 'const val APP_VERSION_CODE = 168' in META
 assert 'versionName = "1.19.27"' in GRADLE
-assert 'versionCode = 167' in GRADLE
+assert 'versionCode = 168' in GRADLE
 assert 'android:label="FlyBrain V1.19.27"' in MANIFEST
 
 if args.map_path:

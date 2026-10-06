@@ -28,9 +28,9 @@ assert 'expected_primary_visual = int(round(source_primary_visual_count * 0.10))
 assert 'counts["VIS"] != expected_primary_visual' in SENS
 assert 'const val RETAINED_OLFACTORY_ORNS = 264' in META
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION_CODE = 167' in META
+assert 'const val APP_VERSION_CODE = 168' in META
 assert 'versionName = "1.19.27"' in GRADLE
-assert 'versionCode = 167' in GRADLE
+assert 'versionCode = 168' in GRADLE
 print('V1.19.27 VISUAL FBR-10 RECONSTRUCTION CONTRACT: PASS')
 
 # When run after build_connectome.py in CI, verify the generated report itself.

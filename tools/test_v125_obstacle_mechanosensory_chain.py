@@ -33,7 +33,7 @@ assert "heading = Math.PI.toFloat() - heading" not in body
 assert "heading = -heading" not in body
 
 assert 'const val APP_VERSION = "1.19.27"' in META
-assert 'const val APP_VERSION_CODE = 167' in META
+assert 'const val APP_VERSION_CODE = 168' in META
 assert 'versionName = "1.19.27"' in GRADLE
-assert 'versionCode = 167' in GRADLE
+assert 'versionCode = 168' in GRADLE
 print("V1.19.27 OBSTACLE CONTACT → MECHANOSENSORY → CONNECTOME AUDIT: PASS")

@@ -7,9 +7,9 @@ GRADLE = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 MANIFEST = (ROOT / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
 
 assert 'const val APP_VERSION = "1.19.27"' in META
-assert 'const val APP_VERSION_CODE = 167' in META
+assert 'const val APP_VERSION_CODE = 168' in META
 assert 'versionName = "1.19.27"' in GRADLE
-assert 'versionCode = 167' in GRADLE
+assert 'versionCode = 168' in GRADLE
 assert '"versionCode": 164' in (ROOT / 'RELEASE_MANIFEST_FBR10_OLF2.json').read_text(encoding='utf-8')
 assert 'android:label="FlyBrain V1.19.27"' in MANIFEST
 

@@ -49,7 +49,7 @@ assert 'route_visual_turn' in BUILD and 'route_visual_escape' in BUILD
 assert 'visual_three_turn' in BUILD and 'visual_three_escape' in BUILD
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
 assert 'const val APP_VERSION = "1.19.27"' in META
-assert 'const val APP_VERSION_CODE = 167' in META
+assert 'const val APP_VERSION_CODE = 168' in META
 assert 'versionName = "1.19.27"' in GRADLE
-assert 'versionCode = 167' in GRADLE
+assert 'versionCode = 168' in GRADLE
 print('V1.19.27 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')

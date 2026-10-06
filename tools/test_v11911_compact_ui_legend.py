@@ -15,5 +15,5 @@ assert 'Triple("ASC.", Color.rgb(55, 190, 210), 5)' in MAIN
 assert 'Triple("MOTOR", Color.rgb(235, 70, 75), 6)' in MAIN
 assert 'Triple("CENTRAL", Color.rgb(150, 160, 170), 7)' in MAIN
 assert 'APP_VERSION = "1.19.27"' in META
-assert 'APP_VERSION_CODE = 167' in META
+assert 'APP_VERSION_CODE = 168' in META
 print("V1.19.11 COMPACT UI / NEURAL COLOR LEGEND REGRESSION: PASS")

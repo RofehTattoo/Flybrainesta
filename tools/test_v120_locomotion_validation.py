@@ -23,10 +23,10 @@ BUILDER = (ROOT / "tools/build_connectome.py").read_text(encoding="utf-8")
 
 # Release identity must be synchronized.
 assert 'const val APP_VERSION = "1.19.27"' in META
-assert 'const val APP_VERSION_CODE = 167' in META
+assert 'const val APP_VERSION_CODE = 168' in META
 assert 'SOURCE_NEUROTRANSMITTERS_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"' in META
 assert 'versionName = "1.19.27"' in GRADLE
-assert 'versionCode = 167' in GRADLE
+assert 'versionCode = 168' in GRADLE
 assert 'android:label="FlyBrain V1.19.27"' in MANIFEST
 
 # Mechanical layer: six independent legs, stance/swing/contact and modified-tripod timing.
