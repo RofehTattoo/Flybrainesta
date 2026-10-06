@@ -17,7 +17,8 @@ assert 'PAUSA ESPONTÁNEA' in MAIN
 assert 'BODY_MIN_X' in MAIN and 'BODY_MAX_X' in MAIN and 'BODY_MIN_Y' in MAIN and 'BODY_MAX_Y' in MAIN
 assert 'fun applyWallConstraint(' in ACT and 'contactActive: Boolean' in ACT
 assert 'outward < 0f' in ACT and 'heading = -heading' not in MAIN
-assert 'TRIPOD_OFFSETS = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)' in ACT
+assert 'INITIAL_PHASES = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)' in ACT
+assert 'TRIPOD_OFFSETS' not in ACT
 assert 'supportMean * 1.75f' not in ACT
 assert 'gustatoryLabellarReceptorIndices' in MAIN and 'gustatoryPharyngealReceptorIndices' in MAIN
 assert '"LABELLAR"' in SENS and '"PHARYNGEAL"' in SENS and '"TARSAL"' in SENS
@@ -34,5 +35,5 @@ assert 'max(wallLeft, wallTop * .30f)' not in MAIN
 assert 'max(wallRight, wallBottom * .30f)' not in MAIN
 assert 'if (foodOn && foodAmount > 0f)' in MAIN
 assert 'WALL_TANGENTIAL_FRICTION' in ACT
-assert '1.19.29' in META and '170' in META and '1.19.29' in GRADLE and '170' in GRADLE
+assert '1.19.30' in META and '171' in META and '1.19.30' in GRADLE and '171' in GRADLE
 print('V1.19.7 EMBODIED PAUSE/WALL/FEEDING AUDIT: PASS')

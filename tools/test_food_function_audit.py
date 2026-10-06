@@ -27,6 +27,6 @@ assert 'FEEDING_FUNCTION_INGESTION_PHARYNGEAL' in META
 assert 'cb_motor' in FEED and 'mn9' in FEED and 'mn4a' in FEED and 'mn11d' in FEED
 assert 'leg bristle' in SENS
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'APP_VERSION = "1.19.29"' in META and 'APP_VERSION_CODE = 170' in META
+assert 'APP_VERSION = "1.19.30"' in META and 'APP_VERSION_CODE = 171' in META
 print('NEURAL FOOD CONTACT→TASTE→PROBOSCIS→INGESTION AUDIT: PASS')
 print('CURRENT BOOTSTRAP FBC SHA-256:',hashlib.sha256(FBC.read_bytes()).hexdigest())

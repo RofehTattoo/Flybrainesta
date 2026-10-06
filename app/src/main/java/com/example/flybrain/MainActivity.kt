@@ -3336,9 +3336,12 @@ class MainActivity : Activity() {
             jumpActivationState = relaxMotorActivation(jumpActivationState, rawJumpActivity, dt)
             abdomenActivationState = relaxMotorActivation(abdomenActivationState, rawAbdomenActivity, dt)
 
-            // V1.19.1: separate tonic motor baseline from phasic locomotor output.
-            // A stable ~5-6 Hz rate is treated as motor tone; propulsion requires
-            // measured rate excess/rise above each leg's own recent baseline.
+            // V1.19.30: the previous decoder treated tonic VNC leg firing as
+            // non-propulsive background. That made locomotion depend almost entirely
+            // on rate excursions above an adaptive baseline and could erase real
+            // motor asymmetries after several seconds. Adult walking motor neurons
+            // carry both tonic and phasic drive; the reduced actuator therefore keeps
+            // both components while retaining the measured six-leg neural origin.
             if (!legBaselineReady) {
                 for (g in 0 until LEG_COUNT) {
                     val total = legGroupTotals[g]
@@ -3346,7 +3349,7 @@ class MainActivity : Activity() {
                     legBaselineRateHz[g] = rate
                     legPreviousRateHz[g] = rate
                     legGroupRateHz[g] = rate
-                    legGroupActivation[g] = 0f
+                    legGroupActivation[g] = (rate / (rate + 4f)).coerceIn(0f, 1f) * .42f
                 }
                 legBaselineReady = true
             } else {
@@ -3357,10 +3360,17 @@ class MainActivity : Activity() {
                     val baseline = legBaselineRateHz[g]
                     val excess = (rate - baseline - 0.90f).coerceAtLeast(0f)
                     val rise = (rate - legPreviousRateHz[g]).coerceAtLeast(0f)
-                    val burst = (excess / 5.0f * .82f + rise / 4.0f * .18f).coerceIn(0f, 1f)
-                    val target = burst
+                    val burst = (excess / 5.0f * .78f + rise / 4.0f * .22f).coerceIn(0f, 1f)
+                    val tonic = (rate / (max(baseline, 1f) + 4f)).coerceIn(0f, 1f)
+                    // Neural leg drive is now a bounded mixture of the measured
+                    // instantaneous rate and its phasic excess. No stimulus/action
+                    // variable enters this decoder.
+                    val target = (tonic * .42f + burst * .58f).coerceIn(0f, 1f)
                     legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
-                    val baseTau = if (burst < .18f) 4.5f else 14f
+
+                    // Slow baseline adaptation is diagnostic only; the motor target
+                    // above does not subtract it away completely.
+                    val baseTau = if (burst < .18f) 8f else 18f
                     val baseAlpha = (1f - exp((-dt / baseTau).toDouble()).toFloat()).coerceIn(0f, 1f)
                     legBaselineRateHz[g] += (rate - legBaselineRateHz[g]) * baseAlpha
                     legPreviousRateHz[g] = rate
@@ -3542,6 +3552,56 @@ class MainActivity : Activity() {
             yawRate = legActuator.yawRate
             worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
             worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
+
+            // V1.19.30: six individual stance feet can generate a local wall-reaction
+            // torque when their actual kinematic contact point intersects the arena
+            // envelope. This is physical reaction mechanics, not an escape controller:
+            // there is no target, stimulus, action score or prescribed turn direction.
+            var wallReactionTorque = 0f
+            val caFoot = cos(heading)
+            val saFoot = sin(heading)
+            val rightFootX = -saFoot
+            val rightFootY = caFoot
+            val footTorqueScale = (.065f * .22f * 2f).coerceAtLeast(.0001f)
+            val bodyYawInertia = 0.20f
+            for (g in 0 until LeggedSensorimotorActuator.LEG_COUNT) {
+                val load = legActuator.load[g].coerceIn(0f, 1f)
+                if (load <= .02f) continue
+                val fx = flyX + caFoot * legActuator.footForward[g] + rightFootX * legActuator.footLateral[g]
+                val fy = flyY + saFoot * legActuator.footForward[g] + rightFootY * legActuator.footLateral[g]
+                var rx = 0f
+                var ry = 0f
+                val penL = (BODY_MIN_X - fx).coerceAtLeast(0f)
+                val penR = (fx - BODY_MAX_X).coerceAtLeast(0f)
+                val penT = (BODY_MIN_Y - fy).coerceAtLeast(0f)
+                val penB = (fy - BODY_MAX_Y).coerceAtLeast(0f)
+                if (penL > 0f) rx += load * penL / .025f
+                if (penR > 0f) rx -= load * penR / .025f
+                if (penT > 0f) ry += load * penT / .025f
+                if (penB > 0f) ry -= load * penB / .025f
+                rx = rx.coerceIn(-1f, 1f)
+                ry = ry.coerceIn(-1f, 1f)
+                // Reaction-force moment r x F, entirely determined by local foot
+                // position and the measured stance load.
+                val rX = caFoot * legActuator.footForward[g] - saFoot * legActuator.footLateral[g]
+                val rY = saFoot * legActuator.footForward[g] + caFoot * legActuator.footLateral[g]
+                wallReactionTorque += rX * ry - rY * rx
+            }
+            val normalizedWallTorque = (wallReactionTorque / footTorqueScale).coerceIn(-1f, 1f)
+            legActuator.recordWallReactionTorque(normalizedWallTorque)
+            // Integrate only the physical contact-reaction torque. It is deliberately
+            // small relative to the neural steering channel and cannot synthesize a
+            // direction when no contacting foot supplies a moment.
+            yawRate = (yawRate + normalizedWallTorque * 1.35f * dt / bodyYawInertia)
+                .coerceIn(-1.80f, 1.80f)
+            if (abs(normalizedWallTorque) > .0001f) {
+                heading += normalizedWallTorque * 1.35f * dt / bodyYawInertia
+                val twoPi = (Math.PI * 2.0).toFloat()
+                if (heading > Math.PI.toFloat()) heading -= twoPi
+                if (heading < -Math.PI.toFloat()) heading += twoPi
+                worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
+                worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
+            }
             }
             var nextFlyX = flyX + worldVx * dt
             var nextFlyY = flyY + worldVy * dt

@@ -110,6 +110,9 @@ class LeggedSensorimotorActuator {
     /** Fraction of the six legs carrying measurable stance contact. */
     var supportCoverage = 0f
         private set
+    /** Signed yaw torque proxy created by local wall/foot contact reaction mechanics. */
+    var wallReactionTorqueProxy = 0f
+        private set
     /** 0..1 bilateral mechanical symmetry; 1 means equal left/right support. */
     var bilateralMechanicalSymmetry = 0f
         private set
@@ -155,6 +158,7 @@ class LeggedSensorimotorActuator {
         forwardForceProxy = 0f
         yawForceProxy = 0f
         yawTorqueProxy = 0f
+        wallReactionTorqueProxy = 0f
         supportCoverage = 0f
         bilateralMechanicalSymmetry = 0f
         bilateralSymmetryFiltered = 0f
@@ -171,6 +175,7 @@ class LeggedSensorimotorActuator {
     fun step(legActivation: FloatArray, walkOffActivation: Float, dtRaw: Float) {
         require(legActivation.size >= LEG_COUNT)
         val dt = dtRaw.coerceAtLeast(LINEAR_RESPONSE_MIN_DT)
+        wallReactionTorqueProxy = 0f
         // A near-complete neural halt must actually stop the gait oscillator.
         // Squaring the residual gate preserves graded partial walk-off, while
         // preventing a small residual leg drive from sustaining a slow crawl
@@ -244,6 +249,10 @@ class LeggedSensorimotorActuator {
             // weighted by where the force is applied, rather than collapsing the
             // six legs immediately into one left/right scalar.
             if (s && force > 0f) {
+                // Exact planar cross-product for a forward stance force. Keeping the
+                // full lever-arm expression makes the mechanics explicit: the six
+                // individual foot positions, not a direct left/right command, create
+                // the yaw moment.
                 yawTorque += footLateral[g] * force
             }
             totalLoad += load[g]
@@ -409,6 +418,15 @@ class LeggedSensorimotorActuator {
             .coerceIn(0f, MAX_FORWARD_SPEED)
         lateralVelocity = (-vx * s + vy * c)
             .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
+    }
+
+    /**
+     * Record a mechanically derived wall-reaction torque. This is a physical
+     * contact result from the already simulated six stance feet; it is not a
+     * behavioral command and never changes leg phase or neural activation.
+     */
+    fun recordWallReactionTorque(normalizedTorque: Float) {
+        wallReactionTorqueProxy = normalizedTorque.coerceIn(-1f, 1f)
     }
 
     private fun bilateralMechanicalMean(start: Int, end: Int): Float {
