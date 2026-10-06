@@ -17,7 +17,7 @@ assert 'dangerLoomMemory' in MAIN
 assert 'dangerOnsetMemory' in MAIN
 assert 'previousDangerOn' in MAIN
 assert 'setMappedSensoryRate(\n                visualReceptorIndices,' not in MAIN
-# V1.19.25 isolates the physical/mechanical body integration in its own function.
+# V1.19.26 isolates the physical/mechanical body integration in its own function.
 # That function is the protected causal boundary: it may consume only measured
 # VNC leg motor groups and walk-OFF neural output.
 def kotlin_function_span(source: str, signature: str) -> str:
@@ -37,7 +37,7 @@ for token in ('approachAction', 'escapeAction', 'orientAction', 'lightDrive', 'd
     assert token not in causal_body, token
 assert 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in causal_body
 assert 'applyMechanicalBodyState(dt)' in drive_body
-# V1.19.25 explicitly reconstructs the visual slice of FBR-10 while keeping the
+# V1.19.26 explicitly reconstructs the visual slice of FBR-10 while keeping the
 # global 16,669-node target and the induced-edge rule. The primary receptor quota
 # must be derived from the pinned MaleCNS source, never from the old selected graph.
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in BUILD
@@ -48,8 +48,8 @@ assert 'annotated["channel"] != 0' in BUILD
 assert 'route_visual_turn' in BUILD and 'route_visual_escape' in BUILD
 assert 'visual_three_turn' in BUILD and 'visual_three_escape' in BUILD
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.19.25"' in META
-assert 'const val APP_VERSION_CODE = 166' in META
-assert 'versionName = "1.19.25"' in GRADLE
-assert 'versionCode = 166' in GRADLE
-print('V1.19.25 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')
+assert 'const val APP_VERSION = "1.19.26"' in META
+assert 'const val APP_VERSION_CODE = 167' in META
+assert 'versionName = "1.19.26"' in GRADLE
+assert 'versionCode = 167' in GRADLE
+print('V1.19.26 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')

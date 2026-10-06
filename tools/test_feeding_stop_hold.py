@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.25 regression audit for neural feeding semantics and physical walk-off."""
+"""V1.19.26 regression audit for neural feeding semantics and physical walk-off."""
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 MAIN=(ROOT/"app/src/main/java/com/example/flybrain/MainActivity.kt").read_text()
@@ -32,4 +32,4 @@ assert "val walkGateBase = (1f - .97f * walkOffActivation.coerceIn(0f, 1f))" in 
 assert "val walkGate = walkGateBase * walkGateBase" in ACT
 assert "WALK_OFF_BRAKE_ACCEL * walkOff" in ACT
 assert "foodOn" not in ACT and "foodX" not in ACT and "foodY" not in ACT
-print("V1.19.25 FEEDING NEURAL WALK-OFF / NO SOFTWARE PAUSE BYPASS: PASS")
+print("V1.19.26 FEEDING NEURAL WALK-OFF / NO SOFTWARE PAUSE BYPASS: PASS")

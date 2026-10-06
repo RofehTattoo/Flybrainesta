@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.25 stabilization audit for the ground locomotion stack.
+"""V1.19.26 stabilization audit for the ground locomotion stack.
 
 This is a source-contract test. It does not claim biological validation by itself.
 It verifies that the release keeps a strict three-layer boundary:
@@ -22,12 +22,12 @@ WORKFLOW = (ROOT / ".github/workflows/build-apk.yml").read_text(encoding="utf-8"
 BUILDER = (ROOT / "tools/build_connectome.py").read_text(encoding="utf-8")
 
 # Release identity must be synchronized.
-assert 'const val APP_VERSION = "1.19.25"' in META
-assert 'const val APP_VERSION_CODE = 166' in META
+assert 'const val APP_VERSION = "1.19.26"' in META
+assert 'const val APP_VERSION_CODE = 167' in META
 assert 'SOURCE_NEUROTRANSMITTERS_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"' in META
-assert 'versionName = "1.19.25"' in GRADLE
-assert 'versionCode = 166' in GRADLE
-assert 'android:label="FlyBrain V1.19.25"' in MANIFEST
+assert 'versionName = "1.19.26"' in GRADLE
+assert 'versionCode = 167' in GRADLE
+assert 'android:label="FlyBrain V1.19.26"' in MANIFEST
 
 # Mechanical layer: six independent legs, stance/swing/contact and modified-tripod timing.
 for token in [
@@ -133,8 +133,8 @@ assert 'route_olfactory_forward' in BUILDER
 assert 'route_olfactory_to_desc' in BUILDER
 assert 'route_desc_to_leg' in BUILDER
 
-# CI must execute the V1.19.25 stabilization audit before the Android tests/build.
+# CI must execute the V1.19.26 stabilization audit before the Android tests/build.
 assert 'python tools/test_v120_locomotion_validation.py' in WORKFLOW
 
-print('V1.19.25 LOCOMOTION STABILIZATION AUDIT: PASS')
+print('V1.19.26 LOCOMOTION STABILIZATION AUDIT: PASS')
 print('Layers checked: NEURAL -> 6-LEG MECHANICS -> PHYSICAL BODY / WALL CONSTRAINT')

@@ -14,4 +14,4 @@ assert "phase[" not in wall
 assert "vx -= outward * nx" in wall and "vy -= outward * ny" in wall
 assert "window.setDecorFitsSystemWindows(true)" in MAIN
 assert "safe.bottom + 8.dp()" in MAIN
-print("V1.19.25 WALL-YAW / NAVIGATION PURITY REGRESSION: PASS")
+print("V1.19.26 WALL-YAW / NAVIGATION PURITY REGRESSION: PASS")

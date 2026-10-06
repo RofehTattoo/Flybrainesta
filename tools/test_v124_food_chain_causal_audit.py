@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.25 causal FOOD -> OLF -> CONNECTOME -> VNC/MN -> BODY audit.
+"""V1.19.26 causal FOOD -> OLF -> CONNECTOME -> VNC/MN -> BODY audit.
 
 This is deliberately an architectural regression test: it verifies that food
 enters only through retained sensory populations, that neural integration occurs
@@ -48,8 +48,8 @@ assert 'val tasteContactPresent = foodOn &&' in feed
 assert 'val ingestionNeural = foodOn &&' in feed
 assert 'forceExternalSpike' not in feed
 # 7) Release identity.
-assert 'APP_VERSION = "1.19.25"' in META and 'APP_VERSION_CODE = 166' in META
-assert 'versionName = "1.19.25"' in GRADLE and 'versionCode = 166' in GRADLE
+assert 'APP_VERSION = "1.19.26"' in META and 'APP_VERSION_CODE = 167' in META
+assert 'versionName = "1.19.26"' in GRADLE and 'versionCode = 167' in GRADLE
 # 8) Numerical bilateral sanity independent of runtime state.
 sigma=.30; forward=.018; half=.035
 
@@ -62,5 +62,5 @@ def sample(fx,fy,h,sx,sy,side):
 L=sample(.5,.5,0,.65,.42,-1); R=sample(.5,.5,0,.65,.42,1)
 Lm=sample(.5,.5,0,.65,.58,-1); Rm=sample(.5,.5,0,.65,.58,1)
 assert L != R and Lm != Rm and (L-R)*(Lm-Rm) < 0
-print('V1.19.25 FOOD CAUSAL CHAIN AUDIT: PASS')
+print('V1.19.26 FOOD CAUSAL CHAIN AUDIT: PASS')
 print(f'Bilateral contrast mirror check: {L-R:+.6f} / {Lm-Rm:+.6f}')

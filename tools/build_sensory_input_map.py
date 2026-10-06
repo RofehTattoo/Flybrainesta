@@ -91,6 +91,29 @@ def gust_site(row) -> str:
     return "OTHER"
 
 
+def mechanosensory_site(row) -> str:
+    """Classify retained mechanosensory receptors by their published organ/site vocabulary.
+
+    This is annotation-derived only. Unknown vocabulary remains OTHER; no geometry or
+    runtime behavior is inferred here.
+    """
+    sub = clean(row.get("subclass")).lower()
+    typ = clean(row.get("type")).lower()
+    fw = clean(row.get("flywireType")).lower()
+    text = f"{sub} {typ} {fw}"
+    if any(x in text for x in ("johnston", "antenn", "jo_", " jo")):
+        return "ANTENNAL"
+    if any(x in text for x in ("leg", "hair plate", "campaniform", "chordotonal", "tarsal")):
+        return "LEG"
+    if "wing" in text:
+        return "WING"
+    if "haltere" in text:
+        return "HALTERE"
+    if any(x in text for x in ("body", "thorax", "abdomen", "abdominal")):
+        return "BODY"
+    return "OTHER"
+
+
 def mechanosensory_receptor(row) -> bool:
     return clean(row.get("class")).lower() == "mechanosensory_proprioceptive" and bool(clean(row.get("subclass")))
 
@@ -110,9 +133,13 @@ def main():
     nodes = read_fbc103(fbc, expected_sha=None)
     by_id = {int(n["bodyId"]): n for n in nodes}
 
+    # MaleCNS v1.0's published annotation schema does not contain a generic
+    # ``name`` field.  Earlier versions of this builder requested it anyway,
+    # causing CI to fail before the sensory map could be generated.  Keep the
+    # source schema strict and use only columns actually published by MaleCNS.
     columns = [
         "bodyId", "superclass", "type", "class", "subclass", "receptorType",
-        "flywireType", "somaSide", "rootSide", "entryNerve", "instance", "name"
+        "flywireType", "somaSide", "rootSide", "entryNerve", "instance"
     ]
     table = feather.read_table(annp, columns=columns)
     by_ann = {}

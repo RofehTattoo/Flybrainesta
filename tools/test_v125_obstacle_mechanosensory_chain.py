@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.25 obstacle-contact sensory audit.
+"""V1.19.26 obstacle-contact sensory audit.
 
 A wall may influence locomotion only by entering the retained mechanosensory
 input path. The mechanical collision layer must not synthesize a turn.
@@ -13,6 +13,8 @@ META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.k
 GRADLE = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 
 assert '"mechSite"' in MAP
+assert 'def mechanosensory_site(row)' in MAP
+assert '"instance", "name"' not in MAP[MAP.index('columns = ['):MAP.index('table = feather.read_table')]
 assert 'mechanosensorySite' in MAIN
 assert 'val expectedHeader = "index\\tbodyId\\tmodality\\tsideCode\\tsideSource\\ttype\\tclass\\tsuperclass\\tsubclass\\treceptorType\\tflywireType\\tgustSite\\tmechSite"' in MAIN
 assert 'footWallLeft' in MAIN and 'footWallRight' in MAIN
@@ -30,8 +32,8 @@ assert "legActuator.applyWallConstraint(" in body
 assert "heading = Math.PI.toFloat() - heading" not in body
 assert "heading = -heading" not in body
 
-assert 'const val APP_VERSION = "1.19.25"' in META
-assert 'const val APP_VERSION_CODE = 166' in META
-assert 'versionName = "1.19.25"' in GRADLE
-assert 'versionCode = 166' in GRADLE
-print("V1.19.25 OBSTACLE CONTACT → MECHANOSENSORY → CONNECTOME AUDIT: PASS")
+assert 'const val APP_VERSION = "1.19.26"' in META
+assert 'const val APP_VERSION_CODE = 167' in META
+assert 'versionName = "1.19.26"' in GRADLE
+assert 'versionCode = 167' in GRADLE
+print("V1.19.26 OBSTACLE CONTACT → MECHANOSENSORY → CONNECTOME AUDIT: PASS")

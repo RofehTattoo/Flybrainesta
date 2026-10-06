@@ -237,7 +237,7 @@ class MainActivity : Activity() {
 
 
     /**
-     * V1.19.25 startup observatory.
+     * V1.19.26 startup observatory.
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
      * It remains on screen after loading until the user explicitly starts the simulation.
      */
@@ -2405,7 +2405,7 @@ class MainActivity : Activity() {
             accumulateWallPressure(wallTop, 0f, 1f)
             accumulateWallPressure(wallBottom, 0f, -1f)
 
-            // V1.19.25: physical obstacle contact is converted into anatomical
+            // V1.19.26: physical obstacle contact is converted into anatomical
             // mechanosensory input before it can influence the retained connectome.
             // We do NOT tell the body to turn. Instead, retained receptors receive
             // contact according to the official receptor-organ provenance:
@@ -3410,7 +3410,7 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19.25: isolated physical/mechanical integration boundary.
+            // V1.19.26: isolated physical/mechanical integration boundary.
             // The method below consumes only measured VNC leg activity + walk-OFF.
             applyMechanicalBodyState(dt)
 
@@ -3487,7 +3487,7 @@ class MainActivity : Activity() {
         }
 
         /**
-         * V1.19.25 physical/mechanical body boundary.
+         * V1.19.26 physical/mechanical body boundary.
          *
          * This function deliberately receives no food, light, danger or action
          * variables. It consumes only measured VNC motor state already reduced into

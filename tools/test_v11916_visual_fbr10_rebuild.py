@@ -28,10 +28,10 @@ assert 'expected_primary_visual = int(round(source_primary_visual_count * 0.10))
 assert 'counts["VIS"] != expected_primary_visual' in SENS
 assert 'const val RETAINED_OLFACTORY_ORNS = 264' in META
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION_CODE = 166' in META
-assert 'versionName = "1.19.25"' in GRADLE
-assert 'versionCode = 166' in GRADLE
-print('V1.19.25 VISUAL FBR-10 RECONSTRUCTION CONTRACT: PASS')
+assert 'const val APP_VERSION_CODE = 167' in META
+assert 'versionName = "1.19.26"' in GRADLE
+assert 'versionCode = 167' in GRADLE
+print('V1.19.26 VISUAL FBR-10 RECONSTRUCTION CONTRACT: PASS')
 
 # When run after build_connectome.py in CI, verify the generated report itself.
 REPORT = ROOT / "app/src/main/res/raw/malecns_reduced_report.json"
@@ -49,4 +49,4 @@ assert int(rep["visual_primary_retained"]) == expected
 assert int(rep["visual_target_total"]) == int(round(int(rep["visual_source_count"]) * 0.10))
 assert int(rep["visual_primary_route_turn_selected_nonzero"]) > 0
 assert int(rep["visual_primary_route_escape_selected_nonzero"]) > 0
-print("V1.19.25 GENERATED VISUAL FBR-10 REPORT: PASS")
+print("V1.19.26 GENERATED VISUAL FBR-10 REPORT: PASS")
