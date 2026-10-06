@@ -27,7 +27,7 @@ assert 'const val APP_VERSION_CODE = 170' in META
 assert 'SOURCE_NEUROTRANSMITTERS_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"' in META
 assert 'versionName = "1.19.29"' in GRADLE
 assert 'versionCode = 170' in GRADLE
-assert 'android:label="FlyBrain V1.19.28"' in MANIFEST
+assert 'android:label="FlyBrain V1.19.29"' in MANIFEST
 
 # Mechanical layer: six independent legs, stance/swing/contact and modified-tripod timing.
 for token in [
