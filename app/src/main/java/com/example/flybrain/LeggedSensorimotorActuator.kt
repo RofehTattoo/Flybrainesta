@@ -122,9 +122,19 @@ class LeggedSensorimotorActuator {
     var wallPressure = 0f
         private set
 
-
     private val previousStride = FloatArray(LEG_COUNT)
     private var initializedStride = false
+
+    /**
+     * The actuator must start in the same anatomically defined startup state
+     * that reset() establishes. Android constructs this object before the first
+     * simulation frame; without explicit initialization, phase[] remained all
+     * zero and the six legs began in artificial synchrony, bypassing the intended
+     * INITIAL_PHASES. This is a state-initialization bug, not a behavioral shortcut.
+     */
+    init {
+        reset()
+    }
 
     // Anatomy in body coordinates: positive forward, negative/positive lateral.
     private val baseForward = floatArrayOf(.050f, .000f, -.050f, .050f, .000f, -.050f)
