@@ -46,7 +46,6 @@ class LeggedSensorimotorActuator {
         private const val TURN_PROPULSION_DEADZONE = .018f
         private const val TURN_PROPULSION_FULL_SCALE = .105f
         private const val WALKOFF_YAW_SUPPRESSION = .92f
-        private const val MIN_TRANSLATION_FOR_NEURAL_YAW = .18f
         private const val PAUSE_YAW_CUTOFF = .20f
         private const val YAW_STOP_RESPONSE_TAU = .075f
         private const val YAW_RESPONSE_TAU = .16f
@@ -296,15 +295,16 @@ class LeggedSensorimotorActuator {
         lateralVelocity = (lateralVelocity + lateralAcceleration * dt)
             .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
 
-        val translationYawGate = (forwardVelocity / MIN_TRANSLATION_FOR_NEURAL_YAW)
-            .coerceIn(0f, 1f)
         val pauseYawGate = if (walkOff >= PAUSE_YAW_CUTOFF) 0f else
             (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
         // Yaw is generated exclusively by the measured bilateral leg-motor
-        // imbalance. Wall contact never writes yaw or gait phase; it only changes
-        // the physical velocity and feeds mechanosensory pressure back upstream.
-        val neuralYawTarget = turnBalance * MAX_YAW_RATE * turnDrive *
-            translationYawGate * pauseYawGate
+        // imbalance. Do not gate this neural yaw by forward translation: after
+        // physical wall contact the collision layer can legitimately reduce
+        // forwardVelocity to ~0, and using that velocity as a prerequisite for
+        // yaw creates a deadlock in which a real asymmetric neural gait can no
+        // longer reorient the body. Wall contact itself still never writes yaw
+        // or gait phase; it only changes physical velocity and sensory feedback.
+        val neuralYawTarget = turnBalance * MAX_YAW_RATE * turnDrive * pauseYawGate
         val yawTarget = neuralYawTarget.coerceIn(-MAX_YAW_RATE, MAX_YAW_RATE)
         val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f) {
             YAW_STOP_RESPONSE_TAU

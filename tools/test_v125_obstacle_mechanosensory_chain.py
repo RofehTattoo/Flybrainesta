@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.26 obstacle-contact sensory audit.
+"""V1.19.27 obstacle-contact sensory audit.
 
 A wall may influence locomotion only by entering the retained mechanosensory
 input path. The mechanical collision layer must not synthesize a turn.
@@ -32,8 +32,8 @@ assert "legActuator.applyWallConstraint(" in body
 assert "heading = Math.PI.toFloat() - heading" not in body
 assert "heading = -heading" not in body
 
-assert 'const val APP_VERSION = "1.19.26"' in META
+assert 'const val APP_VERSION = "1.19.27"' in META
 assert 'const val APP_VERSION_CODE = 167' in META
-assert 'versionName = "1.19.26"' in GRADLE
+assert 'versionName = "1.19.27"' in GRADLE
 assert 'versionCode = 167' in GRADLE
-print("V1.19.26 OBSTACLE CONTACT → MECHANOSENSORY → CONNECTOME AUDIT: PASS")
+print("V1.19.27 OBSTACLE CONTACT → MECHANOSENSORY → CONNECTOME AUDIT: PASS")
