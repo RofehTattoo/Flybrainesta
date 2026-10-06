@@ -20,6 +20,6 @@ assert "heading = -heading" not in body
 
 META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.19.28"' in META
-assert "const val APP_VERSION_CODE = 169" in META
+assert 'const val APP_VERSION = "1.19.29"' in META
+assert "const val APP_VERSION_CODE = 170" in META
 print("V1.19.14 YAW GATING / NO RANDOM STEERING AUDIT: PASS")

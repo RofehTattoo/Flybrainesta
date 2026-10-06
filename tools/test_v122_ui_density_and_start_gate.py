@@ -6,10 +6,10 @@ META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.k
 GRADLE = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 MANIFEST = (ROOT / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
 
-assert 'const val APP_VERSION = "1.19.28"' in META
-assert 'const val APP_VERSION_CODE = 169' in META
-assert 'versionName = "1.19.28"' in GRADLE
-assert 'versionCode = 169' in GRADLE
+assert 'const val APP_VERSION = "1.19.29"' in META
+assert 'const val APP_VERSION_CODE = 170' in META
+assert 'versionName = "1.19.29"' in GRADLE
+assert 'versionCode = 170' in GRADLE
 assert '"versionCode": 164' in (ROOT / 'RELEASE_MANIFEST_FBR10_OLF2.json').read_text(encoding='utf-8')
 assert 'android:label="FlyBrain V1.19.28"' in MANIFEST
 
