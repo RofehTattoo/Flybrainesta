@@ -20,6 +20,6 @@ assert 'val visualThreatComponent = (dangerBaseIntensity *' in MAIN
 assert 'setMappedSensoryRate(' in MAIN
 assert 'visualReceptorIndices' in MAIN
 assert 'visualRateDisplay = .72f * visualRateDisplay + .28f * visualRate' in MAIN
-assert 'const val APP_VERSION = "1.19.24"' in META
-assert 'const val APP_VERSION_CODE = 165' in META
-print("V1.19.24 VISUAL PHOTORECEPTOR ROUTE / LIGHT-LOOM ENCODER AUDIT: PASS")
+assert 'const val APP_VERSION = "1.19.25"' in META
+assert 'const val APP_VERSION_CODE = 166' in META
+print("V1.19.25 VISUAL PHOTORECEPTOR ROUTE / LIGHT-LOOM ENCODER AUDIT: PASS")

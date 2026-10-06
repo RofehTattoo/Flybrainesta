@@ -10,7 +10,7 @@ Modalities:
   MECH = mechanosensory_proprioceptive cells (source class is authoritative)
 """
 from __future__ import annotations
-import argparse, csv, hashlib, json
+import argparse, csv, hashlib, json, re
 from pathlib import Path
 import pyarrow.feather as feather
 from fbc103_reader import read_fbc103, sha256
@@ -40,6 +40,19 @@ def side_source(row):
         return ss, "somaSide"
     if rs in (-1, 1):
         return rs, "rootSide"
+
+    # Some MaleCNS sensory annotations do not populate somaSide/rootSide but
+    # encode the published lateral identity in instance/name/type strings.
+    # This is still source provenance, not a geometric guess.
+    for field in ("instance", "name", "type", "flywireType"):
+        text = clean(row.get(field)).upper()
+        if not text:
+            continue
+        tokens = re.split(r"[^A-Z0-9]+", text)
+        if any(tok in {"L", "LEFT"} for tok in tokens):
+            return -1, field
+        if any(tok in {"R", "RIGHT"} for tok in tokens):
+            return 1, field
     return 0, "unknown"
 
 
@@ -99,7 +112,7 @@ def main():
 
     columns = [
         "bodyId", "superclass", "type", "class", "subclass", "receptorType",
-        "flywireType", "somaSide", "rootSide", "entryNerve"
+        "flywireType", "somaSide", "rootSide", "entryNerve", "instance", "name"
     ]
     table = feather.read_table(annp, columns=columns)
     by_ann = {}
@@ -199,6 +212,7 @@ def main():
             "receptorType": clean(r.get("receptorType")),
             "flywireType": clean(r.get("flywireType")),
             "gustSite": gust_site(r) if modality == "GUST" else "OTHER",
+            "mechSite": mechanosensory_site(r) if modality == "MECH" else "OTHER",
         })
         counts[modality] += 1
 

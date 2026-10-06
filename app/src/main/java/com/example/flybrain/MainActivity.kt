@@ -237,7 +237,7 @@ class MainActivity : Activity() {
 
 
     /**
-     * V1.19.24 startup observatory.
+     * V1.19.25 startup observatory.
      * Shows the interpretation key while the real MaleCNS/FBR-10 substrate loads.
      * It remains on screen after loading until the user explicitly starts the simulation.
      */
@@ -531,6 +531,9 @@ class MainActivity : Activity() {
         // Official side evidence for retained mechanosensory/proprioceptive
         // receptors;  -1=L, +1=R, 0=unknown. The side is metadata only.
         private val mechanosensorySide = ByteArray(N)
+        // Official receptor-organ provenance: LEG, ANTENNAL, WING, HALTERE, BODY, OTHER.
+        // Used only to route physical contact to the appropriate retained sensory population.
+        private val mechanosensorySite = ByteArray(N)
         // Presentation-only anatomical map generated from official MaleCNS annotations.
         // It never participates in neural dynamics, sensory injection, or body mechanics.
         private val anatomicalRegion = ByteArray(N)
@@ -1287,7 +1290,7 @@ class MainActivity : Activity() {
         private fun loadSensoryInputMap() {
             val parsed = assets.open("sensory_input_map.tsv").bufferedReader(Charsets.UTF_8).use { reader ->
                 val header = reader.readLine() ?: throw IllegalStateException("SENSMAP cabecera ausente")
-                val expectedHeader = "index\tbodyId\tmodality\tsideCode\tsideSource\ttype\tclass\tsuperclass\tsubclass\treceptorType\tflywireType\tgustSite"
+                val expectedHeader = "index\tbodyId\tmodality\tsideCode\tsideSource\ttype\tclass\tsuperclass\tsubclass\treceptorType\tflywireType\tgustSite\tmechSite"
                 if (header != expectedHeader) throw IllegalStateException("SENSMAP cabecera inesperada")
                 reader.readLines()
             }
@@ -1300,7 +1303,7 @@ class MainActivity : Activity() {
 
             for (line in parsed) {
                 val c = line.split('\t')
-                if (c.size != 12) throw IllegalStateException("SENSMAP esquema inesperado: ${c.size} columnas")
+                if (c.size != 13) throw IllegalStateException("SENSMAP esquema inesperado: ${c.size} columnas")
                 val idx = c[0].toInt()
                 val bid = c[1].toLong()
                 val modality = c[2]
@@ -1313,6 +1316,7 @@ class MainActivity : Activity() {
                 val receptorType = c[9]
                 val flywireType = c[10]
                 val gustSite = c[11].trim().uppercase()
+                val mechSite = c[12].trim().uppercase()
 
                 if (idx !in 0 until N) throw IllegalStateException("SENSMAP index fuera de FBC103: $idx")
                 if (bodyId[idx] != bid) {
@@ -1320,6 +1324,9 @@ class MainActivity : Activity() {
                 }
                 if (side !in -1..1) throw IllegalStateException("SENSMAP sideCode invalido bodyId=$bid")
                 if (source !in sideSource) throw IllegalStateException("SENSMAP sideSource invalido bodyId=$bid source=$source")
+                if (mechSite !in setOf("LEG", "ANTENNAL", "WING", "HALTERE", "BODY", "OTHER")) {
+                    throw IllegalStateException("SENSMAP mechSite invalido bodyId=$bid site=$mechSite")
+                }
                 if (!seen.add(idx)) throw IllegalStateException("SENSMAP indice duplicado=$idx")
 
                 when (modality) {
@@ -1364,6 +1371,14 @@ class MainActivity : Activity() {
                             throw IllegalStateException("SENSMAP MECH sin organo receptor bodyId=$bid type=$type")
                         }
                         mechanosensorySide[idx] = side.toByte()
+                        mechanosensorySite[idx] = when (mechSite) {
+                            "LEG" -> 1
+                            "ANTENNAL" -> 2
+                            "WING" -> 3
+                            "HALTERE" -> 4
+                            "BODY" -> 5
+                            else -> 0
+                        }.toByte()
                         mechanosensory.add(idx)
                     }
                     else -> throw IllegalStateException("SENSMAP modalidad desconocida=$modality bodyId=$bid")
@@ -2390,16 +2405,80 @@ class MainActivity : Activity() {
             accumulateWallPressure(wallTop, 0f, 1f)
             accumulateWallPressure(wallBottom, 0f, -1f)
 
+            // V1.19.25: physical obstacle contact is converted into anatomical
+            // mechanosensory input before it can influence the retained connectome.
+            // We do NOT tell the body to turn. Instead, retained receptors receive
+            // contact according to the official receptor-organ provenance:
+            //   LEG      -> individual foot/wall contact
+            //   ANTENNAL -> antenna/head contact
+            //   WING/BODY/HALTERE -> body-side wall pressure
+            // This fixes the long-standing "wall treadmill" failure mode without
+            // introducing a synthetic escape command or synthetic neural edge.
+            var footWallLeft = 0f
+            var footWallRight = 0f
+            for (g in 0 until LeggedSensorimotorActuator.LEG_COUNT) {
+                val tx = flyX + fwdX * legActuator.footForward[g] + rightX * legActuator.footLateral[g]
+                val ty = flyY + fwdY * legActuator.footForward[g] + rightY * legActuator.footLateral[g]
+                val fx = min(min(tx - BODY_MIN_X, BODY_MAX_X - tx), .04f).coerceAtLeast(0f)
+                val fy = min(min(ty - BODY_MIN_Y, BODY_MAX_Y - ty), .04f).coerceAtLeast(0f)
+                val px = (1f - fx / .025f).coerceIn(0f, 1f)
+                val py = (1f - fy / .025f).coerceIn(0f, 1f)
+                val contactPressure = max(px, py) * legActuator.contact[g]
+                if (g < 3) footWallLeft = max(footWallLeft, contactPressure)
+                else footWallRight = max(footWallRight, contactPressure)
+            }
+            val footWallGlobal = max(footWallLeft, footWallRight)
+
+            // Antennae sit anterior to the body. A head-on wall therefore produces
+            // bilateral antennal contact rather than an arbitrary screen-side signal.
+            var antennaWallLeft = 0f
+            var antennaWallRight = 0f
+            val antennaForward = .090f
+            val antennaLateral = .025f
+            val antennaPoints = arrayOf(
+                floatArrayOf(-1f, antennaForward, -antennaLateral),
+                floatArrayOf(1f, antennaForward, antennaLateral)
+            )
+            for (a in antennaPoints) {
+                val ax = flyX + fwdX * a[1] + rightX * a[2]
+                val ay = flyY + fwdY * a[1] + rightY * a[2]
+                val dx = min(min(ax - BODY_MIN_X, BODY_MAX_X - ax), .04f).coerceAtLeast(0f)
+                val dy = min(min(ay - BODY_MIN_Y, BODY_MAX_Y - ay), .04f).coerceAtLeast(0f)
+                val p = max(
+                    (1f - dx / .025f).coerceIn(0f, 1f),
+                    (1f - dy / .025f).coerceIn(0f, 1f)
+                )
+                if (a[0] < 0f) antennaWallLeft = max(antennaWallLeft, p)
+                else antennaWallRight = max(antennaWallRight, p)
+            }
+            val antennaWallGlobal = max(antennaWallLeft, antennaWallRight)
+
             val mechLeft = legActuator.proprioceptionLeft
             val mechRight = legActuator.proprioceptionRight
             val mechGlobal = legActuator.proprioceptionGlobal
             for (i in mechanosensoryReceptorIndices) {
-                val local = when (mechanosensorySide[i].toInt()) {
-                    -1 -> max(mechLeft, wallPressureLeft)
-                    1 -> max(mechRight, wallPressureRight)
-                    else -> max(mechGlobal, max(wallPressureFront, wallPressureRear))
+                val side = mechanosensorySide[i].toInt()
+                val site = mechanosensorySite[i].toInt()
+                val local = when (site) {
+                    1 -> when (side) {
+                        -1 -> max(mechLeft, footWallLeft)
+                        1 -> max(mechRight, footWallRight)
+                        else -> max(mechGlobal, footWallGlobal)
+                    }
+                    2 -> when (side) {
+                        -1 -> max(mechLeft, antennaWallLeft)
+                        1 -> max(mechRight, antennaWallRight)
+                        else -> max(mechGlobal, antennaWallGlobal)
+                    }
+                    else -> when (side) {
+                        -1 -> max(mechLeft, wallPressureLeft)
+                        1 -> max(mechRight, wallPressureRight)
+                        else -> max(mechGlobal, max(wallPressureFront, wallPressureRear))
+                    }
                 }
-                externalRateHz[i] = (local * 110f + mechGlobal * 15f).coerceIn(0f, 150f)
+                // Contact is a sensory rate encoder only. The retained connectome
+                // determines whether and how this changes descending/VNC activity.
+                externalRateHz[i] = (local * 130f + mechGlobal * 12f).coerceIn(0f, 150f)
             }
 
             lightDrive = lightIntensity.coerceIn(0f, 1f)
@@ -3331,7 +3410,7 @@ class MainActivity : Activity() {
             jumpActiveCache = jumpActive
             wingActivityCache = wingActivity
 
-            // V1.19.24: isolated physical/mechanical integration boundary.
+            // V1.19.25: isolated physical/mechanical integration boundary.
             // The method below consumes only measured VNC leg activity + walk-OFF.
             applyMechanicalBodyState(dt)
 
@@ -3408,7 +3487,7 @@ class MainActivity : Activity() {
         }
 
         /**
-         * V1.19.24 physical/mechanical body boundary.
+         * V1.19.25 physical/mechanical body boundary.
          *
          * This function deliberately receives no food, light, danger or action
          * variables. It consumes only measured VNC motor state already reduced into
