@@ -1,8 +1,8 @@
-# FBR-10-OLF1 — Functional Balanced Reduction with Olfactory Preservation
+# FBR-10-OLF2-MOTORROUTE — Functional Balanced Reduction with Olfactory Preservation
 
 ## Status
 
-Current structural release candidate for FlyBrain V1.17.0.
+Current structural release candidate for FlyBrain V1.19.31.
 
 - Source: MaleCNS v1.0
 - Source neuron census: 166,700
@@ -11,13 +11,13 @@ Current structural release candidate for FlyBrain V1.17.0.
 - ORN type labels retained: 53
 - Published ORN `(type, entryNerve)` combinations retained: 54
 - Structural format: FBC103
-- Current FBC103 SHA-256: `0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf`
+- Checked-in FBC103 SHA-256: `0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf` (bootstrap only; CI regenerates the canonical artifact)
 
 Historical FBR-10 v1.14 artifacts are preserved under `docs/history/fbr10-v1.14/` and are not current release inputs.
 
 ## Purpose
 
-FBR-10-OLF1 reduces the audited MaleCNS v1.0 neuron census to exactly 16,669 neurons while explicitly preserving a representative population of real olfactory receptor neurons and measured olfactory sensorimotor route support.
+FBR-10-OLF2-MOTORROUTE reduces the audited MaleCNS v1.0 neuron census to exactly 16,669 neurons while explicitly preserving a representative population of real olfactory receptor neurons and measured olfactory sensorimotor route support.
 
 The reducer is structural. It does not program behaviour and does not create synthetic neurons or edges.
 

@@ -8,12 +8,14 @@ drive=MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeural
 assert 'walkOffActivationState' in drive and 'feedingPauseActivation' not in drive
 assert 'effectiveWalkOffActivation' not in drive and 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in drive
 assert 'foodOn' not in ACT and 'foodDirectionalBias' not in ACT and 'approachAction' not in ACT
-# V1.19.14 uses a collision-aware position integration path.
-assert 'var nextFlyX = flyX + worldVx * dt' in drive
-assert 'var nextFlyY = flyY + worldVy * dt' in drive
-assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in drive
-assert 'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)' in drive
-assert 'WALL_POSITION_RECOVERY' in drive
+# The drive function delegates all body integration to the dedicated mechanical layer.
+assert 'applyMechanicalBodyState(dt)' in drive
+mechanical=MAIN[MAIN.index('private fun applyMechanicalBodyState'):MAIN.index('private fun updateMeasuredPauseState')]
+assert 'val nextFlyX = flyX + worldVx * dt' in mechanical
+assert 'val nextFlyY = flyY + worldVy * dt' in mechanical
+assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in mechanical
+assert 'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)' in mechanical
+assert 'applyWallReactionWorld(' in mechanical
 assert 'updateFeedingNeuralReadout(dt)' in drive
 feed=MAIN[MAIN.index('private fun updateFeedingNeuralReadout'):MAIN.index('private fun populationRate')]
 assert 'feedingFunctionSpikeEvents' in feed

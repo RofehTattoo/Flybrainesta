@@ -33,6 +33,7 @@ jobs:
           python tools/test_v120_locomotion_validation.py
           python tools/test_release_version_contract.py
           python tools/test_v128_adaptive_leg_mechanics.py
+          python tools/test_v131_ground_reaction_mechanics.py
           python tools/test_fbc103_reader.py
           python tools/test_food_function_audit.py
           python tools/test_feeding_semantics_consistency.py

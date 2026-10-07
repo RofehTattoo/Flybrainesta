@@ -690,7 +690,10 @@ class MainActivity : Activity() {
         private val BODY_MAX_Y = .945f
         // Small per-frame world-space collision recovery. It only acts during
         // actual wall contact and prevents corner clamping at zero velocity.
-        private val WALL_POSITION_RECOVERY = .0035f
+        // Wall-foot contact calibration: a stance foot that penetrates the fixed
+        // arena envelope generates a bounded inward ground-reaction force.
+        private val WALL_FOOT_FORCE = .12f
+        private val WALL_FOOT_PENETRATION_SCALE = .03f
         private var draggingStimulus = false
         private var lightX = .72f
         private var lightY = .72f
@@ -3506,30 +3509,19 @@ class MainActivity : Activity() {
          */
         private fun applyMechanicalBodyState(dt: Float) {
 
-            // V1.19.4: closed-loop sensorimotor body mechanics. The actuator sees
-            // only the six measured leg-MN subgroup activations and the measured
-            // walk-OFF output. No sensory stimulus or action/goal variable enters.
-            // Feeding-related neural readouts remain diagnostic only. Locomotor
-            // inhibition reaches the actuator exclusively through retained
-            // walk-OFF neural activity measured above.
+            // The actuator consumes only measured VNC leg-MN output + measured
+            // walk-OFF activity. Environmental variables never enter this call.
             legActuator.step(legGroupActivation, walkOffActivationState, dt)
             flySpeed = legActuator.forwardVelocity
             bodyLateralSpeed = legActuator.lateralVelocity
             yawRate = legActuator.yawRate
 
-            // V1.19.4: yaw is part of the mechanical body state. Integrate the
-            // actuator-produced angular velocity before resolving body velocity
-            // into world coordinates. No stimulus/action variable writes heading.
-            heading += yawRate * dt
-            val twoPi = (Math.PI * 2.0).toFloat()
-            if (heading > Math.PI.toFloat()) heading -= twoPi
-            if (heading < -Math.PI.toFloat()) heading += twoPi
-
+            // World-frame velocity before collision/contact resolution.
             var worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
             var worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
 
-            // Physical wall envelope. The constraint feeds back into the actuator;
-            // there is no heading reflection/bounce.
+            // Detect actual body-envelope contact from the predicted mechanical
+            // trajectory. This is collision geometry only; it is not a turn command.
             wallContactNow = false
             var wallNx = 0f
             var wallNy = 0f
@@ -3543,90 +3535,96 @@ class MainActivity : Activity() {
             if (flyX >= BODY_MAX_X - .014f) { wallContactNow = true; wallNx -= 1f }
             if (flyY <= BODY_MIN_Y + .014f) { wallContactNow = true; wallNy += 1f }
             if (flyY >= BODY_MAX_Y - .014f) { wallContactNow = true; wallNy -= 1f }
-            legActuator.applyWallConstraint(
-            heading, wallNx, wallNy, dt, wallContactNow
-            )
-            if (wallContactNow) {
-            flySpeed = legActuator.forwardVelocity
-            bodyLateralSpeed = legActuator.lateralVelocity
-            yawRate = legActuator.yawRate
-            worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
-            worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
 
-            // V1.19.30: six individual stance feet can generate a local wall-reaction
-            // torque when their actual kinematic contact point intersects the arena
-            // envelope. This is physical reaction mechanics, not an escape controller:
-            // there is no target, stimulus, action score or prescribed turn direction.
-            var wallReactionTorque = 0f
-            val caFoot = cos(heading)
-            val saFoot = sin(heading)
-            val rightFootX = -saFoot
-            val rightFootY = caFoot
-            val footTorqueScale = (.065f * .22f * 2f).coerceAtLeast(.0001f)
-            val bodyYawInertia = 0.20f
-            for (g in 0 until LeggedSensorimotorActuator.LEG_COUNT) {
-                val load = legActuator.load[g].coerceIn(0f, 1f)
-                if (load <= .02f) continue
-                val fx = flyX + caFoot * legActuator.footForward[g] + rightFootX * legActuator.footLateral[g]
-                val fy = flyY + saFoot * legActuator.footForward[g] + rightFootY * legActuator.footLateral[g]
-                var rx = 0f
-                var ry = 0f
-                val penL = (BODY_MIN_X - fx).coerceAtLeast(0f)
-                val penR = (fx - BODY_MAX_X).coerceAtLeast(0f)
-                val penT = (BODY_MIN_Y - fy).coerceAtLeast(0f)
-                val penB = (fy - BODY_MAX_Y).coerceAtLeast(0f)
-                if (penL > 0f) rx += load * penL / .025f
-                if (penR > 0f) rx -= load * penR / .025f
-                if (penT > 0f) ry += load * penT / .025f
-                if (penB > 0f) ry -= load * penB / .025f
-                rx = rx.coerceIn(-1f, 1f)
-                ry = ry.coerceIn(-1f, 1f)
-                // Reaction-force moment r x F, entirely determined by local foot
-                // position and the measured stance load.
-                val rX = caFoot * legActuator.footForward[g] - saFoot * legActuator.footLateral[g]
-                val rY = saFoot * legActuator.footForward[g] + caFoot * legActuator.footLateral[g]
-                wallReactionTorque += rX * ry - rY * rx
-            }
-            val normalizedWallTorque = (wallReactionTorque / footTorqueScale).coerceIn(-1f, 1f)
-            legActuator.recordWallReactionTorque(normalizedWallTorque)
-            // Integrate only the physical contact-reaction torque. It is deliberately
-            // small relative to the neural steering channel and cannot synthesize a
-            // direction when no contacting foot supplies a moment.
-            yawRate = (yawRate + normalizedWallTorque * 1.35f * dt / bodyYawInertia)
-                .coerceIn(-1.80f, 1.80f)
-            if (abs(normalizedWallTorque) > .0001f) {
-                heading += normalizedWallTorque * 1.35f * dt / bodyYawInertia
-                val twoPi = (Math.PI * 2.0).toFloat()
-                if (heading > Math.PI.toFloat()) heading -= twoPi
-                if (heading < -Math.PI.toFloat()) heading += twoPi
+            if (wallContactNow) {
+                // A stance foot is a real contact point of the mechanical model.
+                // When that foot penetrates the fixed arena envelope, the wall
+                // supplies a normal reaction force. The same force may translate
+                // and rotate the body through r × F. No target, action score,
+                // stimulus or prescribed turn direction is consulted.
+                val ca = cos(heading)
+                val sa = sin(heading)
+                val rightX = -sa
+                val rightY = ca
+                var wallForceWorldX = 0f
+                var wallForceWorldY = 0f
+                var wallReactionTorque = 0f
+
+                for (g in 0 until LeggedSensorimotorActuator.LEG_COUNT) {
+                    val load = legActuator.load[g].coerceIn(0f, 1f)
+                    if (load <= .02f) continue
+
+                    val footX = flyX + ca * legActuator.footForward[g] + rightX * legActuator.footLateral[g]
+                    val footY = flyY + sa * legActuator.footForward[g] + rightY * legActuator.footLateral[g]
+
+                    var contactNx = 0f
+                    var contactNy = 0f
+                    var penetration = 0f
+                    val penL = (BODY_MIN_X - footX).coerceAtLeast(0f)
+                    val penR = (footX - BODY_MAX_X).coerceAtLeast(0f)
+                    val penT = (BODY_MIN_Y - footY).coerceAtLeast(0f)
+                    val penB = (footY - BODY_MAX_Y).coerceAtLeast(0f)
+                    if (penL > 0f) { contactNx += 1f; penetration = max(penetration, penL) }
+                    if (penR > 0f) { contactNx -= 1f; penetration = max(penetration, penR) }
+                    if (penT > 0f) { contactNy += 1f; penetration = max(penetration, penT) }
+                    if (penB > 0f) { contactNy -= 1f; penetration = max(penetration, penB) }
+                    val nLen = hypot(contactNx, contactNy)
+                    if (nLen <= .00001f || penetration <= 0f) continue
+                    contactNx /= nLen
+                    contactNy /= nLen
+
+                    val pressure = (penetration / WALL_FOOT_PENETRATION_SCALE).coerceIn(0f, 1f)
+                    val forceMag = WALL_FOOT_FORCE * load * pressure
+                    val fx = contactNx * forceMag
+                    val fy = contactNy * forceMag
+                    wallForceWorldX += fx
+                    wallForceWorldY += fy
+
+                    val rX = ca * legActuator.footForward[g] - sa * legActuator.footLateral[g]
+                    val rY = sa * legActuator.footForward[g] + ca * legActuator.footLateral[g]
+                    wallReactionTorque += rX * fy - rY * fx
+                }
+
+                if (abs(wallForceWorldX) > .000001f || abs(wallForceWorldY) > .000001f || abs(wallReactionTorque) > .000001f) {
+                    legActuator.applyWallReactionWorld(
+                        heading = heading,
+                        forceWorldX = wallForceWorldX,
+                        forceWorldY = wallForceWorldY,
+                        torqueWorld = wallReactionTorque,
+                        dtRaw = dt
+                    )
+                }
+
+                // Remove only any residual body velocity pointing through the wall.
+                // Tangential velocity is preserved; reorientation must arise from
+                // the neural six-leg torque plus these local physical contact forces.
+                wallContactNow = true
+                legActuator.applyWallConstraint(
+                    heading, wallNx, wallNy, dt, true
+                )
+                flySpeed = legActuator.forwardVelocity
+                bodyLateralSpeed = legActuator.lateralVelocity
+                yawRate = legActuator.yawRate
                 worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
                 worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
             }
-            }
-            var nextFlyX = flyX + worldVx * dt
-            var nextFlyY = flyY + worldVy * dt
 
-            if (wallContactNow) {
-            val wallLen = hypot(wallNx, wallNy)
-            if (wallLen > .0001f) {
-            val invLen = 1f / wallLen
-            // Local collision resolution only. The vector comes from the
-            // measured wall normal; no food/light/danger target is read.
-            nextFlyX += wallNx * invLen * WALL_POSITION_RECOVERY
-            nextFlyY += wallNy * invLen * WALL_POSITION_RECOVERY
-            }
-            }
+            // Heading is integrated once from the final mechanically resolved yaw rate.
+            heading += yawRate * dt
+            val twoPi = (Math.PI * 2.0).toFloat()
+            if (heading > Math.PI.toFloat()) heading -= twoPi
+            if (heading < -Math.PI.toFloat()) heading += twoPi
+            worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed
+            worldVy = sin(heading) * flySpeed + cos(heading) * bodyLateralSpeed
 
+            val nextFlyX = flyX + worldVx * dt
+            val nextFlyY = flyY + worldVy * dt
             flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)
             flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)
 
             val dxPhysical = flyX - lastMotionX
             val dyPhysical = flyY - lastMotionY
             physicalSpeed = hypot(dxPhysical, dyPhysical) / dt.coerceAtLeast(.001f)
-            // Pause detection must consume the speed measured from the just-finished
-            // physical frame. Calling this before physicalSpeed was updated made the
-            // UI one frame late and, more importantly, could prevent a true arrest
-            // from ever reaching the pause timer at low-speed boundaries.
             updateMeasuredPauseState(dt, wallContactNow)
             physicalAcceleration = (physicalSpeed - previousPhysicalSpeed) / dt.coerceAtLeast(.001f)
             previousPhysicalSpeed = physicalSpeed
@@ -3636,7 +3634,7 @@ class MainActivity : Activity() {
             physicalMovementMemory = .94f * physicalMovementMemory + .06f * movementEvidence
             lastMotionX = flyX
             lastMotionY = flyY
-            }
+        }
 
         private fun updateMeasuredPauseState(dt: Float, wallContact: Boolean) {
             val stillThreshold = .0075f

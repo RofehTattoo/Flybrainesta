@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.30 locomotion reconstruction audit for the ground locomotion stack.
+"""V1.19.31 locomotion reconstruction audit for the ground locomotion stack.
 
 This is a source-contract test. It does not claim biological validation by itself.
 It verifies that the release keeps a strict three-layer boundary:
@@ -22,12 +22,12 @@ WORKFLOW = (ROOT / ".github/workflows/build-apk.yml").read_text(encoding="utf-8"
 BUILDER = (ROOT / "tools/build_connectome.py").read_text(encoding="utf-8")
 
 # Release identity must be synchronized.
-assert 'const val APP_VERSION = "1.19.30"' in META
-assert 'const val APP_VERSION_CODE = 171' in META
+assert 'const val APP_VERSION = "1.19.31"' in META
+assert 'const val APP_VERSION_CODE = 172' in META
 assert 'SOURCE_NEUROTRANSMITTERS_SHA256 = "95c9289220663abeb3409f3ad9e5a7f8a53f8093f5139d15502cd08da8879621"' in META
-assert 'versionName = "1.19.30"' in GRADLE
-assert 'versionCode = 171' in GRADLE
-assert 'android:label="FlyBrain V1.19.30"' in MANIFEST
+assert 'versionName = "1.19.31"' in GRADLE
+assert 'versionCode = 172' in GRADLE
+assert 'android:label="FlyBrain V1.19.31"' in MANIFEST
 
 # Mechanical layer: six independent legs, stance/swing/contact and modified-tripod timing.
 for token in [
@@ -44,7 +44,12 @@ for token in [
     'supportCoverage',
     'bilateralMechanicalSymmetry',
     'legPhaseSpread',
-    'lateralAcceleration = LATERAL_ACCEL * supportBalance * turnDrive',
+    'footVelocityForward',
+    'footVelocityLateral',
+    'forceForward',
+    'forceLateral',
+    'yawTorque += footForward[g] * forceLateral - footLateral[g] * forceForward',
+    'applyWallReactionWorld',
 ]:
     assert token in ACT, token
 
@@ -99,8 +104,8 @@ for token in [
     'yawRate = legActuator.yawRate',
     'heading += yawRate * dt',
     'var worldVx = cos(heading) * flySpeed - sin(heading) * bodyLateralSpeed',
-    'var nextFlyX = flyX + worldVx * dt',
-    'var nextFlyY = flyY + worldVy * dt',
+    'val nextFlyX = flyX + worldVx * dt',
+    'val nextFlyY = flyY + worldVy * dt',
     'legActuator.applyWallConstraint(',
     'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)',
     'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)',
@@ -132,7 +137,7 @@ assert 'route_olfactory_forward' in BUILDER
 assert 'route_olfactory_to_desc' in BUILDER
 assert 'route_desc_to_leg' in BUILDER
 
-# CI must execute the V1.19.30 locomotion reconstruction audit before the Android tests/build.
+# CI must execute the V1.19.31 locomotion reconstruction audit before the Android tests/build.
 assert 'python tools/test_v120_locomotion_validation.py' in WORKFLOW
 
 print('V1.19.28 LOCOMOTION STABILIZATION AUDIT: PASS')
