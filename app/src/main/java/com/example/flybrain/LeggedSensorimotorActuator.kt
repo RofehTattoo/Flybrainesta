@@ -100,7 +100,14 @@ class LeggedSensorimotorActuator {
     var mechanicalActivity = 0f
         private set
 
-    /** Dimensionless forward ground-force proxy produced by stance legs. */
+    /**
+     * Normalized forward ground-force proxy produced by stance legs.
+     *
+     * The underlying body force remains in the mechanical units used by the
+     * integrator. This diagnostic is normalized to the maximum single-foot
+     * reaction so that its 0..1 scale is stable when the number of stance legs
+     * changes; it is never fed back into locomotion dynamics.
+     */
     var forwardForceProxy = 0f
         private set
     /** Signed dimensionless left/right force imbalance used by the physical yaw model. */
@@ -293,7 +300,7 @@ class LeggedSensorimotorActuator {
 
         val netForwardForce = totalForwardForce.coerceIn(-.66f, .66f)
         val netLateralForce = totalLateralForce.coerceIn(-.66f, .66f)
-        forwardForceProxy = netForwardForce.coerceIn(0f, 1f)
+        forwardForceProxy = (netForwardForce / MAX_FOOT_FORCE).coerceIn(0f, 1f)
 
         val walkOff = walkOffActivation.coerceIn(0f, 1f)
         forwardAcceleration = BODY_FORCE_TO_ACCEL * netForwardForce -
