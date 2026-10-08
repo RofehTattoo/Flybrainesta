@@ -25,7 +25,7 @@ assert "foodOn" not in ACT and "dangerOn" not in ACT and "approachAction" not in
 
 # Regression test must exist in the Android test suite.
 assert "sustainedBackgroundMotorInput_isNotAClockThatForcesWalking" in TEST
-assert 'const val APP_VERSION = "1.19.36"' in META
-assert 'const val APP_VERSION_CODE = 177' in META
+assert 'const val APP_VERSION = "1.19.37"' in META
+assert 'const val APP_VERSION_CODE = 178' in META
 
-print("V1.19.36 TONIC/PHASIC LOCOMOTION GATE AUDIT: PASS")
+print("V1.19.37 TONIC/PHASIC LOCOMOTION GATE AUDIT: PASS")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static audit for V1.19.36 arena-derived visual turning closure.
+"""Static audit for V1.19.37 arena-derived visual turning closure.
 
 The arena boundary must reach the retained visual receptor populations as a
 sensory signal. It must not reach heading/yaw directly, nor may a synthetic
@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "app/src/main/java/com/example/flybrain/MainActivity.kt"
 ACT = ROOT / "app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt"
-AUD = ROOT / "V1.19.36_NEURAL_TURN_YAW_AUDIT.md"
+AUD = ROOT / "V1.19.37_NEURAL_TURN_YAW_AUDIT.md"
 
 main = MAIN.read_text()
 act = ACT.read_text()
@@ -54,4 +54,4 @@ assert "val dnSteering = dnBalance * dnDrive * TURN_DN_MAX_CONTRIBUTION" in act
 
 assert "arena itself is a visual object" in main
 assert "arena-derived" not in aud or "arena" in aud.lower()
-print("V1.19.36 ARENA VISUAL -> RETAINED TURN-DN AUDIT: PASS")
+print("V1.19.37 ARENA VISUAL -> RETAINED TURN-DN AUDIT: PASS")

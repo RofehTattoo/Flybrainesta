@@ -19,7 +19,7 @@ assert 'legActuator.step(' in m
 assert 'turnDnLeftActivationState' in m and 'turnDnRightActivationState' in m
 assert 'if (food' not in a.lower()
 assert 'if (wall' not in a.lower()
-assert 'FLYBRAIN_VERSION = "1.19.36"' in meta
-assert 'APP_VERSION_CODE = 177' in meta
+assert 'FLYBRAIN_VERSION = "1.19.37"' in meta
+assert 'APP_VERSION_CODE = 178' in meta
 assert 'BINARY_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"' in meta
-print("V1.19.36 NEURAL HALT/BRK AUDIT: PASS")
+print("V1.19.37 NEURAL HALT/BRK AUDIT: PASS")

@@ -29,11 +29,10 @@ for p in (ROOT/"tools").glob("test_*.py"):
     if p.name in excluded:
         continue
     text = p.read_text(encoding="utf-8", errors="ignore")
-    for old in ("1.19.27", "1.19.28"):
-        # Ignore prose-only historical labels; reject old values when they occur
-        # in executable assertions involving current release files.
+    for old in ("1.19.27", "1.19.28", "1.19.36"):
+        # Reject stale current-release assertions in active tooling.
         for line in text.splitlines():
-            if old in line and "assert" in line and any(k in line for k in ("GRADLE","META","MANIFEST","versionName","versionCode","APP_VERSION")):
+            if old in line and ("assert" in line or "FLYBRAIN_RELEASE" in line or "APP_VERSION_CODE" in line or "versionName" in line or "versionCode" in line):
                 raise AssertionError(f"{p.name}: stale active version contract: {line.strip()}")
 
 print("V1.19.37 RELEASE VERSION CONTRACT: PASS")

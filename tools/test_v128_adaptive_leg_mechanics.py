@@ -6,9 +6,9 @@ MAIN = (ROOT / "app/src/main/java/com/example/flybrain/MainActivity.kt").read_te
 GRADLE = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
 
-assert 'versionName = "1.19.36"' in GRADLE
-assert 'versionCode = 177' in GRADLE
-assert 'APP_VERSION_CODE = 177' in META
+assert 'versionName = "1.19.37"' in GRADLE
+assert 'versionCode = 178' in GRADLE
+assert 'APP_VERSION_CODE = 178' in META
 assert 'INITIAL_PHASES' in ACT
 assert 'var cycle = (phase[g] / TWO_PI) % 1f' in ACT
 assert 'TRIPOD_OFFSETS' not in ACT
