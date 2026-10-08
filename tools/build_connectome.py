@@ -24,8 +24,8 @@ import pyarrow.ipc as ipc
 
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
-FLYBRAIN_RELEASE = "1.19.37"
-APP_VERSION_CODE = 178
+FLYBRAIN_RELEASE = "1.19.38"
+APP_VERSION_CODE = 179
 REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
@@ -370,6 +370,28 @@ def main(root: Path) -> None:
     annotated = annotations[annotations["superclass"].notna()].copy()
     annotated["bodyId"] = annotated["bodyId"].astype(np.int64)
     annotated = annotated.drop_duplicates("bodyId").sort_values("bodyId").reset_index(drop=True)
+
+    # FBR-10-OLF2-MOTORROUTE is a frozen reduction. The canonical binary already
+    # validated the exact 16,669 retained bodyIds. Selection heuristics may be
+    # audited separately, but they must never silently change the production
+    # connectome. Rebuild from the immutable bodyId manifest and fail closed if
+    # the pinned MaleCNS source no longer contains the same neurons.
+    frozen_manifest = root / "tools" / "fbr10_frozen_body_ids.txt"
+    frozen_ids = []
+    for line in frozen_manifest.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            frozen_ids.append(int(line))
+    if len(frozen_ids) != TARGET or len(set(frozen_ids)) != TARGET:
+        raise RuntimeError(f"FBR-10 frozen manifest must contain exactly {TARGET} unique bodyIds")
+    frozen_set = set(frozen_ids)
+    source_set = set(annotated["bodyId"].astype(int).tolist())
+    missing_frozen = sorted(frozen_set - source_set)
+    if missing_frozen:
+        raise RuntimeError(
+            "Pinned MaleCNS source is incompatible with the frozen FBR-10 manifest; "
+            f"missing {len(missing_frozen)} bodyIds, first={missing_frozen[:10]}"
+        )
     if len(annotated) != 166700:
         raise RuntimeError(
             f"MaleCNS v1.0 annotated neuron census changed: expected 166700, found {len(annotated)}"
@@ -1214,9 +1236,13 @@ def main(root: Path) -> None:
             ignore_index=True,
         )
 
-    selected = selected.drop_duplicates("bodyId").reset_index(drop=True)
+    # Discard the heuristic candidate set for production and use the frozen
+    # canonical FBR-10 node manifest. All route/semantic columns have already
+    # been computed from the same pinned MaleCNS annotations.
+    selected = annotated[annotated["bodyId"].isin(frozen_set)].copy()
     if len(selected) != TARGET:
-        raise AssertionError((len(selected), TARGET))
+        raise AssertionError(("frozen manifest selection", len(selected), TARGET))
+    selected = selected.drop_duplicates("bodyId").reset_index(drop=True)
 
     for route_name in ("route_forward", "route_turn", "route_escape",
                        "route_olfactory_forward", "route_olfactory_to_desc",
@@ -1515,6 +1541,12 @@ def main(root: Path) -> None:
             f.write(struct.pack("<iif", int(src), int(dst), float(weight)))
 
     fbc_sha = hashlib.sha256(out.read_bytes()).hexdigest()
+    if fbc_sha != "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf":
+        raise RuntimeError(
+            "FBR-10 reproducibility failure: generated binary SHA-256 "
+            f"{fbc_sha} != frozen canonical "
+            "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"
+        )
 
     def block_range(block_id):
         idxs = np.where(selected["block"].to_numpy(np.int8) == block_id)[0]
@@ -1540,10 +1572,10 @@ def main(root: Path) -> None:
 
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
-    const val FLYBRAIN_VERSION = "1.19.37"
-    const val FLYBRAIN_VERSION_CODE = 178
-    const val APP_VERSION = "1.19.37"
-    const val APP_VERSION_CODE = 178
+    const val FLYBRAIN_VERSION = "1.19.38"
+    const val FLYBRAIN_VERSION_CODE = 179
+    const val APP_VERSION = "1.19.38"
+    const val APP_VERSION_CODE = 179
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = %d
     // 54 distinct published (type, entryNerve) combinations; 53 unique
