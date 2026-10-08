@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.flybrain"
         minSdk = 24
         targetSdk = 35
-        versionCode = 177
-        versionName = "1.19.36"
+        versionCode = 178
+        versionName = "1.19.37"
     }
 
     buildFeatures {

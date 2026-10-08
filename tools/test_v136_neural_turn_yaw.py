@@ -21,12 +21,12 @@ MANIFEST = (ROOT / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8
 TEST = (ROOT / "app/src/test/java/com/example/flybrain/LeggedSensorimotorActuatorTest.kt").read_text(encoding="utf-8")
 BIN = ROOT / "app/src/main/res/raw/malecns_reduced.bin"
 
-assert 'APP_VERSION = "1.19.36"' in META
-assert 'APP_VERSION_CODE = 177' in META
-assert 'versionName = "1.19.36"' in GRADLE
-assert 'versionCode = 177' in GRADLE
-assert 'android:label="FlyBrain V1.19.36"' in MANIFEST
-assert 'BINARY_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"' in META
+assert 'const val APP_VERSION = "1.19.37"' in META
+assert 'const val APP_VERSION_CODE = 178' in META
+assert 'versionName = "1.19.37"' in GRADLE
+assert 'versionCode = 178' in GRADLE
+assert 'android:label="FlyBrain V1.19.37"' in MANIFEST
+assert 'const val BINARY_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"' in META
 
 # Frozen FBC103 census: 20 role-2 DNs, exactly 10 L and 10 R.
 data = BIN.read_bytes()
@@ -104,4 +104,4 @@ for token in [
 ]:
     assert token in TEST, token
 
-print("V1.19.36 RETAINED TURN-DN -> PHYSICAL YAW AUDIT: PASS")
+print("V1.19.37 RETAINED TURN-DN -> PHYSICAL YAW AUDIT: PASS")
