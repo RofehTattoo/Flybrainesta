@@ -33,6 +33,8 @@ jobs:
           python tools/test_v120_locomotion_validation.py
           python tools/test_v134_tonic_locomotion_gate.py
           python tools/test_v11935_phasic_highpass.py
+          python tools/test_v136_neural_turn_yaw.py
+          python tools/test_v136_arena_visual_turn.py
           python tools/test_release_version_contract.py
           python tools/test_v128_adaptive_leg_mechanics.py
           python tools/test_fbc103_reader.py

@@ -13,7 +13,9 @@ for token in (
     "pharyngealContextAgeSeconds",
     "ingestionEventsFrame >= FEEDING_INGESTION_NEURON_SPIKE_MIN",
     "walkOffActivationState = relaxMotorActivation",
-    "legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)",
+    "legActuator.step(",
+    "turnDnLeftActivationState",
+    "turnDnRightActivationState",
 ):
     assert token in MAIN, token
 

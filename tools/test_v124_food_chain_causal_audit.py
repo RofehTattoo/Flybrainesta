@@ -37,7 +37,8 @@ drive=MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeural
 mech=MAIN[MAIN.index('private fun applyMechanicalBodyState'):MAIN.index('private fun runNeuralSimulation')]
 for forbidden in ('foodOn','foodX','foodY','foodDrive','foodDirectionalBias','approachAction','orientAction','escapeAction','exploreAction','feedingPauseActivation'):
     assert forbidden not in mech, forbidden
-assert 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in mech
+assert 'legActuator.step(' in mech
+assert 'turnDnLeftActivationState' in mech and 'turnDnRightActivationState' in mech
 # 5) Mechanical actuator has no environment/action dependency.
 for forbidden in ('foodOn','foodX','foodY','foodDrive','foodDirectionalBias','approachAction','dangerOn','lightOn'):
     assert forbidden not in ACT, forbidden
@@ -48,8 +49,8 @@ assert 'val tasteContactPresent = foodOn &&' in feed
 assert 'val ingestionNeural = foodOn &&' in feed
 assert 'forceExternalSpike' not in feed
 # 7) Release identity.
-assert 'APP_VERSION = "1.19.35"' in META and 'APP_VERSION_CODE = 176' in META
-assert 'versionName = "1.19.35"' in GRADLE and 'versionCode = 176' in GRADLE
+assert 'APP_VERSION = "1.19.36"' in META and 'APP_VERSION_CODE = 177' in META
+assert 'versionName = "1.19.36"' in GRADLE and 'versionCode = 177' in GRADLE
 # 8) Numerical bilateral sanity independent of runtime state.
 sigma=.30; forward=.018; half=.035
 

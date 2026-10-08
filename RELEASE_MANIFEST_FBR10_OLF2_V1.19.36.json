@@ -1,0 +1,17 @@
+{
+  "release": "FlyBrain V1.19.36 / FBR-10-OLF2-MOTORROUTE",
+  "status": "neural-turn-yaw-closure",
+  "male_cns": "v1.0",
+  "target_neurons": 16669,
+  "reduction_id": "FBR-10-OLF2-MOTORROUTE",
+  "structural_binary_sha256": "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf",
+  "version": "1.19.36",
+  "versionCode": 177,
+  "turn_dn_census": {
+    "role": 2,
+    "left": 10,
+    "right": 10,
+    "unknown": 0
+  },
+  "change": "Close measured retained bilateral TURN descending-neuron output to physical body yaw without changing FBR-10."
+}

@@ -8,12 +8,14 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.35 adaptive six-leg sensorimotor actuator.
+ * V1.19.36 adaptive six-leg sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
- * leg phases, stance/swing and foot trajectories; the resulting stance motion
- * produces body force and yaw. No food/light/danger/action variable is accepted.
+ * leg phases, stance/swing and foot trajectories; retained bilateral TURN
+ * descending-neuron output supplies an additional neural yaw signal; stance
+ * mechanics supplies the remaining body force/torque. No food/light/danger/action
+ * variable is accepted.
  *
  * Tonic baseline motor firing is not, by itself, a behavioral command. The
  * actuator also receives the separately measured neural walk-OFF and BRK brake
@@ -52,6 +54,10 @@ class LeggedSensorimotorActuator {
         private const val PAUSE_YAW_CUTOFF = .20f
         private const val YAW_STOP_RESPONSE_TAU = .075f
         private const val YAW_RESPONSE_TAU = .16f
+        // Role-2 retained descending TURN population: calibrated per-neuron rate
+        // reference. The FBR-10 loader verifies the bilateral 10/10 census.
+        private const val TURN_DN_ACTIVATION_DEADZONE = .025f
+        private const val TURN_DN_MAX_CONTRIBUTION = .70f
         private const val LINEAR_RESPONSE_MIN_DT = .0005f
         private const val FOOT_STROKE = .065f
         private const val WALL_TANGENTIAL_FRICTION = .94f
@@ -174,9 +180,31 @@ class LeggedSensorimotorActuator {
 
     /**
      * Advance one 20 ms public mechanical frame.
-     * legActivation is already derived from measured neural spike output.
+     * legActivation and bilateral turn-DN activations are already derived from
+     * measured neural spike output.
      */
+    /** Backward-compatible four-channel step for legacy callers/tests. */
     fun step(legActivation: FloatArray, walkOffActivation: Float, brakeActivation: Float, dtRaw: Float) {
+        stepInternal(legActivation, walkOffActivation, brakeActivation, dtRaw, 0f, 0f)
+    }
+
+    /**
+     * Six-channel body step: measured LEG motor output plus measured bilateral
+     * descending TURN output. The latter is neural yaw evidence, not a synthetic
+     * action command.
+     */
+    fun step(legActivation: FloatArray, walkOffActivation: Float, brakeActivation: Float, dtRaw: Float, turnDnLeftActivation: Float, turnDnRightActivation: Float) {
+        stepInternal(legActivation, walkOffActivation, brakeActivation, dtRaw, turnDnLeftActivation, turnDnRightActivation)
+    }
+
+    private fun stepInternal(
+        legActivation: FloatArray,
+        walkOffActivation: Float,
+        brakeActivation: Float,
+        dtRaw: Float,
+        turnDnLeftActivation: Float,
+        turnDnRightActivation: Float
+    ) {
         require(legActivation.size >= LEG_COUNT)
         val dt = dtRaw.coerceAtLeast(LINEAR_RESPONSE_MIN_DT)
         wallReactionTorqueProxy = 0f
@@ -208,7 +236,7 @@ class LeggedSensorimotorActuator {
             // Phase is a locomotor state variable, not a clock. It advances only
             // while the upstream neural decoder supplies phasic leg-MN drive. A
             // tonic/background activation below threshold must not wind the legs
-            // forever. This is the mechanical correction for the V1.19.35
+            // forever. This is the mechanical correction for the V1.19.36
             // “toy-car” failure mode; the actuator still receives neural output
             // exclusively and contains no stimulus/action controller.
             val phaseHz = if (a > MOTOR_THRESHOLD) {
@@ -369,21 +397,33 @@ class LeggedSensorimotorActuator {
 
         val pauseYawGate = if (walkOff >= PAUSE_YAW_CUTOFF) 0f else
             (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
-        // Yaw is generated exclusively by the measured bilateral leg-motor
-        // imbalance. Do not gate this neural yaw by forward translation: after
-        // physical wall contact the collision layer can legitimately reduce
-        // forwardVelocity to ~0, and using that velocity as a prerequisite for
-        // yaw creates a deadlock in which a real asymmetric neural gait can no
-        // longer reorient the body. Wall contact itself still never writes yaw
-        // or gait phase; it only changes physical velocity and sensory feedback.
-        // Primary steering signal is now the six-leg force moment. The old
-        // bilateral scalar remains only as a bounded fallback when the instantaneous
-        // foot-force moment is numerically tiny. Both signals originate exclusively
-        // from measured leg-MN-driven mechanics.
-        val steeringSignal = if (abs(yawTorqueFiltered) > .015f) yawTorqueFiltered else turnBalance
-        val neuralYawTarget = steeringSignal * MAX_YAW_RATE * turnDrive * pauseYawGate
+        // Two causally distinct neural-to-body routes now coexist:
+        //   (1) six LEG-MN outputs -> stance-force asymmetry -> mechanical yaw, and
+        //   (2) retained bilateral role-2 descending TURN output -> neural yaw torque.
+        // The second path is the missing closure in V1.19.36: turn DNs previously
+        // existed only as an action/diagnostic readout, so a stationary body at a wall
+        // had no direct neural degree of freedom with which to reorient.
+        //
+        // Do not gate either route by forward translation. A fly legitimately may
+        // turn in place, including after a wall collision removes its forward speed.
+        val legSteering = ((if (abs(yawTorqueFiltered) > .015f) yawTorqueFiltered else turnBalance) * turnDrive)
+            .coerceIn(-1f, 1f)
+        val dnLeft = turnDnLeftActivation.coerceIn(0f, 1f)
+        val dnRight = turnDnRightActivation.coerceIn(0f, 1f)
+        val dnTotal = (dnLeft + dnRight).coerceAtLeast(0f)
+        val dnBalance = if (dnTotal <= .0001f) 0f else
+            ((dnRight - dnLeft) / dnTotal).coerceIn(-1f, 1f)
+        val dnDrive = ((dnTotal - TURN_DN_ACTIVATION_DEADZONE) /
+            (1f - TURN_DN_ACTIVATION_DEADZONE)).coerceIn(0f, 1f)
+        val dnSteering = dnBalance * dnDrive * TURN_DN_MAX_CONTRIBUTION
+        // Bilateral agreement between the two neural routes adds authority without
+        // allowing either route to exceed the same bounded yaw command. Opposing
+        // signals cancel, which is the desired interpretation of competing steering
+        // drives rather than an arbitrary winner-takes-all selector.
+        val steeringSignal = (legSteering + dnSteering).coerceIn(-1f, 1f)
+        val neuralYawTarget = steeringSignal * MAX_YAW_RATE * pauseYawGate
         val yawTarget = neuralYawTarget.coerceIn(-MAX_YAW_RATE, MAX_YAW_RATE)
-        val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f) {
+        val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || (turnDrive < .04f && dnDrive < .04f)) {
             YAW_STOP_RESPONSE_TAU
         } else {
             YAW_RESPONSE_TAU

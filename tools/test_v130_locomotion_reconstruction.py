@@ -8,11 +8,11 @@ GRADLE = (ROOT/"app/build.gradle.kts").read_text(encoding="utf-8")
 META = (ROOT/"app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
 MANIFEST = (ROOT/"app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
 
-assert 'versionName = "1.19.35"' in GRADLE
-assert 'versionCode = 176' in GRADLE
-assert 'APP_VERSION = "1.19.35"' in META
-assert 'APP_VERSION_CODE = 176' in META
-assert 'android:label="FlyBrain V1.19.35"' in MANIFEST
+assert 'versionName = "1.19.36"' in GRADLE
+assert 'versionCode = 177' in GRADLE
+assert 'APP_VERSION = "1.19.36"' in META
+assert 'APP_VERSION_CODE = 177' in META
+assert 'android:label="FlyBrain V1.19.36"' in MANIFEST
 
 # Six measured neural leg streams remain the sole locomotor actuator input.
 body = ACT[ACT.index("fun step("):ACT.index("fun applyWallConstraint(")]
@@ -40,4 +40,4 @@ for forbidden in [
 ]:
     assert forbidden not in MAIN
 
-print("V1.19.35 LOCOMOTION RECONSTRUCTION PHASE 2 AUDIT: PASS")
+print("V1.19.36 LOCOMOTION RECONSTRUCTION PHASE 2 AUDIT: PASS")

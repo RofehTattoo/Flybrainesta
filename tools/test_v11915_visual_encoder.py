@@ -35,7 +35,8 @@ causal_body = kotlin_function_span(MAIN, 'private fun applyMechanicalBodyState(d
 drive_body = kotlin_function_span(MAIN, 'private fun driveBody(dt: Float)')
 for token in ('approachAction', 'escapeAction', 'orientAction', 'lightDrive', 'dangerDrive', 'lightOn', 'dangerOn', 'foodOn', 'foodX', 'foodY'):
     assert token not in causal_body, token
-assert 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in causal_body
+assert 'legActuator.step(' in causal_body
+assert 'turnDnLeftActivationState' in causal_body and 'turnDnRightActivationState' in causal_body
 assert 'applyMechanicalBodyState(dt)' in drive_body
 # V1.19.28 explicitly reconstructs the visual slice of FBR-10 while keeping the
 # global 16,669-node target and the induced-edge rule. The primary receptor quota
@@ -48,8 +49,8 @@ assert 'annotated["channel"] != 0' in BUILD
 assert 'route_visual_turn' in BUILD and 'route_visual_escape' in BUILD
 assert 'visual_three_turn' in BUILD and 'visual_three_escape' in BUILD
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.19.35"' in META
-assert 'const val APP_VERSION_CODE = 176' in META
-assert 'versionName = "1.19.35"' in GRADLE
-assert 'versionCode = 176' in GRADLE
+assert 'const val APP_VERSION = "1.19.36"' in META
+assert 'const val APP_VERSION_CODE = 177' in META
+assert 'versionName = "1.19.36"' in GRADLE
+assert 'versionCode = 177' in GRADLE
 print('V1.19.28 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')

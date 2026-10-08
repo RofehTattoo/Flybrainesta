@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.35 phasic high-pass locomotion audit."""
+"""V1.19.36 phasic high-pass locomotion audit."""
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = (ROOT/"app/src/main/java/com/example/flybrain/MainActivity.kt").read_text(encoding="utf-8")
@@ -15,7 +15,7 @@ assert 'target = burst.coerceIn(0f, 1f)' in MAIN
 assert 'foodOn' not in ACT and 'dangerOn' not in ACT and 'approachAction' not in ACT
 assert 'contact[g] = stanceFraction.coerceIn(0f, 1f)' in ACT
 assert 'supportMean = (totalContact / LEG_COUNT)' in ACT
-assert 'versionName = "1.19.35"' in GRADLE and 'versionCode = 176' in GRADLE
-assert 'APP_VERSION = "1.19.35"' in META and 'APP_VERSION_CODE = 176' in META
-assert 'android:label="FlyBrain V1.19.35"' in MANIFEST
-print("V1.19.35 PHASIC HIGH-PASS LOCOMOTION AUDIT: PASS")
+assert 'versionName = "1.19.36"' in GRADLE and 'versionCode = 177' in GRADLE
+assert 'APP_VERSION = "1.19.36"' in META and 'APP_VERSION_CODE = 177' in META
+assert 'android:label="FlyBrain V1.19.36"' in MANIFEST
+print("V1.19.36 PHASIC HIGH-PASS LOCOMOTION AUDIT: PASS")

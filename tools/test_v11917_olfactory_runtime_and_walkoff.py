@@ -5,7 +5,8 @@ ENCODER = (ROOT / "app/src/main/java/com/example/flybrain/OlfactoryInputEncoder.
 assert "OlfactoryInputEncoder.encode(" in MAIN
 assert "externalRateHz[i] = when (olfactorySide[i].toInt())" in MAIN
 assert "max(\n                walkOffActivationState, feedingPauseActivation" not in MAIN
-assert "legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)" in MAIN
+assert "legActuator.step(" in MAIN
+assert "turnDnLeftActivationState" in MAIN and "turnDnRightActivationState" in MAIN
 assert "effectiveWalkOffActivation" not in MAIN
 assert "legActuator.step(legGroupActivation, feedingPauseActivation" not in MAIN
 assert "fun encode(left: Float, right: Float, gain: Float, limit: Float)" in ENCODER

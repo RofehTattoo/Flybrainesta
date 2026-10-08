@@ -32,8 +32,8 @@ assert "legActuator.applyWallConstraint(" in body
 assert "heading = Math.PI.toFloat() - heading" not in body
 assert "heading = -heading" not in body
 
-assert 'const val APP_VERSION = "1.19.35"' in META
-assert 'const val APP_VERSION_CODE = 176' in META
-assert 'versionName = "1.19.35"' in GRADLE
-assert 'versionCode = 176' in GRADLE
+assert 'const val APP_VERSION = "1.19.36"' in META
+assert 'const val APP_VERSION_CODE = 177' in META
+assert 'versionName = "1.19.36"' in GRADLE
+assert 'versionCode = 177' in GRADLE
 print("V1.19.28 OBSTACLE CONTACT → MECHANOSENSORY → CONNECTOME AUDIT: PASS")

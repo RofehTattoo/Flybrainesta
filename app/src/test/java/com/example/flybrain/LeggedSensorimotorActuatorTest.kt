@@ -131,6 +131,60 @@ class LeggedSensorimotorActuatorTest {
     }
 
     @Test
+    fun retainedTurnDnOutput_canReorientBodyWithoutLegPropulsion() {
+        val a = LeggedSensorimotorActuator()
+        repeat(80) {
+            a.step(
+                FloatArray(6),
+                0f,
+                0f,
+                .02f,
+                turnDnLeftActivation = 0f,
+                turnDnRightActivation = .70f
+            )
+        }
+        assertTrue(a.yawRate > .20f)
+        assertTrue(abs(a.forwardVelocity) < 1e-5f)
+    }
+
+    @Test
+    fun symmetricTurnDnOutput_hasNoIntrinsicYawBias() {
+        val a = LeggedSensorimotorActuator()
+        var yawSum = 0f
+        var samples = 0
+        repeat(180) { step ->
+            val burst = if ((step / 5) % 2 == 0) .55f else 0f
+            a.step(
+                FloatArray(6),
+                0f,
+                0f,
+                .02f,
+                turnDnLeftActivation = burst,
+                turnDnRightActivation = burst
+            )
+            if (step >= 30) {
+                yawSum += a.yawRate
+                samples++
+            }
+        }
+        assertTrue(abs(yawSum / samples.toFloat()) < .01f)
+    }
+
+    @Test
+    fun bilateralTurnDnSignals_competeBySideInsteadOfUsingAOneShotHeadingEdit() {
+        val a = LeggedSensorimotorActuator()
+        repeat(30) {
+            a.step(FloatArray(6), 0f, 0f, .02f, turnDnLeftActivation = .60f, turnDnRightActivation = 0f)
+        }
+        val leftYaw = a.yawRate
+        repeat(60) {
+            a.step(FloatArray(6), 0f, 0f, .02f, turnDnLeftActivation = 0f, turnDnRightActivation = .60f)
+        }
+        assertTrue(leftYaw < -.15f)
+        assertTrue(a.yawRate > .15f)
+    }
+
+    @Test
     fun wallContact_isCollisionAndSensoryFeedback_only() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .45f }
