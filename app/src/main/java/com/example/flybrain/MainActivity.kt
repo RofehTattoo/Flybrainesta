@@ -414,6 +414,11 @@ class MainActivity : Activity() {
         // A short first-order activation state avoids frame-quantized limb force.
         // This is an actuator filter, not a sensory or action shortcut.
         private val MOTOR_ACTIVATION_TAU_SECONDS = 0.040f
+        // Fast motor-rate baseline used only to separate sustained tonic firing
+        // from temporally varying locomotor recruitment. A real phasic gait can
+        // repeatedly exceed this short baseline; a constant high motor rate
+        // cannot remain a "burst" indefinitely.
+        private val LEG_FAST_BASELINE_TAU_SECONDS = 0.22f
 
         // V1.19: six-leg motor output is decoded into the closed-loop mechanical actuator.
         // These are actuator/calibration parameters, not behavior selectors:
@@ -613,6 +618,7 @@ class MainActivity : Activity() {
         private val legGroupActivation = FloatArray(LEG_COUNT)
         private val legGroupRateHz = FloatArray(LEG_COUNT)
         private val legBaselineRateHz = FloatArray(LEG_COUNT)
+        private val legFastBaselineRateHz = FloatArray(LEG_COUNT)
         private val legPreviousRateHz = FloatArray(LEG_COUNT)
         private var legBaselineReady = false
         private var haltWalkOffTotal = 0
@@ -1015,6 +1021,7 @@ class MainActivity : Activity() {
             java.util.Arrays.fill(legGroupActivation, 0f)
             java.util.Arrays.fill(legGroupRateHz, 0f)
             java.util.Arrays.fill(legBaselineRateHz, 0f)
+            java.util.Arrays.fill(legFastBaselineRateHz, 0f)
             java.util.Arrays.fill(legPreviousRateHz, 0f)
             legBaselineReady = false
             jumpActivityCacheValue = 0f
@@ -3349,9 +3356,10 @@ class MainActivity : Activity() {
                     val total = legGroupTotals[g]
                     val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
                     legBaselineRateHz[g] = rate
+                    legFastBaselineRateHz[g] = rate
                     legPreviousRateHz[g] = rate
                     legGroupRateHz[g] = rate
-                    legGroupActivation[g] = (rate / (rate + 4f)).coerceIn(0f, 1f) * .42f
+                    legGroupActivation[g] = 0f
                 }
                 legBaselineReady = true
             } else {
@@ -3359,24 +3367,29 @@ class MainActivity : Activity() {
                     val total = legGroupTotals[g]
                     val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
                     legGroupRateHz[g] = rate
-                    val baseline = legBaselineRateHz[g]
-                    val excess = (rate - baseline - 0.90f).coerceAtLeast(0f)
+                    // Two timescales are deliberately separated. The slow baseline
+                    // remains a physiological reference, while the fast baseline is
+                    // the actual phasic detector. This prevents a step-like transition
+                    // into sustained VNC firing from being interpreted as a locomotor
+                    // command for many seconds.
+                    val fastBaseline = legFastBaselineRateHz[g]
+                    val fastAlpha = (1f - exp((-dt / LEG_FAST_BASELINE_TAU_SECONDS).toDouble()).toFloat()).coerceIn(0f, 1f)
+                    val fastExcess = (rate - fastBaseline - 0.55f).coerceAtLeast(0f)
                     val rise = (rate - legPreviousRateHz[g]).coerceAtLeast(0f)
-                    val burst = (excess / 5.0f * .78f + rise / 4.0f * .22f).coerceIn(0f, 1f)
-                    val tonic = (rate / (max(baseline, 1f) + 4f)).coerceIn(0f, 1f)
-                    // Tonic motor-neuron firing is a baseline physiological state,
-                    // not by itself a locomotor command. The previous decoder fed
-                    // 42% tonic activity directly into the leg phase oscillator;
-                    // once any tonic VNC firing existed, the actuator could therefore
-                    // become a self-sustaining wind-up toy. Locomotor phase drive is
-                    // now carried by measured phasic excess/rising activity. Tonic
-                    // firing remains available in diagnostics but cannot create a
-                    // permanent gait on its own. No stimulus/action variable enters.
+                    val burst = (fastExcess / 4.5f * .82f + rise / 4f * .18f).coerceIn(0f, 1f)
+
+                    // Tonic motor-neuron firing is physiological state, not an
+                    // indefinitely renewable locomotor clock. A genuinely phasic
+                    // pattern repeatedly outruns the fast baseline; a constant rate
+                    // is absorbed by that baseline and its locomotor drive decays.
                     val target = burst.coerceIn(0f, 1f)
                     legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
 
-                    // Slow baseline adaptation is diagnostic only; the motor target
-                    // above does not subtract it away completely.
+                    legFastBaselineRateHz[g] += (rate - legFastBaselineRateHz[g]) * fastAlpha
+
+                    // Slow baseline remains diagnostic and deliberately adapts much
+                    // more slowly so the UI/research telemetry still exposes the
+                    // physiological firing level independently of phasic decoding.
                     val baseTau = if (burst < .18f) 8f else 18f
                     val baseAlpha = (1f - exp((-dt / baseTau).toDouble()).toFloat()).coerceIn(0f, 1f)
                     legBaselineRateHz[g] += (rate - legBaselineRateHz[g]) * baseAlpha

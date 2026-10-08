@@ -18,7 +18,7 @@ assert 'brakeActivationState = relaxMotorActivation(brakeActivationState, brakeT
 assert 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in m
 assert 'if (food' not in a.lower()
 assert 'if (wall' not in a.lower()
-assert 'FLYBRAIN_VERSION = "1.19.34"' in meta
-assert 'APP_VERSION_CODE = 175' in meta
+assert 'FLYBRAIN_VERSION = "1.19.35"' in meta
+assert 'APP_VERSION_CODE = 176' in meta
 assert 'BINARY_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"' in meta
-print("V1.19.34 NEURAL HALT/BRK AUDIT: PASS")
+print("V1.19.35 NEURAL HALT/BRK AUDIT: PASS")

@@ -48,8 +48,8 @@ assert 'val tasteContactPresent = foodOn &&' in feed
 assert 'val ingestionNeural = foodOn &&' in feed
 assert 'forceExternalSpike' not in feed
 # 7) Release identity.
-assert 'APP_VERSION = "1.19.34"' in META and 'APP_VERSION_CODE = 175' in META
-assert 'versionName = "1.19.34"' in GRADLE and 'versionCode = 175' in GRADLE
+assert 'APP_VERSION = "1.19.35"' in META and 'APP_VERSION_CODE = 176' in META
+assert 'versionName = "1.19.35"' in GRADLE and 'versionCode = 176' in GRADLE
 # 8) Numerical bilateral sanity independent of runtime state.
 sigma=.30; forward=.018; half=.035
 

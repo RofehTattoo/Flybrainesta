@@ -8,7 +8,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.34 adaptive six-leg sensorimotor actuator.
+ * V1.19.35 adaptive six-leg sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -208,7 +208,7 @@ class LeggedSensorimotorActuator {
             // Phase is a locomotor state variable, not a clock. It advances only
             // while the upstream neural decoder supplies phasic leg-MN drive. A
             // tonic/background activation below threshold must not wind the legs
-            // forever. This is the mechanical correction for the V1.19.34
+            // forever. This is the mechanical correction for the V1.19.35
             // “toy-car” failure mode; the actuator still receives neural output
             // exclusively and contains no stimulus/action controller.
             val phaseHz = if (a > MOTOR_THRESHOLD) {
@@ -233,8 +233,11 @@ class LeggedSensorimotorActuator {
 
             stance[g] = stanceFraction
             swing[g] = swingFraction
-            contact[g] = if (a <= MOTOR_THRESHOLD) 0f else
-                (a * stanceFraction).coerceIn(0f, 1f)
+            // Contact is geometric support, not a proxy for neural firing.
+            // A leg that has entered stance remains a physical support contact
+            // even while its neural drive is momentarily silent. Propulsive load
+            // remains neural-drive dependent below.
+            contact[g] = stanceFraction.coerceIn(0f, 1f)
             load[g] = (a * stanceFraction).coerceIn(0f, 1f)
             extension[g] = (0.18f + .82f * a).coerceIn(0f, 1f)
 
@@ -281,7 +284,9 @@ class LeggedSensorimotorActuator {
         }
         initializedStride = true
 
-        supportMean = (totalLoad / LEG_COUNT).coerceIn(0f, 1f)
+        // Support describes physical stance/contact. Neural load is kept separate
+        // because it represents how strongly the motor system is driving that contact.
+        supportMean = (totalContact / LEG_COUNT).coerceIn(0f, 1f)
         leftSupport = (leftLoad / 3f).coerceIn(0f, 1f)
         rightSupport = (rightLoad / 3f).coerceIn(0f, 1f)
         supportBalance = ((rightSupport - leftSupport) / (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)

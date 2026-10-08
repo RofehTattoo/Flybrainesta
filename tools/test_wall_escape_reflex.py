@@ -22,6 +22,6 @@ assert "WALL_SEPARATION_SPEED" not in ACT
 assert "exploratoryTurn" not in MAIN and "locomotionRng" not in MAIN
 assert "heading += yawRate * dt" in MAIN
 assert "legActuator.applyWallConstraint(" in MAIN and "wallContactNow" in MAIN
-assert 'APP_VERSION = "1.19.34"' in META and 'APP_VERSION_CODE = 175' in META
-assert 'versionName = "1.19.34"' in GRADLE and 'versionCode = 175' in GRADLE
+assert 'APP_VERSION = "1.19.35"' in META and 'APP_VERSION_CODE = 176' in META
+assert 'versionName = "1.19.35"' in GRADLE and 'versionCode = 176' in GRADLE
 print("V1.19.28 WALL CONTACT / NO DIRECT TURN AUDIT: PASS")
