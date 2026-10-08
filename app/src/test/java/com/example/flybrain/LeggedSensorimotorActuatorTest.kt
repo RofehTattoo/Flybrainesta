@@ -18,10 +18,16 @@ class LeggedSensorimotorActuatorTest {
     }
 
     @Test
-    fun bilateralMotorOutput_drivesSixLegMechanicsAndFeedback() {
+    fun phasicMotorOutput_drivesSixLegMechanicsAndFeedback() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .35f }
-        repeat(80) { a.step(motor, 0f, 0f, .02f) }
+        repeat(80) { step ->
+            // The actuator receives the already-decoded phasic neural drive.
+            // Alternate short bursts with silence so the test represents an
+            // actual motor pattern rather than tonic/background firing.
+            val burst = if ((step / 5) % 2 == 0) motor else FloatArray(6)
+            a.step(burst, 0f, 0f, .02f)
+        }
         assertTrue(a.forwardVelocity > .03f)
         assertTrue(a.supportMean > .05f)
         assertTrue(a.proprioceptionGlobal > .02f)
@@ -39,7 +45,7 @@ class LeggedSensorimotorActuatorTest {
 
 
     @Test
-    fun symmetricMotorOutput_hasNoPersistentYawBias() {
+    fun symmetricPhasicMotorOutput_hasNoPersistentYawBias() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .45f }
         var yawSum = 0f
@@ -47,7 +53,8 @@ class LeggedSensorimotorActuatorTest {
         var forceSum = 0f
         var samples = 0
         repeat(2500) { step ->
-            a.step(motor, 0f, 0f, .02f)
+            val burst = if ((step / 5) % 2 == 0) motor else FloatArray(6)
+            a.step(burst, 0f, 0f, .02f)
             if (step >= 500) {
                 yawSum += a.yawRate
                 supportSum += a.supportCoverage
@@ -112,6 +119,15 @@ class LeggedSensorimotorActuatorTest {
         repeat(100) { a.step(motor, 0f, 1f, .02f) }
         assertTrue(a.forwardVelocity < walking)
         assertTrue(a.forwardVelocity < .03f)
+    }
+
+    @Test
+    fun sustainedBackgroundMotorInput_isNotAClockThatForcesWalking() {
+        val a = LeggedSensorimotorActuator()
+        val tonic = FloatArray(6) { .015f }
+        repeat(600) { a.step(tonic, 0f, 0f, .02f) }
+        assertTrue(a.forwardVelocity < 1e-5f)
+        assertTrue(a.yawRate < 1e-5f)
     }
 
     @Test

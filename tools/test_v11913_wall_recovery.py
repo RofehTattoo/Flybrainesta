@@ -10,6 +10,6 @@ assert "fun applyWallConstraint(" in ACT
 assert "vx -= outward * nx" in ACT and "vy -= outward * ny" in ACT
 assert "wallPressure" in ACT
 assert "wallEscapeBias" not in ACT
-assert 'APP_VERSION = "1.19.33"' in META
-assert 'APP_VERSION_CODE = 174' in META
+assert 'APP_VERSION = "1.19.34"' in META
+assert 'APP_VERSION_CODE = 175' in META
 print("V1.19.28 WALL CONTACT / BODY RECOVERY REGRESSION: PASS")

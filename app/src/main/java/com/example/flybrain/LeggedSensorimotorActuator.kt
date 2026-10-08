@@ -8,7 +8,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.28 adaptive six-leg sensorimotor actuator.
+ * V1.19.34 adaptive six-leg sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
@@ -31,8 +31,8 @@ class LeggedSensorimotorActuator {
         // change the inter-leg timing instead of forcing a perpetual tripod.
         private val INITIAL_PHASES = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)
         private const val STANCE_DUTY = .62f
-        private const val MIN_PHASE_HZ = 1.20f
-        private const val MAX_PHASE_HZ = 16.0f
+        private const val MIN_PHASE_HZ = 0.80f
+        private const val MAX_PHASE_HZ = 14.0f
         private const val MOTOR_THRESHOLD = .035f
         private const val MAX_FORWARD_SPEED = 5.00f
         private const val MAX_LATERAL_SPEED = .025f
@@ -205,6 +205,12 @@ class LeggedSensorimotorActuator {
 
         for (g in 0 until LEG_COUNT) {
             val a = (legActivation[g].coerceIn(0f, 1f) * gaitGate).coerceIn(0f, 1f)
+            // Phase is a locomotor state variable, not a clock. It advances only
+            // while the upstream neural decoder supplies phasic leg-MN drive. A
+            // tonic/background activation below threshold must not wind the legs
+            // forever. This is the mechanical correction for the V1.19.34
+            // “toy-car” failure mode; the actuator still receives neural output
+            // exclusively and contains no stimulus/action controller.
             val phaseHz = if (a > MOTOR_THRESHOLD) {
                 MIN_PHASE_HZ + (MAX_PHASE_HZ - MIN_PHASE_HZ) * sqrt(a)
             } else 0f

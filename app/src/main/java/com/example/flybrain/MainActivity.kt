@@ -622,7 +622,6 @@ class MainActivity : Activity() {
         private var bodyLateralSpeed = 0f
         private var yawRate = 0f
         private var walkOffActivationState = 0f
-            brakeActivationState = 0f
         private var brakeActivationState = 0f
         // Connectome-derived two-hop route metadata: descriptive weights for
         // forward, turning and escape-related paths. These never create edges.
@@ -3365,10 +3364,15 @@ class MainActivity : Activity() {
                     val rise = (rate - legPreviousRateHz[g]).coerceAtLeast(0f)
                     val burst = (excess / 5.0f * .78f + rise / 4.0f * .22f).coerceIn(0f, 1f)
                     val tonic = (rate / (max(baseline, 1f) + 4f)).coerceIn(0f, 1f)
-                    // Neural leg drive is now a bounded mixture of the measured
-                    // instantaneous rate and its phasic excess. No stimulus/action
-                    // variable enters this decoder.
-                    val target = (tonic * .42f + burst * .58f).coerceIn(0f, 1f)
+                    // Tonic motor-neuron firing is a baseline physiological state,
+                    // not by itself a locomotor command. The previous decoder fed
+                    // 42% tonic activity directly into the leg phase oscillator;
+                    // once any tonic VNC firing existed, the actuator could therefore
+                    // become a self-sustaining wind-up toy. Locomotor phase drive is
+                    // now carried by measured phasic excess/rising activity. Tonic
+                    // firing remains available in diagnostics but cannot create a
+                    // permanent gait on its own. No stimulus/action variable enters.
+                    val target = burst.coerceIn(0f, 1f)
                     legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
 
                     // Slow baseline adaptation is diagnostic only; the motor target
