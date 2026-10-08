@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V1.19.38 release-contract audit.
+"""V1.19.39 release-contract audit.
 
 Checks all active source/test contracts that are supposed to describe the current
 release. Historical changelog/audit documents are deliberately excluded.
@@ -8,8 +8,8 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT = "1.19.38"
-CODE = "179"
+CURRENT = "1.19.39"
+CODE = "180"
 
 gradle = (ROOT/"app/build.gradle.kts").read_text(encoding="utf-8")
 meta = (ROOT/"app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
@@ -35,4 +35,4 @@ for p in (ROOT/"tools").glob("test_*.py"):
             if old in line and ("assert" in line or "FLYBRAIN_RELEASE" in line or "APP_VERSION_CODE" in line or "versionName" in line or "versionCode" in line):
                 raise AssertionError(f"{p.name}: stale active version contract: {line.strip()}")
 
-print("V1.19.38 RELEASE VERSION CONTRACT: PASS")
+print("V1.19.39 RELEASE VERSION CONTRACT: PASS")

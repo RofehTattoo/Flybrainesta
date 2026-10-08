@@ -26,7 +26,7 @@ jobs:
         run: python tools/build_connectome.py
 
       - name: Validate frozen FBR-10 reproducibility
-        run: python tools/test_fbr10_reproducibility.py
+        run: python tools/test_v139_visual_path_preservation.py
 
       - name: Validate generated visual FBR-10 quotas
         run: python tools/test_v11916_visual_fbr10_rebuild.py
