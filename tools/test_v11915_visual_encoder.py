@@ -48,8 +48,8 @@ assert 'annotated["channel"] != 0' in BUILD
 assert 'route_visual_turn' in BUILD and 'route_visual_escape' in BUILD
 assert 'visual_three_turn' in BUILD and 'visual_three_escape' in BUILD
 assert 'const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
-assert 'const val APP_VERSION = "1.19.31"' in META
-assert 'const val APP_VERSION_CODE = 172' in META
-assert 'versionName = "1.19.31"' in GRADLE
-assert 'versionCode = 172' in GRADLE
+assert 'const val APP_VERSION = "1.19.32"' in META
+assert 'const val APP_VERSION_CODE = 173' in META
+assert 'versionName = "1.19.32"' in GRADLE
+assert 'versionCode = 173' in GRADLE
 print('V1.19.28 BILATERAL VISUAL + LOOMING ENCODER AUDIT: PASS')

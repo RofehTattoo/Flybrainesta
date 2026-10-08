@@ -9,6 +9,6 @@ assert "WindowInsets.Type.systemBars()" in MAIN
 assert "WindowInsets.Type.displayCutout()" in MAIN
 assert "view.setPadding(safe.left, safe.top, safe.right, safe.bottom + 8.dp())" in MAIN
 META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
-assert 'APP_VERSION = "1.19.31"' in META
+assert 'APP_VERSION = "1.19.32"' in META
 assert 'REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"' in META
 print("V1.19.14 YAW / EDGE-TO-EDGE / HEADER COLLISION AUDIT: PASS")

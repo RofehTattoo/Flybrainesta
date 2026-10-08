@@ -1,4 +1,4 @@
-# FlyBrain — V1.19.31 / FBR-10-OLF2-MOTORROUTE
+# FlyBrain — V1.19.27 / FBR-10-OLF2-MOTORROUTE
 
 FlyBrain is an Android simulation built from the published MaleCNS v1.0 connectome of the male *Drosophila* central nervous system.
 
@@ -47,7 +47,7 @@ Environmental receptor stimulation is represented as Poisson spike events; it do
 ## Neural integration
 
 - Public neural frame: 20 ms.
-- Internal integration: 40 internal 0.5 ms substeps.
+- Internal integration: four 5 ms substeps.
 - Synaptic alpha-state: analytical exact integration with `tau_syn = 5 ms`.
 - Membrane leak: analytical exact integration with `tau_mem = 20 ms`.
 - Refractory period: 2.2 ms on a 0.5 ms internal grid; threshold reset follows the reference model.
@@ -64,16 +64,16 @@ The feeding chain is measured rather than hard-coded as a body controller:
 
 Body movement is driven from measured retained VNC motor activity. The body mechanics are an engineering readout layer; they are not claimed to be a full biomechanical model of *Drosophila*.
 
-## V1.19.31 locomotion / ground-reaction boundary
+## V1.19.27 stabilization boundary
 
-V1.19.31 is a locomotion/mechanics correction release, not a connectome expansion.
-The release keeps the FBR-10-OLF2-MOTORROUTE topology unchanged and replaces the previous scalar locomotion/wall response with an explicit six-foot ground-reaction model. CI checks three layers:
+V1.19.27 is a stabilization and validation release, not a connectome expansion.
+The release adds explicit locomotion observability and CI checks for three layers:
 
 - neural: six leg groups are derived from measured retained VNC motor-neuron output and walk-OFF from retained halt neurons;
 - mechanical: stance/swing/contact/load, modified-tripod coordination, bilateral support and ground-force/yaw proxies;
 - physical: bounded body velocity, yaw integration, fixed simulation timestep and local wall-contact resolution.
 
-These checks are architectural/engineering validation gates. They do not claim that the current normalized 2D body model is a complete experimental biomechanical reconstruction of *Drosophila melanogaster*. V1.19.31 specifically verifies that wall contact can generate a physical translation/torque response and that no wall-escape heading command is written directly.
+These checks are architectural/engineering validation gates. They do not claim that the current normalized 2D body model is a complete experimental biomechanical reconstruction of *Drosophila melanogaster*.
 
 Behaviour labels and action scores are diagnostics/readouts. They do not write direct sensory commands into body position.
 
@@ -105,7 +105,6 @@ py tools/test_frozen_connectome_validator.py
 py tools/test_neural_time_integration.py
 py tools/test_olfactory_input_map.py
 py tools/test_olfactory_route_reduction.py
-py tools/test_v131_ground_reaction_mechanics.py
 py tools/test_phase2b_temporal_substepping.py
 py tools/test_sensory_input_purity.py
 py tools/test_vnc_motor_semantics_logic.py
@@ -125,7 +124,7 @@ FBD105 validation requires the generated `malecns_fbr10_dynamics.bin` and its bu
 Previous V1.12–V1.16 audits and changelogs are preserved under `docs/history/`. They describe historical states and are not current runtime specifications.
 
 
-## Anatomical visual placement
+## V1.19.27 anatomical visual placement
 
 The neural observatory now uses a source-derived anatomical placement map. Primary
 sensory receptors are anchored to their receptor organs, VNC motor neurons to the

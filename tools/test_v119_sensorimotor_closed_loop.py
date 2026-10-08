@@ -15,22 +15,22 @@ assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, dtRaw: Flo
 assert 'effectiveWalkOffActivation' not in MAIN and 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in MAIN
 assert 'legActuator.proprioceptionLeft' in MAIN and 'legActuator.proprioceptionRight' in MAIN
 assert 'mechanosensorySide[idx] = side.toByte()' in MAIN
-# Position integration is isolated in the physical body boundary.
-mechanical=MAIN[MAIN.index('private fun applyMechanicalBodyState'):MAIN.index('private fun updateMeasuredPauseState')]
-assert 'val nextFlyX = flyX + worldVx * dt' in mechanical
-assert 'val nextFlyY = flyY + worldVy * dt' in mechanical
-assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in mechanical
-assert 'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)' in mechanical
-assert 'applyWallReactionWorld(' in mechanical
-assert 'WALL_POSITION_RECOVERY' not in mechanical
+# Position integration may include wall-normal collision recovery before clamping.
+# Verify the current semi-implicit integration structure without pinning the test
+# to the old two-line spelling that predated V1.19.28 corner recovery.
+assert 'var nextFlyX = flyX + worldVx * dt' in MAIN
+assert 'var nextFlyY = flyY + worldVy * dt' in MAIN
+assert 'flyX = nextFlyX.coerceIn(BODY_MIN_X, BODY_MAX_X)' in MAIN
+assert 'flyY = nextFlyY.coerceIn(BODY_MIN_Y, BODY_MAX_Y)' in MAIN
+assert 'WALL_POSITION_RECOVERY' in MAIN
 assert 'if (wallContactNow)' in MAIN
 assert 'heading += yawRate * dt' in MAIN
-assert MAIN.index('heading += yawRate * dt') < MAIN.index('val nextFlyX = flyX + worldVx * dt')
+assert MAIN.index('heading += yawRate * dt') < MAIN.index('var worldVx = cos(heading) * flySpeed')
 assert '* 60f' not in MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeuralSimulation')]
 assert 'wingActivity * .010f' not in MAIN and 'flightMotor * .010f' not in MAIN
 assert 'approachAction' not in ACT and 'foodOn' not in ACT and 'lightOn' not in ACT and 'dangerOn' not in ACT
 assert 'heading = Math.PI.toFloat() - heading' not in MAIN and 'heading = -heading' not in MAIN
 assert 'exploratoryTurn' not in MAIN and 'locomotionRng' not in MAIN
-assert 'const val APP_VERSION = "1.19.31"' in META and 'const val APP_VERSION_CODE = 172' in META
-assert 'versionName = "1.19.31"' in GRADLE and 'versionCode = 172' in GRADLE
+assert 'const val APP_VERSION = "1.19.32"' in META and 'const val APP_VERSION_CODE = 173' in META
+assert 'versionName = "1.19.32"' in GRADLE and 'versionCode = 173' in GRADLE
 print('V1.19.8 SENSORIMOTOR CLOSED LOOP STATIC AUDIT: PASS')

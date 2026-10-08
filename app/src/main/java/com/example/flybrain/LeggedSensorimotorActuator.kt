@@ -6,20 +6,18 @@ import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sqrt
-import kotlin.math.tanh
 
 /**
- * V1.19.31 six-leg ground-reaction sensorimotor actuator.
+ * V1.19.28 adaptive six-leg sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
  * leg phases, stance/swing and foot trajectories; the resulting stance motion
  * produces body force and yaw. No food/light/danger/action variable is accepted.
  *
- * Each stance foot generates a bounded ground reaction from its measured neural
- * leg activation and foot velocity relative to the ground. This couples force,
- * lateral slip and yaw through the actual six foot lever arms instead of using
- * a scalar turn or lateral-motion command.
+ * Tonic baseline motor firing is not propulsion. Only phasic excess above the
+ * per-leg measured baseline advances the gait strongly enough to generate force.
+ * This prevents a stable ~5 Hz background from becoming endless walking.
  */
 class LeggedSensorimotorActuator {
     companion object {
@@ -36,22 +34,22 @@ class LeggedSensorimotorActuator {
         private const val MAX_PHASE_HZ = 16.0f
         private const val MOTOR_THRESHOLD = .035f
         private const val MAX_FORWARD_SPEED = 5.00f
-        private const val MAX_BACKWARD_SPEED = .80f
-        private const val MAX_LATERAL_SPEED = .020f
-        private const val FORWARD_SLIP_SCALE = .55f
-        private const val LATERAL_SLIP_SCALE = .12f
-        private const val YAW_TORQUE_NORMALIZER = .0143f
-        private const val MAX_FOOT_FORCE = .22f
-        private const val BODY_FORCE_TO_ACCEL = 45.0f
-        private const val LATERAL_FORCE_TO_ACCEL = 28.0f
-        private const val YAW_TORQUE_TO_ACCEL = 180.0f
-        private const val YAW_DAMPING = 4.0f
+        private const val MAX_LATERAL_SPEED = .025f
+        private const val FORWARD_ACCEL = 45.0f
+        private const val LATERAL_ACCEL = .10f
         private const val FORWARD_DAMPING = 6.0f
         private const val WALK_OFF_BRAKE_ACCEL = 7.0f
         private const val LATERAL_DAMPING = 6.5f
+        private const val MAX_YAW_RATE = 1.35f
         // A left/right ratio is meaningful only when there is enough measured
         // stance propulsion. Without this gate, tiny residual forces normalize
         // to a full turn command and the body spins while translationally stopped.
+        private const val TURN_PROPULSION_DEADZONE = .018f
+        private const val TURN_PROPULSION_FULL_SCALE = .105f
+        private const val WALKOFF_YAW_SUPPRESSION = .92f
+        private const val PAUSE_YAW_CUTOFF = .20f
+        private const val YAW_STOP_RESPONSE_TAU = .075f
+        private const val YAW_RESPONSE_TAU = .16f
         private const val LINEAR_RESPONSE_MIN_DT = .0005f
         private const val FOOT_STROKE = .065f
         private const val WALL_TANGENTIAL_FRICTION = .94f
@@ -100,14 +98,7 @@ class LeggedSensorimotorActuator {
     var mechanicalActivity = 0f
         private set
 
-    /**
-     * Normalized forward ground-force proxy produced by stance legs.
-     *
-     * The underlying body force remains in the mechanical units used by the
-     * integrator. This diagnostic is normalized to the maximum single-foot
-     * reaction so that its 0..1 scale is stable when the number of stance legs
-     * changes; it is never fed back into locomotion dynamics.
-     */
+    /** Dimensionless forward ground-force proxy produced by stance legs. */
     var forwardForceProxy = 0f
         private set
     /** Signed dimensionless left/right force imbalance used by the physical yaw model. */
@@ -195,10 +186,11 @@ class LeggedSensorimotorActuator {
 
         var leftLoad = 0f
         var rightLoad = 0f
+        var leftPropulsion = 0f
+        var rightPropulsion = 0f
         var totalLoad = 0f
         var totalContact = 0f
-        var totalForwardForce = 0f
-        var totalLateralForce = 0f
+        var totalPropulsion = 0f
         var yawTorque = 0f
 
         for (g in 0 until LEG_COUNT) {
@@ -211,8 +203,9 @@ class LeggedSensorimotorActuator {
             while (phase[g] < 0f) phase[g] += TWO_PI
 
             // The phase is now the leg's own state. There is no per-frame
-            // tripod offset imposed here. Neural motor output determines the
-            // phase progression of each individual leg.
+            // tripod offset imposed here. Different neural drives can therefore
+            // advance the six legs at different rates and let their coordination
+            // drift from the startup condition.
             var cycle = (phase[g] / TWO_PI) % 1f
             if (cycle < 0f) cycle += 1f
             val s = cycle < STANCE_DUTY
@@ -220,7 +213,7 @@ class LeggedSensorimotorActuator {
                 ((cycle - STANCE_DUTY) / (1f - STANCE_DUTY)).coerceIn(0f, 1f)
             val smooth = u * u * (3f - 2f * u)
             val stanceFraction = if (s) 1f - smooth else 0f
-            val swingFraction = if (s) smooth else 0f
+            val swingFraction = if (s) 0f else smooth
 
             stance[g] = stanceFraction
             swing[g] = swingFraction
@@ -237,40 +230,38 @@ class LeggedSensorimotorActuator {
             lift[g] = if (a <= MOTOR_THRESHOLD) 0f else
                 (kneeSin(swingFraction) * a).coerceIn(0f, 1f)
 
+            // Body-frame foot geometry is driven by the same gait state shown on screen.
             footForward[g] = baseForward[g] + stride[g] * FOOT_STROKE
             footLateral[g] = baseLateral[g] + (if (g < 3) -1f else 1f) * .007f * extension[g]
             footLift[g] = lift[g] * .020f
 
             val strideRate = if (initializedStride) (stride[g] - previousStride[g]) / dt else 0f
             previousStride[g] = stride[g]
-
-            // During stance, the foot is treated as a temporary ground contact.
-            // The reaction force opposes the foot's velocity relative to the ground.
-            // This couples translational slip and yaw through the actual six-foot
-            // lever arms instead of injecting a scalar left/right steering command.
-            if (s && contact[g] > 0f) {
-                val footVelocityForward = forwardVelocity - yawRate * footLateral[g]
-                val footVelocityLateral = lateralVelocity + yawRate * footForward[g]
-                val footStrokeVelocity = strideRate * FOOT_STROKE
-                val slipForward = footVelocityForward + footStrokeVelocity
-                val slipLateral = footVelocityLateral
-
-                val forceScale = MAX_FOOT_FORCE * contact[g]
-                val forceForward = (-forceScale * tanh((slipForward / FORWARD_SLIP_SCALE).toDouble()).toFloat())
-                    .coerceIn(-MAX_FOOT_FORCE, MAX_FOOT_FORCE)
-                val forceLateral = (-forceScale * tanh((slipLateral / LATERAL_SLIP_SCALE).toDouble()).toFloat())
-                    .coerceIn(-MAX_FOOT_FORCE, MAX_FOOT_FORCE)
-
-                totalForwardForce += forceForward
-                totalLateralForce += forceLateral
-                // Exact planar moment r × F. The body turns only when the measured
-                // six-foot ground reactions are mechanically asymmetric.
-                yawTorque += footForward[g] * forceLateral - footLateral[g] * forceForward
+            val propulsive = if (s && a > MOTOR_THRESHOLD) {
+                (-strideRate * contact[g]).coerceAtLeast(0f)
+            } else 0f
+            // Normalize the foot stroke velocity so it becomes a bounded force proxy.
+            val force = (propulsive * .055f * (0.55f + .45f * a)).coerceIn(0f, .22f)
+            totalPropulsion += force
+            // Use the actual lateral location of each stance foot to form a
+            // signed torque proxy. This is still downstream mechanics: no wall,
+            // food or action variable enters. A side imbalance is therefore
+            // weighted by where the force is applied, rather than collapsing the
+            // six legs immediately into one left/right scalar.
+            if (s && force > 0f) {
+                // Exact planar cross-product for a forward stance force. Keeping the
+                // full lever-arm expression makes the mechanics explicit: the six
+                // individual foot positions, not a direct left/right command, create
+                // the yaw moment.
+                yawTorque += footLateral[g] * force
             }
-
             totalLoad += load[g]
             totalContact += contact[g]
-            if (g < 3) leftLoad += load[g] else rightLoad += load[g]
+            if (g < 3) {
+                leftLoad += load[g]; leftPropulsion += force
+            } else {
+                rightLoad += load[g]; rightPropulsion += force
+            }
         }
         initializedStride = true
 
@@ -279,15 +270,22 @@ class LeggedSensorimotorActuator {
         rightSupport = (rightLoad / 3f).coerceIn(0f, 1f)
         supportBalance = ((rightSupport - leftSupport) / (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
         supportCoverage = (totalContact / LEG_COUNT.toFloat()).coerceIn(0f, 1f)
-
+        // Instantaneous tripod support is intentionally asymmetric (two legs on
+        // one side can be in stance while one is on the other). For diagnostics,
+        // bilateral symmetry therefore compares left/right propulsive impulse
+        // accumulated over time rather than treating each frame as a standing
+        // posture. This metric never feeds back into dynamics.
         val symmetryAlpha = (1f - exp((-dt / .20f).toDouble()).toFloat()).coerceIn(0f, 1f)
-        val leftContactForce = totalSideLoad(0, 3)
-        val rightContactForce = totalSideLoad(3, 6)
-        leftPropulsionFiltered += (leftContactForce - leftPropulsionFiltered) * symmetryAlpha
-        rightPropulsionFiltered += (rightContactForce - rightPropulsionFiltered) * symmetryAlpha
+        leftPropulsionFiltered += (leftPropulsion - leftPropulsionFiltered) * symmetryAlpha
+        rightPropulsionFiltered += (rightPropulsion - rightPropulsionFiltered) * symmetryAlpha
         bilateralSymmetryFiltered = (1f - abs(leftPropulsionFiltered - rightPropulsionFiltered) /
             (leftPropulsionFiltered + rightPropulsionFiltered + .001f)).coerceIn(0f, 1f)
         bilateralMechanicalSymmetry = bilateralSymmetryFiltered
+
+        // Inter-leg timing is intentionally no longer forced back toward a
+        // modified-tripod reference. The six phases are independent state variables;
+        // the only coordination available to them is the neural drive and the
+        // proprioceptive feedback returned through MainActivity.
 
         var phaseMeanX = 0f
         var phaseMeanY = 0f
@@ -298,76 +296,74 @@ class LeggedSensorimotorActuator {
         val phaseConcentration = hypot(phaseMeanX, phaseMeanY) / LEG_COUNT.toFloat()
         legPhaseSpread = (1f - phaseConcentration).coerceIn(0f, 1f)
 
-        val netForwardForce = totalForwardForce.coerceIn(-.66f, .66f)
-        val netLateralForce = totalLateralForce.coerceIn(-.66f, .66f)
-        forwardForceProxy = (netForwardForce / MAX_FOOT_FORCE).coerceIn(0f, 1f)
-
+        // Each stance foot contributes to the body's net propulsive force.
+        // Summing then saturating preserves the contribution of multiple legs;
+        // averaging by LEG_COUNT incorrectly diluted the total force sixfold.
+        // Propulsion still comes only from backward foot motion during stance.
+        val propulsive = totalPropulsion.coerceIn(0f, .66f)
+        forwardForceProxy = propulsive
         val walkOff = walkOffActivation.coerceIn(0f, 1f)
-        forwardAcceleration = BODY_FORCE_TO_ACCEL * netForwardForce -
-            FORWARD_DAMPING * forwardVelocity - WALK_OFF_BRAKE_ACCEL * walkOff
-        lateralAcceleration = LATERAL_FORCE_TO_ACCEL * netLateralForce -
-            LATERAL_DAMPING * lateralVelocity
+        forwardAcceleration = FORWARD_ACCEL * propulsive -
+            FORWARD_DAMPING * forwardVelocity -
+            WALK_OFF_BRAKE_ACCEL * walkOff
+        forwardVelocity = (forwardVelocity + forwardAcceleration * dt).coerceIn(0f, MAX_FORWARD_SPEED)
 
-        forwardVelocity = (forwardVelocity + forwardAcceleration * dt)
-            .coerceIn(-MAX_BACKWARD_SPEED, MAX_FORWARD_SPEED)
+        val totalTurnPropulsion = (rightPropulsion + leftPropulsion).coerceAtLeast(0f)
+        val turnBalance = ((rightPropulsion - leftPropulsion) /
+            (totalTurnPropulsion + .0005f)).coerceIn(-1f, 1f)
+        val torqueScale = (.065f * .22f * 2f).coerceAtLeast(.0001f)
+        val normalizedYawTorque = (yawTorque / torqueScale).coerceIn(-1f, 1f)
+        yawTorqueProxy = normalizedYawTorque
+        // Turn authority exists only when real stance propulsion exists. This
+        // preserves a genuine asymmetric gait response while preventing residual
+        // one-sided activity from spinning a stationary body.
+        val turnDrive = ((totalTurnPropulsion - TURN_PROPULSION_DEADZONE) /
+            (TURN_PROPULSION_FULL_SCALE - TURN_PROPULSION_DEADZONE))
+            .coerceIn(0f, 1f)
+        yawForceProxy = (turnBalance * turnDrive).coerceIn(-1f, 1f)
+        // A load imbalance can bias lateral motion only while the stance gait is
+        // actually producing propulsive force. Static asymmetry alone cannot move
+        // the body sideways.
+        lateralAcceleration = LATERAL_ACCEL * supportBalance * turnDrive -
+            LATERAL_DAMPING * lateralVelocity
         lateralVelocity = (lateralVelocity + lateralAcceleration * dt)
             .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
 
-        val torqueNorm = (yawTorque / YAW_TORQUE_NORMALIZER).coerceIn(-1f, 1f)
-        yawTorqueProxy = torqueNorm
-        // Rotational dynamics are integrated from the measured six-foot moment.
-        // There is no target angle, bilateral scalar fallback, or wall-escape turn.
-        yawForceProxy = torqueNorm
-        yawAcceleration = YAW_TORQUE_TO_ACCEL * yawTorque - YAW_DAMPING * yawRate
+        val pauseYawGate = if (walkOff >= PAUSE_YAW_CUTOFF) 0f else
+            (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
+        // Yaw is generated exclusively by the measured bilateral leg-motor
+        // imbalance. Do not gate this neural yaw by forward translation: after
+        // physical wall contact the collision layer can legitimately reduce
+        // forwardVelocity to ~0, and using that velocity as a prerequisite for
+        // yaw creates a deadlock in which a real asymmetric neural gait can no
+        // longer reorient the body. Wall contact itself still never writes yaw
+        // or gait phase; it only changes physical velocity and sensory feedback.
+        // Primary steering signal is now the six-leg force moment. The old
+        // bilateral scalar remains only as a bounded fallback when the instantaneous
+        // foot-force moment is numerically tiny. Both signals originate exclusively
+        // from measured leg-MN-driven mechanics.
+        val steeringSignal = if (abs(normalizedYawTorque) > .015f) normalizedYawTorque else turnBalance
+        val neuralYawTarget = steeringSignal * MAX_YAW_RATE * turnDrive * pauseYawGate
+        val yawTarget = neuralYawTarget.coerceIn(-MAX_YAW_RATE, MAX_YAW_RATE)
+        val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f) {
+            YAW_STOP_RESPONSE_TAU
+        } else {
+            YAW_RESPONSE_TAU
+        }
+        val yawAlpha = (1f - exp((-dt / yawTau).toDouble()).toFloat()).coerceIn(0f, 1f)
         val oldYaw = yawRate
-        yawRate = (yawRate + yawAcceleration * dt).coerceIn(-1.80f, 1.80f)
+        yawRate += (yawTarget - yawRate) * yawAlpha
         yawAcceleration = (yawRate - oldYaw) / dt
 
         val leftMechanical = bilateralMechanicalMean(0, 3)
         val rightMechanical = bilateralMechanicalMean(3, 6)
-        proprioceptionLeft = (leftMechanical + abs(leftContactForce) * .10f).coerceIn(0f, 1f)
-        proprioceptionRight = (rightMechanical + abs(rightContactForce) * .10f).coerceIn(0f, 1f)
+        proprioceptionLeft = (leftMechanical + abs(leftPropulsion) * .10f).coerceIn(0f, 1f)
+        proprioceptionRight = (rightMechanical + abs(rightPropulsion) * .10f).coerceIn(0f, 1f)
         proprioceptionGlobal = ((proprioceptionLeft + proprioceptionRight) * .5f +
             abs(forwardAcceleration) * .07f + wallPressure * .25f).coerceIn(0f, 1f)
         mechanicalActivity = ((totalContact / LEG_COUNT) * .60f +
-            (abs(forwardVelocity) / MAX_FORWARD_SPEED) * .40f).coerceIn(0f, 1f)
+            (forwardVelocity / MAX_FORWARD_SPEED) * .40f).coerceIn(0f, 1f)
         wallPressure = (wallPressure * exp((-dt / .14f).toDouble()).toFloat()).coerceIn(0f, 1f)
-    }
-
-    private fun totalSideLoad(start: Int, end: Int): Float {
-        var sum = 0f
-        for (i in start until end) sum += contact[i]
-        return sum.coerceIn(0f, 1.5f)
-    }
-
-    /**
-     * Apply a normalized world-frame reaction from a real physical wall contact.
-     * The caller supplies only contact mechanics (force and moment), never a goal
-     * or behavioural action. This lets a stance foot push the body away from a
-     * wall and lets the resulting moment reorient the body without a wall-escape
-     * controller.
-     */
-    fun applyWallReactionWorld(
-        heading: Float,
-        forceWorldX: Float,
-        forceWorldY: Float,
-        torqueWorld: Float,
-        dtRaw: Float
-    ) {
-        val dt = dtRaw.coerceAtLeast(LINEAR_RESPONSE_MIN_DT)
-        val c = kotlin.math.cos(heading)
-        val s = kotlin.math.sin(heading)
-        val forceForward = c * forceWorldX + s * forceWorldY
-        val forceLateral = -s * forceWorldX + c * forceWorldY
-
-        forwardVelocity = (forwardVelocity + BODY_FORCE_TO_ACCEL * forceForward * dt)
-            .coerceIn(0f, MAX_FORWARD_SPEED)
-        lateralVelocity = (lateralVelocity + LATERAL_FORCE_TO_ACCEL * forceLateral * dt)
-            .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
-        yawRate = (yawRate + YAW_TORQUE_TO_ACCEL * torqueWorld * dt)
-            .coerceIn(-1.80f, 1.80f)
-        wallPressure = max(wallPressure, hypot(forceWorldX, forceWorldY).coerceIn(0f, 1f))
-        wallReactionTorqueProxy = (torqueWorld / YAW_TORQUE_NORMALIZER).coerceIn(-1f, 1f)
     }
 
     /**
@@ -418,8 +414,8 @@ class LeggedSensorimotorActuator {
             max(forwardIntoWall, .10f * wallFacing)
         ).coerceIn(0f, 1f)
 
-        forwardVelocity = (vx * c + vy * s)
-            .coerceIn(-MAX_BACKWARD_SPEED, MAX_FORWARD_SPEED)
+        forwardVelocity = (vx * c + vy * s).coerceAtLeast(0f)
+            .coerceIn(0f, MAX_FORWARD_SPEED)
         lateralVelocity = (-vx * s + vy * c)
             .coerceIn(-MAX_LATERAL_SPEED, MAX_LATERAL_SPEED)
     }

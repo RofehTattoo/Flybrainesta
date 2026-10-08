@@ -54,11 +54,11 @@ assert 'for (id in 0 until N)' in MAIN and 'brainDisplayLookup[id] >= 0' in MAIN
 assert 'loadAnatomicalVisualMap()' in MAIN
 assert 'anatomical_visual_map.tsv' in WF
 assert 'python tools/test_anatomical_visual_map.py' in WF
-assert 'const val APP_VERSION = "1.19.31"' in META
-assert 'const val APP_VERSION_CODE = 172' in META
-assert 'versionName = "1.19.31"' in GRADLE
-assert 'versionCode = 172' in GRADLE
-assert 'android:label="FlyBrain V1.19.31"' in MANIFEST
+assert 'const val APP_VERSION = "1.19.32"' in META
+assert 'const val APP_VERSION_CODE = 173' in META
+assert 'versionName = "1.19.32"' in GRADLE
+assert 'versionCode = 173' in GRADLE
+assert 'android:label="FlyBrain V1.19.32"' in MANIFEST
 
 if args.map_path:
     mp = Path(args.map_path)
