@@ -3,7 +3,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 act=(root/"app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt").read_text()
 assert "translationYawGate" not in act
-assert "val steeringSignal = if (abs(normalizedYawTorque) > .015f) normalizedYawTorque else turnBalance" in act
+assert "val steeringSignal = if (abs(yawTorqueFiltered) > .015f) yawTorqueFiltered else turnBalance" in act
 assert "applyWallConstraint" in act
 start=act.index("fun applyWallConstraint")
 wall=act[start:]

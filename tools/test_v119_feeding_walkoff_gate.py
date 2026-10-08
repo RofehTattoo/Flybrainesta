@@ -6,7 +6,7 @@ MAIN=(ROOT/'app/src/main/java/com/example/flybrain/MainActivity.kt').read_text(e
 ACT=(ROOT/'app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt').read_text(encoding='utf-8')
 drive=MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeuralSimulation')]
 assert 'walkOffActivationState' in drive and 'feedingPauseActivation' not in drive
-assert 'effectiveWalkOffActivation' not in drive and 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in drive
+assert 'effectiveWalkOffActivation' not in drive and 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in drive
 assert 'foodOn' not in ACT and 'foodDirectionalBias' not in ACT and 'approachAction' not in ACT
 # V1.19.14 uses a collision-aware position integration path.
 assert 'var nextFlyX = flyX + worldVx * dt' in drive

@@ -427,6 +427,7 @@ class MainActivity : Activity() {
         private val LEG_STANCE_DUTY = 0.62f
         private val LEG_WALK_THRESHOLD = 0.025f
         private val WALKOFF_RATE_REFERENCE_HZ = 10f
+        private val BRK_RATE_REFERENCE_HZ = 10f
 
         private val VIS_START = GeneratedConnectomeMeta.VIS_START
         private val VIS_END = GeneratedConnectomeMeta.VIS_END
@@ -621,6 +622,8 @@ class MainActivity : Activity() {
         private var bodyLateralSpeed = 0f
         private var yawRate = 0f
         private var walkOffActivationState = 0f
+            brakeActivationState = 0f
+        private var brakeActivationState = 0f
         // Connectome-derived two-hop route metadata: descriptive weights for
         // forward, turning and escape-related paths. These never create edges.
         private val routeForward = FloatArray(N)
@@ -3386,7 +3389,15 @@ class MainActivity : Activity() {
             }
             val walkOffTarget = (walkOffRateHz / WALKOFF_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
             walkOffActivationState = relaxMotorActivation(walkOffActivationState, walkOffTarget, dt)
-            val walkOffGate = (1f - .94f * walkOffActivationState).coerceIn(0f, 1f)
+
+            // BRK is a separate measured VNC brake population. Keep its state
+            // independent from FG/BB walk-OFF so the actuator can distinguish
+            // suppression of the walking command from active joint braking.
+            val brakeRateHz = if (haltBrakeTotal <= 0) 0f else {
+                haltBrakeSpikeEventsFrame * invFrame / haltBrakeTotal.toFloat()
+            }
+            val brakeTarget = (brakeRateHz / BRK_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
+            brakeActivationState = relaxMotorActivation(brakeActivationState, brakeTarget, dt)
 
             legActivity = legActivationState
             leftLeg = leftLegActivationState
@@ -3512,7 +3523,7 @@ class MainActivity : Activity() {
             // Feeding-related neural readouts remain diagnostic only. Locomotor
             // inhibition reaches the actuator exclusively through retained
             // walk-OFF neural activity measured above.
-            legActuator.step(legGroupActivation, walkOffActivationState, dt)
+            legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)
             flySpeed = legActuator.forwardVelocity
             bodyLateralSpeed = legActuator.lateralVelocity
             yawRate = legActuator.yawRate

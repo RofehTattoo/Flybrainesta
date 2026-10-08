@@ -6,10 +6,10 @@ MAIN = (ROOT / "app/src/main/java/com/example/flybrain/MainActivity.kt").read_te
 GRADLE = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
 
-assert 'versionName = "1.19.32"' in GRADLE
-assert 'versionCode = 173' in GRADLE
-assert 'APP_VERSION = "1.19.32"' in META
-assert 'APP_VERSION_CODE = 173' in META
+assert 'versionName = "1.19.33"' in GRADLE
+assert 'versionCode = 174' in GRADLE
+assert 'APP_VERSION = "1.19.33"' in META
+assert 'APP_VERSION_CODE = 174' in META
 
 # Regression guard: stance/swing semantics must remain physically ordered.
 assert 'val stanceFraction = if (s) 1f - smooth else 0f' in ACT
@@ -29,4 +29,4 @@ for forbidden in [
 ]:
     assert forbidden not in ACT, f"V1.19.31 regression token present: {forbidden}"
 
-print("V1.19.32 REGRESSION RECOVERY GUARD: PASS")
+print("V1.19.33 REGRESSION RECOVERY GUARD: PASS")

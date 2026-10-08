@@ -9,7 +9,7 @@ class LeggedSensorimotorActuatorTest {
     @Test
     fun noMotorOutput_doesNotAdvanceLegPhasesOrBody() {
         val a = LeggedSensorimotorActuator()
-        repeat(50) { a.step(FloatArray(6), 0f, .02f) }
+        repeat(50) { a.step(FloatArray(6), 0f, 0f, .02f) }
         assertTrue(a.forwardVelocity < 1e-5f)
         assertTrue(a.lateralVelocity < 1e-5f)
         assertTrue(a.yawRate < 1e-5f)
@@ -21,7 +21,7 @@ class LeggedSensorimotorActuatorTest {
     fun bilateralMotorOutput_drivesSixLegMechanicsAndFeedback() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .35f }
-        repeat(80) { a.step(motor, 0f, .02f) }
+        repeat(80) { a.step(motor, 0f, 0f, .02f) }
         assertTrue(a.forwardVelocity > .03f)
         assertTrue(a.supportMean > .05f)
         assertTrue(a.proprioceptionGlobal > .02f)
@@ -32,7 +32,7 @@ class LeggedSensorimotorActuatorTest {
     fun rightSupportImbalance_producesPositiveYaw() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { i -> if (i < 3) .10f else .60f }
-        repeat(80) { a.step(motor, 0f, .02f) }
+        repeat(80) { a.step(motor, 0f, 0f, .02f) }
         assertTrue(a.yawRate > 0f)
         assertTrue(a.supportBalance > 0f)
     }
@@ -47,7 +47,7 @@ class LeggedSensorimotorActuatorTest {
         var forceSum = 0f
         var samples = 0
         repeat(2500) { step ->
-            a.step(motor, 0f, .02f)
+            a.step(motor, 0f, 0f, .02f)
             if (step >= 500) {
                 yawSum += a.yawRate
                 supportSum += a.supportCoverage
@@ -69,9 +69,9 @@ class LeggedSensorimotorActuatorTest {
     fun legPhasesFreezeWhenMotorOutputStops() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .42f }
-        repeat(60) { a.step(motor, 0f, .02f) }
+        repeat(60) { a.step(motor, 0f, 0f, .02f) }
         val phaseBefore = a.phase.clone()
-        repeat(50) { a.step(FloatArray(6), 0f, .02f) }
+        repeat(50) { a.step(FloatArray(6), 0f, 0f, .02f) }
         for (i in phaseBefore.indices) {
             assertEquals(phaseBefore[i], a.phase[i], 1e-5f)
         }
@@ -85,7 +85,7 @@ class LeggedSensorimotorActuatorTest {
         val a = LeggedSensorimotorActuator()
         val before = a.phase.clone()
         val motor = FloatArray(6) { i -> if (i == 0) .12f else .55f }
-        repeat(180) { a.step(motor, 0f, .02f) }
+        repeat(180) { a.step(motor, 0f, 0f, .02f) }
         val phaseDeltaBefore = (before[0] - before[1])
         val phaseDeltaAfter = (a.phase[0] - a.phase[1])
         assertTrue(abs(phaseDeltaAfter - phaseDeltaBefore) > .05f)
@@ -96,17 +96,29 @@ class LeggedSensorimotorActuatorTest {
     fun walkOff_reducesMechanicalDrive() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .55f }
-        repeat(100) { a.step(motor, 0f, .02f) }
+        repeat(100) { a.step(motor, 0f, 0f, .02f) }
         val walking = a.forwardVelocity
-        repeat(100) { a.step(motor, 1f, .02f) }
+        repeat(100) { a.step(motor, 1f, 0f, .02f) }
         assertTrue(a.forwardVelocity < walking)
         assertTrue(a.forwardVelocity < .03f)
     }
+
+    @Test
+    fun brkBrake_isIndependentFromWalkOffAndStopsMechanicalDrive() {
+        val a = LeggedSensorimotorActuator()
+        val motor = FloatArray(6) { .55f }
+        repeat(100) { a.step(motor, 0f, 0f, .02f) }
+        val walking = a.forwardVelocity
+        repeat(100) { a.step(motor, 0f, 1f, .02f) }
+        assertTrue(a.forwardVelocity < walking)
+        assertTrue(a.forwardVelocity < .03f)
+    }
+
     @Test
     fun wallContact_isCollisionAndSensoryFeedback_only() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .45f }
-        repeat(120) { a.step(motor, 0f, .02f) }
+        repeat(120) { a.step(motor, 0f, 0f, .02f) }
         val yawBefore = a.yawRate
         val phaseBefore = a.phase.clone()
         val speedBefore = a.forwardVelocity

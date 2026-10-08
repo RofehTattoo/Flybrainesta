@@ -11,8 +11,8 @@ for token in ['"fl" -> if (side < 0) 1 else 4','"ml" -> if (side < 0) 2 else 5',
     assert token in MAIN
 for token in ['val phase = FloatArray(LEG_COUNT)','val contact = FloatArray(LEG_COUNT)','val load = FloatArray(LEG_COUNT)','private const val STANCE_DUTY = .62f','private const val MAX_FORWARD_SPEED = 5.00f']:
     assert token in ACT
-assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, dtRaw: Float)' in ACT
-assert 'effectiveWalkOffActivation' not in MAIN and 'legActuator.step(legGroupActivation, walkOffActivationState, dt)' in MAIN
+assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, brakeActivation: Float, dtRaw: Float)' in ACT
+assert 'effectiveWalkOffActivation' not in MAIN and 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in MAIN
 assert 'legActuator.proprioceptionLeft' in MAIN and 'legActuator.proprioceptionRight' in MAIN
 assert 'mechanosensorySide[idx] = side.toByte()' in MAIN
 # Position integration may include wall-normal collision recovery before clamping.
@@ -31,6 +31,6 @@ assert 'wingActivity * .010f' not in MAIN and 'flightMotor * .010f' not in MAIN
 assert 'approachAction' not in ACT and 'foodOn' not in ACT and 'lightOn' not in ACT and 'dangerOn' not in ACT
 assert 'heading = Math.PI.toFloat() - heading' not in MAIN and 'heading = -heading' not in MAIN
 assert 'exploratoryTurn' not in MAIN and 'locomotionRng' not in MAIN
-assert 'const val APP_VERSION = "1.19.32"' in META and 'const val APP_VERSION_CODE = 173' in META
-assert 'versionName = "1.19.32"' in GRADLE and 'versionCode = 173' in GRADLE
+assert 'const val APP_VERSION = "1.19.33"' in META and 'const val APP_VERSION_CODE = 174' in META
+assert 'versionName = "1.19.33"' in GRADLE and 'versionCode = 174' in GRADLE
 print('V1.19.8 SENSORIMOTOR CLOSED LOOP STATIC AUDIT: PASS')
