@@ -37,20 +37,19 @@ drive=MAIN[MAIN.index('private fun driveBody'):MAIN.index('private fun runNeural
 mech=MAIN[MAIN.index('private fun applyMechanicalBodyState'):MAIN.index('private fun runNeuralSimulation')]
 for forbidden in ('foodOn','foodX','foodY','foodDrive','foodDirectionalBias','approachAction','orientAction','escapeAction','exploreAction','feedingPauseActivation'):
     assert forbidden not in mech, forbidden
-assert 'legActuator.step(' in mech
-assert 'turnDnLeftActivationState' in mech and 'turnDnRightActivationState' in mech
+assert 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in mech
 # 5) Mechanical actuator has no environment/action dependency.
 for forbidden in ('foodOn','foodX','foodY','foodDrive','foodDirectionalBias','approachAction','dangerOn','lightOn'):
     assert forbidden not in ACT, forbidden
-assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, brakeActivation: Float, dtRaw: Float)' in ACT
+assert 'brakeActivation: Float' in ACT and 'BRK_RESISTANCE' in ACT
 # 6) Feeding contact is contact-gated; long-range attraction remains olfactory.
 feed=MAIN[MAIN.index('private fun updateFeedingNeuralReadout'):MAIN.index('private fun populationRate')]
 assert 'val tasteContactPresent = foodOn &&' in feed
 assert 'val ingestionNeural = foodOn &&' in feed
 assert 'forceExternalSpike' not in feed
 # 7) Release identity.
-assert 'APP_VERSION = "1.19.37"' in META and 'APP_VERSION_CODE = 178' in META
-assert 'versionName = "1.19.37"' in GRADLE and 'versionCode = 178' in GRADLE
+assert 'APP_VERSION = "1.19.33"' in META and 'APP_VERSION_CODE = 174' in META
+assert 'versionName = "1.19.33"' in GRADLE and 'versionCode = 174' in GRADLE
 # 8) Numerical bilateral sanity independent of runtime state.
 sigma=.30; forward=.018; half=.035
 

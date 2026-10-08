@@ -8,7 +8,7 @@ SENS=(ROOT/"tools/build_sensory_input_map.py").read_text()
 META=(ROOT/"app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text()
 GRADLE=(ROOT/"app/build.gradle.kts").read_text()
 assert 'legBaselineRateHz' in MAIN and 'legPreviousRateHz' in MAIN and 'legBaselineReady' in MAIN
-assert 'fastExcess = (rate - fastBaseline - 0.55f).coerceAtLeast(0f)' in MAIN
+assert 'excess = (rate - baseline - 0.90f).coerceAtLeast(0f)' in MAIN
 assert 'foodAmount = (foodAmount - FOOD_INGESTION_STEP).coerceAtLeast(0f)' in MAIN
 assert 'val ingestionNeural = foodOn &&' in MAIN and 'pharyngealContextActive' in MAIN and 'foodPharyngealContactFrame >= .04f' in MAIN
 assert 'fun updateMeasuredPauseState(dt: Float, wallContact: Boolean)' in MAIN
@@ -35,5 +35,5 @@ assert 'max(wallLeft, wallTop * .30f)' not in MAIN
 assert 'max(wallRight, wallBottom * .30f)' not in MAIN
 assert 'if (foodOn && foodAmount > 0f)' in MAIN
 assert 'WALL_TANGENTIAL_FRICTION' in ACT
-assert '1.19.37' in META and '178' in META and '1.19.37' in GRADLE and '178' in GRADLE
+assert '1.19.33' in META and '174' in META and '1.19.33' in GRADLE and '174' in GRADLE
 print('V1.19.7 EMBODIED PAUSE/WALL/FEEDING AUDIT: PASS')

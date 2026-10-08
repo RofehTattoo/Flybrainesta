@@ -3,7 +3,6 @@ package com.example.flybrain
 import android.app.Activity
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.os.SystemClock
 import android.graphics.Canvas
 import android.graphics.Color
@@ -375,13 +374,6 @@ class MainActivity : Activity() {
         // V1.18: sensory interfaces are encoded as Poisson spike rates; the neural
         // substrate itself uses the reference-style LIF/alpha-synapse dynamics.
         private val SENSORY_VIS_MAX_HZ = 120f
-        // V1.19.36: the arena itself is a visual object. When no stimulus is
-        // selected, the previous encoder drove the photoreceptors at exactly zero,
-        // so the visual/turn circuit had no environmental information with which to
-        // reorient the body at a boundary. The wall field below is a sensory cue only;
-        // it does not choose a turn direction or write heading.
-        private val ARENA_WALL_VISUAL_DISTANCE = 0.18f
-        private val ARENA_WALL_VISUAL_RATE_FRACTION = 0.48f
         // V1.18.3: food/olfaction uses an official-annotation-derived per-ORN map.
         // The gain is an environmental sensor calibration parameter only; it never
         // writes motor state or a turn command.
@@ -422,11 +414,6 @@ class MainActivity : Activity() {
         // A short first-order activation state avoids frame-quantized limb force.
         // This is an actuator filter, not a sensory or action shortcut.
         private val MOTOR_ACTIVATION_TAU_SECONDS = 0.040f
-        // Fast motor-rate baseline used only to separate sustained tonic firing
-        // from temporally varying locomotor recruitment. A real phasic gait can
-        // repeatedly exceed this short baseline; a constant high motor rate
-        // cannot remain a "burst" indefinitely.
-        private val LEG_FAST_BASELINE_TAU_SECONDS = 0.22f
 
         // V1.19: six-leg motor output is decoded into the closed-loop mechanical actuator.
         // These are actuator/calibration parameters, not behavior selectors:
@@ -435,16 +422,12 @@ class MainActivity : Activity() {
         // modified-tripod walking biomechanics and is not a sensory shortcut.
         private val LEG_COUNT = 6
         private val LEG_RATE_REFERENCE_HZ = 12f
-        // V1.19.36: the retained role-2 TURN DN rate is normalized per neuron.
-        // These are decoder calibration values only; they do not select a behavior.
-        private val TURN_DN_RATE_REFERENCE_HZ = 12f
-        private val TURN_DN_ACTIVATION_TAU_SECONDS = 0.075f
         private val GAIT_MIN_HZ = 3.0f
         private val GAIT_MAX_HZ = 7.5f
         private val LEG_STANCE_DUTY = 0.62f
         private val LEG_WALK_THRESHOLD = 0.025f
         private val WALKOFF_RATE_REFERENCE_HZ = 10f
-        private val BRK_RATE_REFERENCE_HZ = 10f
+        private val BRAKE_RATE_REFERENCE_HZ = 10f
 
         private val VIS_START = GeneratedConnectomeMeta.VIS_START
         private val VIS_END = GeneratedConnectomeMeta.VIS_END
@@ -497,11 +480,6 @@ class MainActivity : Activity() {
         private var gustatorySpikeEventsFrame = 0
         private var haltWalkOffSpikeEventsFrame = 0
         private var haltBrakeSpikeEventsFrame = 0
-        // V1.19.36: frame-level bilateral activity of the retained role-2
-        // descending TURN neurons. This is measured neural output, not an
-        // action variable or a synthetic steering command.
-        private var turnDnLeftSpikeEventsFrame = 0
-        private var turnDnRightSpikeEventsFrame = 0
         private var foodTarsalContactFrame = 0f
         private var foodTarsalLeftContactFrame = 0f
         private var foodTarsalRightContactFrame = 0f
@@ -601,13 +579,6 @@ class MainActivity : Activity() {
         private var legLeftTotal = 0
         private var legRightTotal = 0
         private var legUnknownSideTotal = 0
-        // FBR-10 role-2 descending TURN census, resolved from frozen node metadata.
-        private var turnDnLeftTotal = 0
-        private var turnDnRightTotal = 0
-        private var turnDnUnknownSideTotal = 0
-        // Rate-limited runtime telemetry for empirical validation of the neural
-        // turning path. It is read-only and never enters dynamics.
-        private var turnTelemetryClock = 0f
         private var wingLeftTotal = 0
         private var wingRightTotal = 0
         private var jumpLeftTotal = 0
@@ -642,7 +613,6 @@ class MainActivity : Activity() {
         private val legGroupActivation = FloatArray(LEG_COUNT)
         private val legGroupRateHz = FloatArray(LEG_COUNT)
         private val legBaselineRateHz = FloatArray(LEG_COUNT)
-        private val legFastBaselineRateHz = FloatArray(LEG_COUNT)
         private val legPreviousRateHz = FloatArray(LEG_COUNT)
         private var legBaselineReady = false
         private var haltWalkOffTotal = 0
@@ -1043,12 +1013,9 @@ class MainActivity : Activity() {
             legActuator.reset()
             walkOffActivationState = 0f
             brakeActivationState = 0f
-            turnDnLeftActivationState = 0f
-            turnDnRightActivationState = 0f
             java.util.Arrays.fill(legGroupActivation, 0f)
             java.util.Arrays.fill(legGroupRateHz, 0f)
             java.util.Arrays.fill(legBaselineRateHz, 0f)
-            java.util.Arrays.fill(legFastBaselineRateHz, 0f)
             java.util.Arrays.fill(legPreviousRateHz, 0f)
             legBaselineReady = false
             jumpActivityCacheValue = 0f
@@ -1209,8 +1176,6 @@ class MainActivity : Activity() {
             olfWindowSpikesUnknown = 0
             olfLeftHz = 0f
             olfRightHz = 0f
-            turnDnLeftSpikeEventsFrame = 0
-            turnDnRightSpikeEventsFrame = 0
             dnLeftHz = 0f
             dnRightHz = 0f
             legLeftHz = 0f
@@ -1791,33 +1756,14 @@ class MainActivity : Activity() {
 
                 haltWalkOffTotal = 0
                 haltBrakeTotal = 0
-                turnDnLeftTotal = 0
-                turnDnRightTotal = 0
-                turnDnUnknownSideTotal = 0
                 for (i in 0 until N) {
                     when (haltRole[i].toInt()) {
                         1, 2 -> haltWalkOffTotal++
                         3 -> haltBrakeTotal++
                     }
-                    if (descendingRole[i].toInt() == 2) {
-                        when (nodeSide[i].toInt()) {
-                            -1 -> turnDnLeftTotal++
-                            1 -> turnDnRightTotal++
-                            else -> turnDnUnknownSideTotal++
-                        }
-                    }
                 }
                 if (haltWalkOffTotal <= 0) throw IllegalStateException("no retained walk-OFF halt neurons")
-                if (turnDnLeftTotal <= 0 || turnDnRightTotal <= 0 || turnDnUnknownSideTotal != 0) {
-                    throw IllegalStateException(
-                        "TURN-DN lateralidad FBR-10 invalida L=$turnDnLeftTotal R=$turnDnRightTotal U=$turnDnUnknownSideTotal"
-                    )
-                }
-                if (turnDnLeftTotal != turnDnRightTotal) {
-                    throw IllegalStateException(
-                        "TURN-DN censo bilateral asimetrico L=$turnDnLeftTotal R=$turnDnRightTotal"
-                    )
-                }
+                if (haltBrakeTotal <= 0) throw IllegalStateException("no retained BRK halt neurons")
 
                 loadSensoryInputMap()
                 loadOlfactoryInputMap()
@@ -2253,40 +2199,6 @@ class MainActivity : Activity() {
          * whether the left or right eye receives the larger rate. No action score,
          * DN readout or motor variable is consulted.
          */
-        private fun arenaWallDistance(theta: Float): Float {
-            val dx = cos(theta)
-            val dy = sin(theta)
-            var distance = Float.POSITIVE_INFINITY
-            if (dx > 0f) distance = min(distance, (BODY_MAX_X - flyX) / dx)
-            if (dx < 0f) distance = min(distance, (BODY_MIN_X - flyX) / dx)
-            if (dy > 0f) distance = min(distance, (BODY_MAX_Y - flyY) / dy)
-            if (dy < 0f) distance = min(distance, (BODY_MIN_Y - flyY) / dy)
-            return if (distance.isFinite() && distance > 0f) distance else .95f
-        }
-
-        private fun eyeWallVisualIntensity(side: Int): Float {
-            // Coarse compound-eye sampling: each retained L/R primary visual
-            // population receives the mean boundary contrast over five rays in
-            // its lateral/forward visual sector. This is world geometry -> retina,
-            // not world geometry -> steering.
-            val center = heading + if (side < 0) -Math.PI.toFloat() / 3f else Math.PI.toFloat() / 3f
-            val offsets = floatArrayOf(-.55f, -.275f, 0f, .275f, .55f)
-            val weights = floatArrayOf(.65f, .85f, 1f, .85f, .65f)
-            var weighted = 0f
-            var weightSum = 0f
-            for (k in offsets.indices) {
-                val d = arenaWallDistance(center + offsets[k])
-                val x = d / ARENA_WALL_VISUAL_DISTANCE
-                // Near-wall boundary contrast rises smoothly and saturates; at the
-                // centre of the arena the cue is very small instead of becoming a
-                // permanent directional command.
-                val proximity = (1f / (1f + x * x)).coerceIn(0f, 1f)
-                weighted += proximity * weights[k]
-                weightSum += weights[k]
-            }
-            return if (weightSum <= 0f) 0f else (weighted / weightSum).coerceIn(0f, 1f)
-        }
-
         private fun setMappedVisualRate(
             lightIntensity: Float,
             dangerIntensity: Float,
@@ -2316,10 +2228,6 @@ class MainActivity : Activity() {
 
             val lightGains = bilateralGains(lightX, lightY)
             val dangerGains = bilateralGains(dangerX, dangerY)
-            val wallLeft = eyeWallVisualIntensity(-1)
-            val wallRight = eyeWallVisualIntensity(1)
-            val wallLeftRate = wallLeft * SENSORY_VIS_MAX_HZ * ARENA_WALL_VISUAL_RATE_FRACTION
-            val wallRightRate = wallRight * SENSORY_VIS_MAX_HZ * ARENA_WALL_VISUAL_RATE_FRACTION
             val lightRate = (lightIntensity * SENSORY_VIS_MAX_HZ * .70f).coerceIn(0f, 260f)
             // Danger has a sustained luminance component plus an onset/looming
             // transient. This keeps a stationary threat visible while preserving
@@ -2330,9 +2238,11 @@ class MainActivity : Activity() {
 
             for (index in visualReceptorIndices) {
                 val rate = when (visualSide[index].toInt()) {
-                    -1 -> wallLeftRate + lightRate * lightGains[0] + dangerRate * dangerGains[0]
-                    1 -> wallRightRate + lightRate * lightGains[1] + dangerRate * dangerGains[1]
-                    else -> (wallLeftRate + wallRightRate + lightRate + dangerRate) * .5f
+                    -1 -> lightRate * lightGains[0] + dangerRate * dangerGains[0]
+                    1 -> lightRate * lightGains[1] + dangerRate * dangerGains[1]
+                    else -> {
+                        (lightRate + dangerRate) * .5f
+                    }
                 }
                 externalRateHz[index] = rate.coerceIn(0f, 260f)
             }
@@ -2693,8 +2603,6 @@ class MainActivity : Activity() {
             gustatorySpikeEventsFrame = 0
             haltWalkOffSpikeEventsFrame = 0
             haltBrakeSpikeEventsFrame = 0
-            turnDnLeftSpikeEventsFrame = 0
-            turnDnRightSpikeEventsFrame = 0
         }
 
         private fun accumulateNeuralSubstepDiagnostics() {
@@ -2737,15 +2645,7 @@ class MainActivity : Activity() {
                 }
             }
             for (i in DESC_START until DESC_END) {
-                if (fired[i]) {
-                    dnWindowSpikes[i - DESC_START]++
-                    if (descendingRole[i].toInt() == 2) {
-                        when (nodeSide[i].toInt()) {
-                            -1 -> turnDnLeftSpikeEventsFrame++
-                            1 -> turnDnRightSpikeEventsFrame++
-                        }
-                    }
-                }
+                if (fired[i]) dnWindowSpikes[i - DESC_START]++
             }
             for (i in MOTOR_START until MOTOR_END) {
                 val mi = i - MOTOR_START
@@ -3279,10 +3179,6 @@ class MainActivity : Activity() {
         private var legActivationState = 0f
         private var leftLegActivationState = 0f
         private var rightLegActivationState = 0f
-        // Bilateral retained descending TURN output. Unlike the old `turnLeftAction`
-        // UI readout, these states are consumed by the physical body actuator.
-        private var turnDnLeftActivationState = 0f
-        private var turnDnRightActivationState = 0f
         private var wingActivationState = 0f
         private var neckActivationState = 0f
         private var jumpActivationState = 0f
@@ -3341,10 +3237,6 @@ class MainActivity : Activity() {
             var haltereSpikeEvents = 0
             var motorOtherSpikeEvents = 0
             var allMotorSpikeEvents = 0
-            // V1.19.36: these counters are accumulated across all 40 neural
-            // substeps of the current 20 ms frame, preserving brief DN turn bursts.
-            val frameTurnDnLeftSpikes = turnDnLeftSpikeEventsFrame
-            val frameTurnDnRightSpikes = turnDnRightSpikeEventsFrame
             var wingActive = 0
             var neckActive = 0
             var jumpActive = 0
@@ -3435,17 +3327,6 @@ class MainActivity : Activity() {
             val rawLegActivity = (legRateHz / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
             val rawLeftLeg = (leftLegRateHz / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
             val rawRightLeg = (rightLegRateHz / LEG_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
-            // Descending TURN neurons are already a bilateral motor-output population.
-            // Resolve their measured spike rate per retained neuron so a single 20 ms
-            // burst remains a finite, calibrated steering impulse instead of a direct
-            // per-frame heading edit. 10 L + 10 R is checked from FBR-10 at load time.
-            val turnDnLeftRateHz = if (turnDnLeftTotal == 0) 0f else
-                frameTurnDnLeftSpikes * invFrame / turnDnLeftTotal.toFloat()
-            val turnDnRightRateHz = if (turnDnRightTotal == 0) 0f else
-                frameTurnDnRightSpikes * invFrame / turnDnRightTotal.toFloat()
-            val rawTurnDnLeft = (turnDnLeftRateHz / TURN_DN_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
-            val rawTurnDnRight = (turnDnRightRateHz / TURN_DN_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
-
             val rawWingActivity = (wingRateHz / 50f).coerceIn(0f, 1f)
             val rawNeckActivity = (neckRateHz / 50f).coerceIn(0f, 1f)
             val rawJumpActivity = (jumpRateHz / 50f).coerceIn(0f, 1f)
@@ -3454,24 +3335,6 @@ class MainActivity : Activity() {
             legActivationState = relaxMotorActivation(legActivationState, rawLegActivity, dt)
             leftLegActivationState = relaxMotorActivation(leftLegActivationState, rawLeftLeg, dt)
             rightLegActivationState = relaxMotorActivation(rightLegActivationState, rawRightLeg, dt)
-            turnDnLeftActivationState = relaxMotorActivation(
-                turnDnLeftActivationState, rawTurnDnLeft, dt, TURN_DN_ACTIVATION_TAU_SECONDS
-            )
-            turnDnRightActivationState = relaxMotorActivation(
-                turnDnRightActivationState, rawTurnDnRight, dt, TURN_DN_ACTIVATION_TAU_SECONDS
-            )
-
-            // Empirical audit hook: expose the measured bilateral TURN-DN output
-            // and body heading at 1 Hz so runtime captures can distinguish
-            // "TURN population silent" from "TURN population active but yaw blocked".
-            turnTelemetryClock += dt
-            if (turnTelemetryClock >= 1f) {
-                turnTelemetryClock -= 1f
-                Log.d("FlyBrainTurn", "TURN_DN L=%.3f R=%.3f wallYaw=%.3f heading=%.3f v=%.3f".format(
-                    turnDnLeftActivationState, turnDnRightActivationState,
-                    legActuator.yawRate, heading, flySpeed
-                ))
-            }
             wingActivationState = relaxMotorActivation(wingActivationState, rawWingActivity, dt)
             neckActivationState = relaxMotorActivation(neckActivationState, rawNeckActivity, dt)
             jumpActivationState = relaxMotorActivation(jumpActivationState, rawJumpActivity, dt)
@@ -3488,10 +3351,9 @@ class MainActivity : Activity() {
                     val total = legGroupTotals[g]
                     val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
                     legBaselineRateHz[g] = rate
-                    legFastBaselineRateHz[g] = rate
                     legPreviousRateHz[g] = rate
                     legGroupRateHz[g] = rate
-                    legGroupActivation[g] = 0f
+                    legGroupActivation[g] = (rate / (rate + 4f)).coerceIn(0f, 1f) * .42f
                 }
                 legBaselineReady = true
             } else {
@@ -3499,29 +3361,19 @@ class MainActivity : Activity() {
                     val total = legGroupTotals[g]
                     val rate = if (total <= 0) 0f else legGroupSpikeEvents[g] * invFrame / total.toFloat()
                     legGroupRateHz[g] = rate
-                    // Two timescales are deliberately separated. The slow baseline
-                    // remains a physiological reference, while the fast baseline is
-                    // the actual phasic detector. This prevents a step-like transition
-                    // into sustained VNC firing from being interpreted as a locomotor
-                    // command for many seconds.
-                    val fastBaseline = legFastBaselineRateHz[g]
-                    val fastAlpha = (1f - exp((-dt / LEG_FAST_BASELINE_TAU_SECONDS).toDouble()).toFloat()).coerceIn(0f, 1f)
-                    val fastExcess = (rate - fastBaseline - 0.55f).coerceAtLeast(0f)
+                    val baseline = legBaselineRateHz[g]
+                    val excess = (rate - baseline - 0.90f).coerceAtLeast(0f)
                     val rise = (rate - legPreviousRateHz[g]).coerceAtLeast(0f)
-                    val burst = (fastExcess / 4.5f * .82f + rise / 4f * .18f).coerceIn(0f, 1f)
-
-                    // Tonic motor-neuron firing is physiological state, not an
-                    // indefinitely renewable locomotor clock. A genuinely phasic
-                    // pattern repeatedly outruns the fast baseline; a constant rate
-                    // is absorbed by that baseline and its locomotor drive decays.
-                    val target = burst.coerceIn(0f, 1f)
+                    val burst = (excess / 5.0f * .78f + rise / 4.0f * .22f).coerceIn(0f, 1f)
+                    val tonic = (rate / (max(baseline, 1f) + 4f)).coerceIn(0f, 1f)
+                    // Neural leg drive is now a bounded mixture of the measured
+                    // instantaneous rate and its phasic excess. No stimulus/action
+                    // variable enters this decoder.
+                    val target = (tonic * .42f + burst * .58f).coerceIn(0f, 1f)
                     legGroupActivation[g] = relaxMotorActivation(legGroupActivation[g], target, dt)
 
-                    legFastBaselineRateHz[g] += (rate - legFastBaselineRateHz[g]) * fastAlpha
-
-                    // Slow baseline remains diagnostic and deliberately adapts much
-                    // more slowly so the UI/research telemetry still exposes the
-                    // physiological firing level independently of phasic decoding.
+                    // Slow baseline adaptation is diagnostic only; the motor target
+                    // above does not subtract it away completely.
                     val baseTau = if (burst < .18f) 8f else 18f
                     val baseAlpha = (1f - exp((-dt / baseTau).toDouble()).toFloat()).coerceIn(0f, 1f)
                     legBaselineRateHz[g] += (rate - legBaselineRateHz[g]) * baseAlpha
@@ -3539,14 +3391,16 @@ class MainActivity : Activity() {
             val walkOffTarget = (walkOffRateHz / WALKOFF_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
             walkOffActivationState = relaxMotorActivation(walkOffActivationState, walkOffTarget, dt)
 
-            // BRK is a separate measured VNC brake population. Keep its state
-            // independent from FG/BB walk-OFF so the actuator can distinguish
-            // suppression of the walking command from active joint braking.
+            // BRK is a distinct retained halt population. It is not folded into
+            // walk-OFF: BRK acts as a VNC brake/resistance signal downstream of
+            // the walking command. The signal is derived only from real BRK
+            // spikes measured in the retained connectome.
             val brakeRateHz = if (haltBrakeTotal <= 0) 0f else {
                 haltBrakeSpikeEventsFrame * invFrame / haltBrakeTotal.toFloat()
             }
-            val brakeTarget = (brakeRateHz / BRK_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
+            val brakeTarget = (brakeRateHz / BRAKE_RATE_REFERENCE_HZ).coerceIn(0f, 1f)
             brakeActivationState = relaxMotorActivation(brakeActivationState, brakeTarget, dt)
+            val walkOffGate = (1f - .94f * walkOffActivationState).coerceIn(0f, 1f)
 
             legActivity = legActivationState
             leftLeg = leftLegActivationState
@@ -3667,20 +3521,12 @@ class MainActivity : Activity() {
         private fun applyMechanicalBodyState(dt: Float) {
 
             // V1.19.4: closed-loop sensorimotor body mechanics. The actuator sees
-            // only measured VNC motor output: the six leg-MN subgroup activations,
-            // bilateral retained descending TURN activity, and measured halt output.
-            // No sensory stimulus or action/goal variable enters.
+            // only the six measured leg-MN subgroup activations and the measured
+            // walk-OFF output. No sensory stimulus or action/goal variable enters.
             // Feeding-related neural readouts remain diagnostic only. Locomotor
             // inhibition reaches the actuator exclusively through retained
             // walk-OFF neural activity measured above.
-            legActuator.step(
-                legGroupActivation,
-                walkOffActivationState,
-                brakeActivationState,
-                dt,
-                turnDnLeftActivationState,
-                turnDnRightActivationState
-            )
+            legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)
             flySpeed = legActuator.forwardVelocity
             bodyLateralSpeed = legActuator.lateralVelocity
             yawRate = legActuator.yawRate

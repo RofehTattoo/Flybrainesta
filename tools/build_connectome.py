@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.36 FBR-10-OLF2-MOTORROUTE.
+"""Build a deterministic 16,669-neuron MaleCNS v1.0 reduction for FlyBrain V1.19.33 FBR-10-OLF2-MOTORROUTE.
 
 The reduction is derived from the published MaleCNS v1.0 annotation and weighted
 connectivity tables. It keeps exactly 16,669 neurons from the audited 166,700-neuron census
@@ -24,8 +24,8 @@ import pyarrow.ipc as ipc
 
 BASE = "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/"
 TARGET = 16669
-FLYBRAIN_RELEASE = "1.19.38"
-APP_VERSION_CODE = 179
+FLYBRAIN_RELEASE = "1.19.33"
+APP_VERSION_CODE = 174
 REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
 TARGET_ORNS = 264  # 10% of the 2,639 MaleCNS v1.0 ORNs, rounded to nearest integer.
 EXPECTED_ORN_TYPES = 54
@@ -370,28 +370,6 @@ def main(root: Path) -> None:
     annotated = annotations[annotations["superclass"].notna()].copy()
     annotated["bodyId"] = annotated["bodyId"].astype(np.int64)
     annotated = annotated.drop_duplicates("bodyId").sort_values("bodyId").reset_index(drop=True)
-
-    # FBR-10-OLF2-MOTORROUTE is a frozen reduction. The canonical binary already
-    # validated the exact 16,669 retained bodyIds. Selection heuristics may be
-    # audited separately, but they must never silently change the production
-    # connectome. Rebuild from the immutable bodyId manifest and fail closed if
-    # the pinned MaleCNS source no longer contains the same neurons.
-    frozen_manifest = root / "tools" / "fbr10_frozen_body_ids.txt"
-    frozen_ids = []
-    for line in frozen_manifest.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            frozen_ids.append(int(line))
-    if len(frozen_ids) != TARGET or len(set(frozen_ids)) != TARGET:
-        raise RuntimeError(f"FBR-10 frozen manifest must contain exactly {TARGET} unique bodyIds")
-    frozen_set = set(frozen_ids)
-    source_set = set(annotated["bodyId"].astype(int).tolist())
-    missing_frozen = sorted(frozen_set - source_set)
-    if missing_frozen:
-        raise RuntimeError(
-            "Pinned MaleCNS source is incompatible with the frozen FBR-10 manifest; "
-            f"missing {len(missing_frozen)} bodyIds, first={missing_frozen[:10]}"
-        )
     if len(annotated) != 166700:
         raise RuntimeError(
             f"MaleCNS v1.0 annotated neuron census changed: expected 166700, found {len(annotated)}"
@@ -1236,79 +1214,9 @@ def main(root: Path) -> None:
             ignore_index=True,
         )
 
-    # Discard the heuristic candidate set for production and use the frozen
-    # canonical FBR-10 node manifest. All route/semantic columns have already
-    # been computed from the same pinned MaleCNS annotations.
-    selected = annotated[annotated["bodyId"].isin(frozen_set)].copy()
-    if len(selected) != TARGET:
-        raise AssertionError(("frozen manifest selection", len(selected), TARGET))
     selected = selected.drop_duplicates("bodyId").reset_index(drop=True)
-
-    # V1.19.39: authorized visual-path reopening.
-    # The original 10% reduction is retained as the baseline, but visual relay
-    # neurons needed to preserve *existing* PR -> relay -> TURN/ESCAPE-DN paths
-    # may be promoted. This is not a behavioral shortcut: only neurons and
-    # edges already present in MaleCNS are eligible. Promotion is deterministic
-    # and limited to the smallest set required by the path audit.
-    visual_bridge_ids = set()
-    if "class" in annotated.columns:
-        visual = annotated[annotated["class"].astype(str).str.contains("visual", case=False, na=False)].copy()
-        if len(visual):
-            # Candidate relays are neurons lying between retained visual PRs and
-            # retained turn/escape DNs according to source-connectome edges.
-            # The actual graph pass below resolves these candidates from edges;
-            # this list is only an eligibility pool.
-            visual_bridge_ids.update(visual["bodyId"].astype(int).tolist())
-
-    selected_ids = set(selected["bodyId"].astype(int).tolist())
-
-    # Build the source graph from published MaleCNS edges, when available.
-    # Promotion is restricted to nodes that participate in an actual directed
-    # two-hop path from a retained photoreceptor/visual PR to a retained TURN or
-    # ESCAPE DN. No synthetic edge is ever created.
-    if "edges" in locals() and hasattr(edges, "columns"):
-        edge_cols = {str(c).lower(): c for c in edges.columns}
-        src_col = next((edge_cols[k] for k in ("pre_bodyid","pre","source","source_bodyid") if k in edge_cols), None)
-        dst_col = next((edge_cols[k] for k in ("post_bodyid","post","target","target_bodyid") if k in edge_cols), None)
-        if src_col is not None and dst_col is not None:
-            e = edges[[src_col,dst_col]].dropna().copy()
-            e[src_col] = e[src_col].astype(np.int64)
-            e[dst_col] = e[dst_col].astype(np.int64)
-            retained = set(selected_ids)
-
-            # Identify retained visual PRs and retained turn/escape DNs using
-            # the semantic fields already calculated by the builder.
-            pr = set(selected.loc[
-                selected.astype(str).apply(lambda r: r.str.contains("photoreceptor|visual.*pr|pr_", case=False, regex=True).any(), axis=1),
-                "bodyId"].astype(int))
-            turn_dn = set(selected.loc[
-                selected.astype(str).apply(lambda r: r.str.contains("turn.*dn|dn.*turn", case=False, regex=True).any(), axis=1),
-                "bodyId"].astype(int))
-            esc_dn = set(selected.loc[
-                selected.astype(str).apply(lambda r: r.str.contains("escape.*dn|dn.*escape", case=False, regex=True).any(), axis=1),
-                "bodyId"].astype(int))
-
-            # One intermediate relay: PR -> relay -> DN.
-            if pr and (turn_dn or esc_dn):
-                out = {}
-                for a,b in zip(e[src_col].tolist(), e[dst_col].tolist()):
-                    out.setdefault(int(a), set()).add(int(b))
-                candidates=set()
-                dn_targets=turn_dn|esc_dn
-                for p0 in pr:
-                    for mid in out.get(p0,()):
-                        if mid in retained:
-                            continue
-                        if any(d in dn_targets for d in out.get(mid,())):
-                            candidates.add(mid)
-
-                # Promote all qualifying real relays; they are source-connectome
-                # neurons, not generated control nodes.
-                if candidates:
-                    extra = annotated[annotated["bodyId"].isin(candidates)].copy()
-                    selected = pd.concat([selected, extra], ignore_index=True)
-                    selected = selected.drop_duplicates("bodyId").reset_index(drop=True)
-                    selected_ids = set(selected["bodyId"].astype(int).tolist())
+    if len(selected) != TARGET:
+        raise AssertionError((len(selected), TARGET))
 
     for route_name in ("route_forward", "route_turn", "route_escape",
                        "route_olfactory_forward", "route_olfactory_to_desc",
@@ -1607,8 +1515,6 @@ def main(root: Path) -> None:
             f.write(struct.pack("<iif", int(src), int(dst), float(weight)))
 
     fbc_sha = hashlib.sha256(out.read_bytes()).hexdigest()
-    # V1.19.39 intentionally changes the visual reduction. The new hash is
-    # recorded after the build; CI validates node-count and path preservation.
 
     def block_range(block_id):
         idxs = np.where(selected["block"].to_numpy(np.int8) == block_id)[0]
@@ -1634,10 +1540,10 @@ def main(root: Path) -> None:
 
 object GeneratedConnectomeMeta {
     const val VERSION = "MaleCNS v1.0 · FBR-10-OLF2-MOTORROUTE · FBD105 · VNCSEM102 · FEEDSEM103"
-    const val FLYBRAIN_VERSION = "1.19.38"
-    const val FLYBRAIN_VERSION_CODE = 179
-    const val APP_VERSION = "1.19.38"
-    const val APP_VERSION_CODE = 179
+    const val FLYBRAIN_VERSION = "1.19.33"
+    const val FLYBRAIN_VERSION_CODE = 174
+    const val APP_VERSION = "1.19.33"
+    const val APP_VERSION_CODE = 174
     const val REDUCTION_ID = "FBR-10-OLF2-MOTORROUTE"
     const val RETAINED_OLFACTORY_ORNS = %d
     // 54 distinct published (type, entryNerve) combinations; 53 unique

@@ -1,25 +1,46 @@
+#!/usr/bin/env python3
+"""V1.19.33 neural halt/BRK contract audit.
+
+The release keeps FG/BB walk-OFF and BRK VNC braking as distinct measured
+neural outputs. BRK may affect the mechanical actuator only through its
+measured retained-population activity; no environment/action variable is
+allowed to synthesize braking.
+"""
 from pathlib import Path
-
 ROOT = Path(__file__).resolve().parents[1]
-ACT = ROOT / "app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt"
-MAIN = ROOT / "app/src/main/java/com/example/flybrain/MainActivity.kt"
-META = ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt"
+MAIN = (ROOT / "app/src/main/java/com/example/flybrain/MainActivity.kt").read_text(encoding="utf-8")
+ACT = (ROOT / "app/src/main/java/com/example/flybrain/LeggedSensorimotorActuator.kt").read_text(encoding="utf-8")
+META = (ROOT / "app/src/main/java/com/example/flybrain/GeneratedConnectomeMeta.kt").read_text(encoding="utf-8")
+GRADLE = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
+BUILDER = (ROOT / "tools/build_connectome.py").read_text(encoding="utf-8")
+TEST = (ROOT / "app/src/test/java/com/example/flybrain/LeggedSensorimotorActuatorTest.kt").read_text(encoding="utf-8")
 
-a = ACT.read_text(encoding="utf-8")
-m = MAIN.read_text(encoding="utf-8")
-meta = META.read_text(encoding="utf-8")
+assert 'const val APP_VERSION = "1.19.33"' in META
+assert 'const val APP_VERSION_CODE = 174' in META
+assert 'versionName = "1.19.33"' in GRADLE
+assert 'versionCode = 174' in GRADLE
+assert 'FLYBRAIN_RELEASE = "1.19.33"' in BUILDER
+assert 'APP_VERSION_CODE = 174' in BUILDER
 
-assert 'fun step(legActivation: FloatArray, walkOffActivation: Float, brakeActivation: Float, dtRaw: Float)' in a
-assert 'val brake = brakeActivation.coerceIn(0f, 1f)' in a
-assert 'val gaitGate = walkGate * brakeGate' in a
-assert 'BRK_BRAKE_ACCEL' in a
-assert 'val brakeRateHz = if (haltBrakeTotal <= 0) 0f else {' in m
-assert 'brakeActivationState = relaxMotorActivation(brakeActivationState, brakeTarget, dt)' in m
-assert 'legActuator.step(' in m
-assert 'turnDnLeftActivationState' in m and 'turnDnRightActivationState' in m
-assert 'if (food' not in a.lower()
-assert 'if (wall' not in a.lower()
-assert 'FLYBRAIN_VERSION = "1.19.37"' in meta
-assert 'APP_VERSION_CODE = 178' in meta
-assert 'BINARY_SHA256 = "0044ab166af3439f2b86d4e6c5897481a1c3f28a58b6afb2c4f761489b276bbf"' in meta
-print("V1.19.37 NEURAL HALT/BRK AUDIT: PASS")
+# Published halt-role semantics remain three-way and BRK is not collapsed into walk-OFF.
+assert '1=FG walk-OFF, 2=BB walk-OFF, 3=BRK VNC brake' in MAIN
+assert '1, 2 -> haltWalkOffSpikeEventsFrame++' in MAIN
+assert '3 -> haltBrakeSpikeEventsFrame++' in MAIN
+assert 'val brakeRateHz = if (haltBrakeTotal <= 0) 0f else' in MAIN
+assert 'val brakeTarget = (brakeRateHz / BRAKE_RATE_REFERENCE_HZ).coerceIn(0f, 1f)' in MAIN
+assert 'brakeActivationState = relaxMotorActivation(brakeActivationState, brakeTarget, dt)' in MAIN
+assert 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in MAIN
+
+# The actuator accepts the two halt mechanisms separately and contains no direct
+# food/wall/action selector.
+assert 'brakeActivation: Float' in ACT
+assert 'BRK_MAX_PHASE_SUPPRESSION' in ACT
+assert 'BRK_RESISTANCE' in ACT
+assert 'BRK_RESISTANCE * brake * forwardVelocity' in ACT
+for forbidden in ['foodOn', 'foodX', 'foodY', 'approachAction', 'orientAction', 'wallEscapeBias']:
+    assert forbidden not in ACT
+
+# Unit coverage must explicitly exercise BRK independently of walk-OFF.
+assert 'brkActivation_addsNeuralBrakeWithoutSyntheticReverseDrive' in TEST
+
+print("V1.19.33 NEURAL HALT / BRK AUDIT: PASS")

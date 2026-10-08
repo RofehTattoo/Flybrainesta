@@ -8,19 +8,16 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V1.19.36 adaptive six-leg sensorimotor actuator.
+ * V1.19.28 adaptive six-leg sensorimotor actuator.
  *
  * The neural substrate remains upstream and immutable. This class is the
  * mechanical interface: six decoded LEG motor streams drive six independent
- * leg phases, stance/swing and foot trajectories; retained bilateral TURN
- * descending-neuron output supplies an additional neural yaw signal; stance
- * mechanics supplies the remaining body force/torque. No food/light/danger/action
- * variable is accepted.
+ * leg phases, stance/swing and foot trajectories; the resulting stance motion
+ * produces body force and yaw. No food/light/danger/action variable is accepted.
  *
- * Tonic baseline motor firing is not, by itself, a behavioral command. The
- * actuator also receives the separately measured neural walk-OFF and BRK brake
- * populations. Walk-OFF suppresses the gait drive; BRK adds an independent
- * VNC-level brake so a sustained motor output cannot behave like a wind-up toy.
+ * Tonic baseline motor firing is not propulsion. Only phasic excess above the
+ * per-leg measured baseline advances the gait strongly enough to generate force.
+ * This prevents a stable ~5 Hz background from becoming endless walking.
  */
 class LeggedSensorimotorActuator {
     companion object {
@@ -33,8 +30,8 @@ class LeggedSensorimotorActuator {
         // change the inter-leg timing instead of forcing a perpetual tripod.
         private val INITIAL_PHASES = floatArrayOf(.50f, .08f, .66f, 0f, .58f, .16f)
         private const val STANCE_DUTY = .62f
-        private const val MIN_PHASE_HZ = 0.80f
-        private const val MAX_PHASE_HZ = 14.0f
+        private const val MIN_PHASE_HZ = 1.20f
+        private const val MAX_PHASE_HZ = 16.0f
         private const val MOTOR_THRESHOLD = .035f
         private const val MAX_FORWARD_SPEED = 5.00f
         private const val MAX_LATERAL_SPEED = .025f
@@ -42,7 +39,8 @@ class LeggedSensorimotorActuator {
         private const val LATERAL_ACCEL = .10f
         private const val FORWARD_DAMPING = 6.0f
         private const val WALK_OFF_BRAKE_ACCEL = 7.0f
-        private const val BRK_BRAKE_ACCEL = 18.0f
+        private const val BRK_MAX_PHASE_SUPPRESSION = .92f
+        private const val BRK_RESISTANCE = 18.0f
         private const val LATERAL_DAMPING = 6.5f
         private const val MAX_YAW_RATE = 1.35f
         // A left/right ratio is meaningful only when there is enough measured
@@ -54,10 +52,6 @@ class LeggedSensorimotorActuator {
         private const val PAUSE_YAW_CUTOFF = .20f
         private const val YAW_STOP_RESPONSE_TAU = .075f
         private const val YAW_RESPONSE_TAU = .16f
-        // Role-2 retained descending TURN population: calibrated per-neuron rate
-        // reference. The FBR-10 loader verifies the bilateral 10/10 census.
-        private const val TURN_DN_ACTIVATION_DEADZONE = .025f
-        private const val TURN_DN_MAX_CONTRIBUTION = .70f
         private const val LINEAR_RESPONSE_MIN_DT = .0005f
         private const val FOOT_STROKE = .065f
         private const val WALL_TANGENTIAL_FRICTION = .94f
@@ -127,7 +121,6 @@ class LeggedSensorimotorActuator {
     private var bilateralSymmetryFiltered = 0f
     private var leftPropulsionFiltered = 0f
     private var rightPropulsionFiltered = 0f
-    private var yawTorqueFiltered = 0f
     /** 0..1 spread of the six independent leg phases; diagnostic only. */
     var legPhaseSpread = 0f
         private set
@@ -173,37 +166,19 @@ class LeggedSensorimotorActuator {
         bilateralSymmetryFiltered = 0f
         leftPropulsionFiltered = 0f
         rightPropulsionFiltered = 0f
-        yawTorqueFiltered = 0f
         legPhaseSpread = 0f
         wallPressure = 0f
     }
 
     /**
      * Advance one 20 ms public mechanical frame.
-     * legActivation and bilateral turn-DN activations are already derived from
-     * measured neural spike output.
+     * legActivation is already derived from measured neural spike output.
      */
-    /** Backward-compatible four-channel step for legacy callers/tests. */
-    fun step(legActivation: FloatArray, walkOffActivation: Float, brakeActivation: Float, dtRaw: Float) {
-        stepInternal(legActivation, walkOffActivation, brakeActivation, dtRaw, 0f, 0f)
-    }
-
-    /**
-     * Six-channel body step: measured LEG motor output plus measured bilateral
-     * descending TURN output. The latter is neural yaw evidence, not a synthetic
-     * action command.
-     */
-    fun step(legActivation: FloatArray, walkOffActivation: Float, brakeActivation: Float, dtRaw: Float, turnDnLeftActivation: Float, turnDnRightActivation: Float) {
-        stepInternal(legActivation, walkOffActivation, brakeActivation, dtRaw, turnDnLeftActivation, turnDnRightActivation)
-    }
-
-    private fun stepInternal(
+    fun step(
         legActivation: FloatArray,
         walkOffActivation: Float,
         brakeActivation: Float,
-        dtRaw: Float,
-        turnDnLeftActivation: Float,
-        turnDnRightActivation: Float
+        dtRaw: Float
     ) {
         require(legActivation.size >= LEG_COUNT)
         val dt = dtRaw.coerceAtLeast(LINEAR_RESPONSE_MIN_DT)
@@ -215,12 +190,12 @@ class LeggedSensorimotorActuator {
         val walkGateBase = (1f - .97f * walkOffActivation.coerceIn(0f, 1f))
             .coerceIn(0f, 1f)
         val walkGate = walkGateBase * walkGateBase
-        // BRK is a distinct VNC brake mechanism. It is not merged into the
-        // walk-OFF signal: the two populations have different biological
-        // mechanisms and therefore remain independently measurable.
+        // BRK is a separate neural mechanism from walk-OFF. It increases
+        // mechanical resistance and suppresses stepping without pretending that
+        // BRK is itself a motor command. A value of 1 represents the normalized
+        // measured activity of the retained BRK population.
         val brake = brakeActivation.coerceIn(0f, 1f)
-        val brakeGate = (1f - .98f * brake).coerceIn(0f, 1f)
-        val gaitGate = walkGate * brakeGate
+        val brakePhaseGate = (1f - BRK_MAX_PHASE_SUPPRESSION * brake).coerceIn(0f, 1f)
 
         var leftLoad = 0f
         var rightLoad = 0f
@@ -232,15 +207,9 @@ class LeggedSensorimotorActuator {
         var yawTorque = 0f
 
         for (g in 0 until LEG_COUNT) {
-            val a = (legActivation[g].coerceIn(0f, 1f) * gaitGate).coerceIn(0f, 1f)
-            // Phase is a locomotor state variable, not a clock. It advances only
-            // while the upstream neural decoder supplies phasic leg-MN drive. A
-            // tonic/background activation below threshold must not wind the legs
-            // forever. This is the mechanical correction for the V1.19.36
-            // “toy-car” failure mode; the actuator still receives neural output
-            // exclusively and contains no stimulus/action controller.
+            val a = (legActivation[g].coerceIn(0f, 1f) * walkGate).coerceIn(0f, 1f)
             val phaseHz = if (a > MOTOR_THRESHOLD) {
-                MIN_PHASE_HZ + (MAX_PHASE_HZ - MIN_PHASE_HZ) * sqrt(a)
+                (MIN_PHASE_HZ + (MAX_PHASE_HZ - MIN_PHASE_HZ) * sqrt(a)) * brakePhaseGate
             } else 0f
             phase[g] += TWO_PI * phaseHz * dt
             while (phase[g] >= TWO_PI) phase[g] -= TWO_PI
@@ -261,11 +230,8 @@ class LeggedSensorimotorActuator {
 
             stance[g] = stanceFraction
             swing[g] = swingFraction
-            // Contact is geometric support, not a proxy for neural firing.
-            // A leg that has entered stance remains a physical support contact
-            // even while its neural drive is momentarily silent. Propulsive load
-            // remains neural-drive dependent below.
-            contact[g] = stanceFraction.coerceIn(0f, 1f)
+            contact[g] = if (a <= MOTOR_THRESHOLD) 0f else
+                (a * stanceFraction).coerceIn(0f, 1f)
             load[g] = (a * stanceFraction).coerceIn(0f, 1f)
             extension[g] = (0.18f + .82f * a).coerceIn(0f, 1f)
 
@@ -288,7 +254,7 @@ class LeggedSensorimotorActuator {
                 (-strideRate * contact[g]).coerceAtLeast(0f)
             } else 0f
             // Normalize the foot stroke velocity so it becomes a bounded force proxy.
-            val force = (propulsive * .055f * (0.55f + .45f * a)).coerceIn(0f, .22f)
+            val force = (propulsive * .055f * (0.55f + .45f * a) * (1f - .78f * brake)).coerceIn(0f, .22f)
             totalPropulsion += force
             // Use the actual lateral location of each stance foot to form a
             // signed torque proxy. This is still downstream mechanics: no wall,
@@ -312,9 +278,7 @@ class LeggedSensorimotorActuator {
         }
         initializedStride = true
 
-        // Support describes physical stance/contact. Neural load is kept separate
-        // because it represents how strongly the motor system is driving that contact.
-        supportMean = (totalContact / LEG_COUNT).coerceIn(0f, 1f)
+        supportMean = (totalLoad / LEG_COUNT).coerceIn(0f, 1f)
         leftSupport = (leftLoad / 3f).coerceIn(0f, 1f)
         rightSupport = (rightLoad / 3f).coerceIn(0f, 1f)
         supportBalance = ((rightSupport - leftSupport) / (leftSupport + rightSupport + .001f)).coerceIn(-1f, 1f)
@@ -352,34 +316,21 @@ class LeggedSensorimotorActuator {
         val propulsive = totalPropulsion.coerceIn(0f, .66f)
         forwardForceProxy = propulsive
         val walkOff = walkOffActivation.coerceIn(0f, 1f)
+        // BRK is modeled as resistance proportional to existing body velocity,
+        // matching a brake-like mechanical effect rather than injecting a
+        // synthetic reverse force. Walk-OFF remains the separate command gate.
         forwardAcceleration = FORWARD_ACCEL * propulsive -
             FORWARD_DAMPING * forwardVelocity -
             WALK_OFF_BRAKE_ACCEL * walkOff -
-            BRK_BRAKE_ACCEL * brake
+            BRK_RESISTANCE * brake * forwardVelocity
         forwardVelocity = (forwardVelocity + forwardAcceleration * dt).coerceIn(0f, MAX_FORWARD_SPEED)
 
         val totalTurnPropulsion = (rightPropulsion + leftPropulsion).coerceAtLeast(0f)
         val turnBalance = ((rightPropulsion - leftPropulsion) /
             (totalTurnPropulsion + .0005f)).coerceIn(-1f, 1f)
-        // Use the bilateral net stance force to form the body's steering moment.
-        // The six individual foot forces still determine propulsion and contact,
-        // but a perfectly symmetric gait must have zero mean yaw regardless of its
-        // alternating tripod phase. This pairwise moment therefore preserves real
-        // left/right motor asymmetry without turning normal gait phasing into a
-        // permanent heading bias.
-        val effectiveLever = .065f
-        val bilateralYawTorque = (rightPropulsion - leftPropulsion) * effectiveLever
-        yawTorque = bilateralYawTorque
-        val torqueScale = (effectiveLever * .22f).coerceAtLeast(.0001f)
+        val torqueScale = (.065f * .22f * 2f).coerceAtLeast(.0001f)
         val normalizedYawTorque = (yawTorque / torqueScale).coerceIn(-1f, 1f)
         yawTorqueProxy = normalizedYawTorque
-        // The instantaneous tripod force moment is intentionally alternating even
-        // during perfectly symmetric walking. Filter it over the same short window
-        // used for bilateral propulsion so the actuator does not convert ordinary
-        // gait phasing into a persistent steering bias. A sustained neural asymmetry
-        // still survives this filter and produces real yaw.
-        val yawFilterAlpha = (1f - exp((-dt / .12f).toDouble()).toFloat()).coerceIn(0f, 1f)
-        yawTorqueFiltered += (normalizedYawTorque - yawTorqueFiltered) * yawFilterAlpha
         // Turn authority exists only when real stance propulsion exists. This
         // preserves a genuine asymmetric gait response while preventing residual
         // one-sided activity from spinning a stationary body.
@@ -397,33 +348,21 @@ class LeggedSensorimotorActuator {
 
         val pauseYawGate = if (walkOff >= PAUSE_YAW_CUTOFF) 0f else
             (1f - WALKOFF_YAW_SUPPRESSION * walkOff).coerceIn(0f, 1f)
-        // Two causally distinct neural-to-body routes now coexist:
-        //   (1) six LEG-MN outputs -> stance-force asymmetry -> mechanical yaw, and
-        //   (2) retained bilateral role-2 descending TURN output -> neural yaw torque.
-        // The second path is the missing closure in V1.19.36: turn DNs previously
-        // existed only as an action/diagnostic readout, so a stationary body at a wall
-        // had no direct neural degree of freedom with which to reorient.
-        //
-        // Do not gate either route by forward translation. A fly legitimately may
-        // turn in place, including after a wall collision removes its forward speed.
-        val legSteering = ((if (abs(yawTorqueFiltered) > .015f) yawTorqueFiltered else turnBalance) * turnDrive)
-            .coerceIn(-1f, 1f)
-        val dnLeft = turnDnLeftActivation.coerceIn(0f, 1f)
-        val dnRight = turnDnRightActivation.coerceIn(0f, 1f)
-        val dnTotal = (dnLeft + dnRight).coerceAtLeast(0f)
-        val dnBalance = if (dnTotal <= .0001f) 0f else
-            ((dnRight - dnLeft) / dnTotal).coerceIn(-1f, 1f)
-        val dnDrive = ((dnTotal - TURN_DN_ACTIVATION_DEADZONE) /
-            (1f - TURN_DN_ACTIVATION_DEADZONE)).coerceIn(0f, 1f)
-        val dnSteering = dnBalance * dnDrive * TURN_DN_MAX_CONTRIBUTION
-        // Bilateral agreement between the two neural routes adds authority without
-        // allowing either route to exceed the same bounded yaw command. Opposing
-        // signals cancel, which is the desired interpretation of competing steering
-        // drives rather than an arbitrary winner-takes-all selector.
-        val steeringSignal = (legSteering + dnSteering).coerceIn(-1f, 1f)
-        val neuralYawTarget = steeringSignal * MAX_YAW_RATE * pauseYawGate
+        // Yaw is generated exclusively by the measured bilateral leg-motor
+        // imbalance. Do not gate this neural yaw by forward translation: after
+        // physical wall contact the collision layer can legitimately reduce
+        // forwardVelocity to ~0, and using that velocity as a prerequisite for
+        // yaw creates a deadlock in which a real asymmetric neural gait can no
+        // longer reorient the body. Wall contact itself still never writes yaw
+        // or gait phase; it only changes physical velocity and sensory feedback.
+        // Primary steering signal is now the six-leg force moment. The old
+        // bilateral scalar remains only as a bounded fallback when the instantaneous
+        // foot-force moment is numerically tiny. Both signals originate exclusively
+        // from measured leg-MN-driven mechanics.
+        val steeringSignal = if (abs(normalizedYawTorque) > .015f) normalizedYawTorque else turnBalance
+        val neuralYawTarget = steeringSignal * MAX_YAW_RATE * turnDrive * pauseYawGate
         val yawTarget = neuralYawTarget.coerceIn(-MAX_YAW_RATE, MAX_YAW_RATE)
-        val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || (turnDrive < .04f && dnDrive < .04f)) {
+        val yawTau = if (walkOff >= PAUSE_YAW_CUTOFF || turnDrive < .04f) {
             YAW_STOP_RESPONSE_TAU
         } else {
             YAW_RESPONSE_TAU

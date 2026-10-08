@@ -18,16 +18,10 @@ class LeggedSensorimotorActuatorTest {
     }
 
     @Test
-    fun phasicMotorOutput_drivesSixLegMechanicsAndFeedback() {
+    fun bilateralMotorOutput_drivesSixLegMechanicsAndFeedback() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .35f }
-        repeat(80) { step ->
-            // The actuator receives the already-decoded phasic neural drive.
-            // Alternate short bursts with silence so the test represents an
-            // actual motor pattern rather than tonic/background firing.
-            val burst = if ((step / 5) % 2 == 0) motor else FloatArray(6)
-            a.step(burst, 0f, 0f, .02f)
-        }
+        repeat(80) { a.step(motor, 0f, 0f, .02f) }
         assertTrue(a.forwardVelocity > .03f)
         assertTrue(a.supportMean > .05f)
         assertTrue(a.proprioceptionGlobal > .02f)
@@ -45,7 +39,7 @@ class LeggedSensorimotorActuatorTest {
 
 
     @Test
-    fun symmetricPhasicMotorOutput_hasNoPersistentYawBias() {
+    fun symmetricMotorOutput_hasNoPersistentYawBias() {
         val a = LeggedSensorimotorActuator()
         val motor = FloatArray(6) { .45f }
         var yawSum = 0f
@@ -53,8 +47,7 @@ class LeggedSensorimotorActuatorTest {
         var forceSum = 0f
         var samples = 0
         repeat(2500) { step ->
-            val burst = if ((step / 5) % 2 == 0) motor else FloatArray(6)
-            a.step(burst, 0f, 0f, .02f)
+            a.step(motor, 0f, 0f, .02f)
             if (step >= 500) {
                 yawSum += a.yawRate
                 supportSum += a.supportCoverage
@@ -109,80 +102,20 @@ class LeggedSensorimotorActuatorTest {
         assertTrue(a.forwardVelocity < walking)
         assertTrue(a.forwardVelocity < .03f)
     }
-
     @Test
-    fun brkBrake_isIndependentFromWalkOffAndStopsMechanicalDrive() {
-        val a = LeggedSensorimotorActuator()
-        val motor = FloatArray(6) { .55f }
-        repeat(100) { a.step(motor, 0f, 0f, .02f) }
-        val walking = a.forwardVelocity
-        repeat(100) { a.step(motor, 0f, 1f, .02f) }
-        assertTrue(a.forwardVelocity < walking)
-        assertTrue(a.forwardVelocity < .03f)
-    }
-
-    @Test
-    fun sustainedBackgroundMotorInput_isNotAClockThatForcesWalking() {
-        val a = LeggedSensorimotorActuator()
-        val tonic = FloatArray(6) { .015f }
-        repeat(600) { a.step(tonic, 0f, 0f, .02f) }
-        assertTrue(a.forwardVelocity < 1e-5f)
-        assertTrue(a.yawRate < 1e-5f)
-    }
-
-    @Test
-    fun retainedTurnDnOutput_canReorientBodyWithoutLegPropulsion() {
-        val a = LeggedSensorimotorActuator()
-        repeat(80) {
-            a.step(
-                FloatArray(6),
-                0f,
-                0f,
-                .02f,
-                turnDnLeftActivation = 0f,
-                turnDnRightActivation = .70f
-            )
+    fun brkActivation_addsNeuralBrakeWithoutSyntheticReverseDrive() {
+        val walking = LeggedSensorimotorActuator()
+        val braked = LeggedSensorimotorActuator()
+        val motor = FloatArray(6) { .45f }
+        repeat(120) {
+            walking.step(motor, 0f, 0f, .02f)
+            braked.step(motor, 0f, 1f, .02f)
         }
-        assertTrue(a.yawRate > .20f)
-        assertTrue(abs(a.forwardVelocity) < 1e-5f)
+        assertTrue(walking.forwardVelocity > braked.forwardVelocity)
+        assertTrue(braked.forwardVelocity >= 0f)
+        assertTrue(braked.phase.zip(walking.phase).any { (b, w) -> abs(b - w) > .05f })
     }
 
-    @Test
-    fun symmetricTurnDnOutput_hasNoIntrinsicYawBias() {
-        val a = LeggedSensorimotorActuator()
-        var yawSum = 0f
-        var samples = 0
-        repeat(180) { step ->
-            val burst = if ((step / 5) % 2 == 0) .55f else 0f
-            a.step(
-                FloatArray(6),
-                0f,
-                0f,
-                .02f,
-                turnDnLeftActivation = burst,
-                turnDnRightActivation = burst
-            )
-            if (step >= 30) {
-                yawSum += a.yawRate
-                samples++
-            }
-        }
-        assertTrue(abs(yawSum / samples.toFloat()) < .01f)
-    }
-
-    @Test
-    fun bilateralTurnDnSignals_competeBySideInsteadOfUsingAOneShotHeadingEdit() {
-        val a = LeggedSensorimotorActuator()
-        repeat(30) {
-            a.step(FloatArray(6), 0f, 0f, .02f, turnDnLeftActivation = .60f, turnDnRightActivation = 0f)
-        }
-        val leftYaw = a.yawRate
-        repeat(60) {
-            a.step(FloatArray(6), 0f, 0f, .02f, turnDnLeftActivation = 0f, turnDnRightActivation = .60f)
-        }
-        assertTrue(leftYaw < -.15f)
-        assertTrue(a.yawRate > .15f)
-    }
 
     @Test
     fun wallContact_isCollisionAndSensoryFeedback_only() {

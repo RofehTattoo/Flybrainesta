@@ -16,8 +16,7 @@ assert 'val legGroupSpikeEvents = IntArray(LEG_COUNT)' in body
 assert 'legGroupActivation[g] = relaxMotorActivation' in body
 assert 'feedingPauseActivation' not in body
 assert 'effectiveWalkOffActivation' not in body
-assert 'legActuator.step(' in body
-assert 'turnDnLeftActivationState' in body and 'turnDnRightActivationState' in body
+assert 'legActuator.step(legGroupActivation, walkOffActivationState, brakeActivationState, dt)' in body
 # V1.19.14 integrates into temporary world coordinates so collision recovery
 # can be applied before the arena clamp.
 assert 'var nextFlyX = flyX + worldVx * dt' in body

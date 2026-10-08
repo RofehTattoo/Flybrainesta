@@ -25,21 +25,15 @@ jobs:
       - name: Build canonical FBR-10-OLF2-MOTORROUTE
         run: python tools/build_connectome.py
 
-      - name: Validate frozen FBR-10 reproducibility
-        run: python tools/test_v139_visual_path_preservation.py
-
       - name: Validate generated visual FBR-10 quotas
         run: python tools/test_v11916_visual_fbr10_rebuild.py
 
       - name: Run structural/static validation
         run: |
           python tools/test_v120_locomotion_validation.py
-          python tools/test_v134_tonic_locomotion_gate.py
-          python tools/test_v11935_phasic_highpass.py
-          python tools/test_v136_neural_turn_yaw.py
-          python tools/test_v136_arena_visual_turn.py
           python tools/test_release_version_contract.py
           python tools/test_v128_adaptive_leg_mechanics.py
+          python tools/test_v133_neural_halt_brake.py
           python tools/test_fbc103_reader.py
           python tools/test_food_function_audit.py
           python tools/test_feeding_semantics_consistency.py
